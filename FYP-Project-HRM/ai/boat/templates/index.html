@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HR Assist · Employee Support</title>
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * { 
+            transition: all 0.2s ease; 
+        }
+        
+        .chat-transition { 
+            animation: fadeSlide 0.3s ease-out; 
+        }
+        
+        @keyframes fadeSlide {
+            0% { opacity: 0; transform: translateY(8px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        .dot-flash span {
+            animation: dotFlash 1.4s infinite;
+            opacity: 0.4;
+        }
+        .dot-flash span:nth-child(2) { animation-delay: 0.2s; }
+        .dot-flash span:nth-child(3) { animation-delay: 0.4s; }
+        
+        @keyframes dotFlash {
+            0%, 60%, 100% { opacity: 0.4; transform: translateY(0); }
+            30% { opacity: 1; transform: translateY(-4px); }
+        }
+
+        .messages-container::-webkit-scrollbar { 
+            width: 5px; 
+        }
+        .messages-container::-webkit-scrollbar-track { 
+            background: #f1f5f9; 
+            border-radius: 20px; 
+        }
+        .messages-container::-webkit-scrollbar-thumb { 
+            background: #cbd5e1; 
+            border-radius: 20px; 
+        }
+        .messages-container::-webkit-scrollbar-thumb:hover { 
+            background: #94a3b8; 
+        }
+
+        .message-bubble a { 
+            color: #2563eb; 
+            text-decoration: underline;
+            font-weight: 500;
+        }
+        .message-bubble a:hover { 
+            color: #1e40af; 
+        }
+
+        .message-bubble ul, .message-bubble ol {
+            margin-top: 0.5rem;
+            margin-bottom: 0.5rem;
+            padding-left: 1.5rem;
+        }
+        
+        .message-bubble li {
+            margin-bottom: 0.25rem;
+        }
+
+        .message-bubble strong {
+            font-weight: 600;
+            color: #0f172a;
+        }
+
+        .input-clean:focus { 
+            box-shadow: none; 
+            border-color: #e2e8f0; 
+        }
+
+        /* Professional color scheme */
+        .bg-primary { background-color: #0f2b3d; }
+        .bg-primary-light { background-color: #1a3b4f; }
+        .text-primary { color: #0f2b3d; }
+        .border-primary { border-color: #e2e8f0; }
+        
+        .user-message {
+            background: linear-gradient(135deg, #0f2b3d 0%, #1a3b4f 100%);
+        }
+        
+        .bot-message {
+            background: #ffffff;
+            border: 1px solid #eef2f6;
+        }
+
+        .name-input {
+            border: 2px solid #e2e8f0;
+            transition: all 0.2s;
+        }
+        .name-input:focus {
+            border-color: #0f2b3d;
+            box-shadow: 0 0 0 3px rgba(15, 43, 61, 0.1);
+            outline: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 flex items-center justify-center h-screen font-['Inter',system-ui,sans-serif] p-4">
+
+    <!-- main card -->
+    <div class="w-full max-w-4xl h-[90vh] bg-white rounded-2xl shadow-xl flex flex-col overflow-hidden border border-slate-200">
+
+        <!-- header - professional dark -->
+        <div class="px-6 py-4 bg-primary text-white flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 bg-white/10 rounded-lg flex items-center justify-center backdrop-blur-sm">
+                    <i class="fas fa-building text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-base font-semibold tracking-wide">HR ASSISTANT</h1>
+                    <p class="text-xs text-white/70 flex items-center gap-1">
+                        <i class="fas fa-circle text-[6px] text-emerald-400"></i>
+                        <span id="greetingText">employee support</span>
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <div class="flex items-center gap-1.5 bg-white/10 py-1.5 px-3 rounded-full">
+                    <span class="relative flex h-2 w-2">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span class="text-xs text-white/80">active</span>
+                </div>
+
+                <button id="clearBtn" class="text-white/60 hover:text-white hover:bg-white/10 p-2 rounded-lg transition-all" title="New conversation">
+                    <i class="fas fa-plus-circle text-lg"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- chat area -->
+        <div id="chatContainer" class="flex-1 overflow-y-auto px-5 py-6 bg-slate-50 space-y-4 messages-container">
+            <!-- welcome screen will be injected by js -->
+        </div>
+
+        <!-- bottom bar -->
+        <div class="bg-white pt-2 pb-5 px-5 border-t border-slate-100">
+            <div id="typingIndicator" class="h-6 flex items-center gap-2 pl-2 mb-1 hidden">
+                <div class="flex gap-1 dot-flash">
+                    <span class="w-2 h-2 bg-slate-400 rounded-full"></span>
+                    <span class="w-2 h-2 bg-slate-400 rounded-full"></span>
+                    <span class="w-2 h-2 bg-slate-400 rounded-full"></span>
+                </div>
+                <span class="text-xs text-slate-400 font-medium">Assistant is typing</span>
+            </div>
+
+            <div class="flex items-end gap-3 bg-white rounded-xl border border-slate-200 pl-5 pr-2 py-2 focus-within:border-primary/30 focus-within:ring-2 focus-within:ring-primary/5 transition-all shadow-sm">
+                <textarea 
+                    id="messageInput" 
+                    rows="1"
+                    placeholder="Ask about attendance, payroll, leave, or policies..."
+                    class="flex-1 bg-transparent border-0 outline-none resize-none max-h-28 py-2.5 text-sm text-slate-700 placeholder-slate-400 input-clean"
+                ></textarea>
+                
+                <button id="sendBtn" class="w-9 h-9 bg-primary hover:bg-primary-light text-white rounded-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:pointer-events-none shadow-sm" aria-label="Send message">
+                    <i class="fas fa-paper-plane text-xs"></i>
+                </button>
+            </div>
+            <div class="flex justify-between items-center mt-2 px-1">
+                <span class="text-[11px] text-slate-400 flex items-center gap-1">
+                    <i class="far fa-clock"></i> 
+                    <span id="statusText">ready to help</span>
+                </span>
+                <span class="text-[11px] text-slate-400">Shift+Enter ↵ new line</span>
+            </div>
+        </div>
+    </div>
+
+<script>
+    (function() {
+        // DOM elements
+        const chatContainer = document.getElementById('chatContainer');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const typingIndicator = document.getElementById('typingIndicator');
+        const clearBtn = document.getElementById('clearBtn');
+        const statusText = document.getElementById('statusText');
+        const greetingText = document.getElementById('greetingText');
+
+        // Store user info
+        let userName = localStorage.getItem('hr_user_name') || null;
+        let nameAsked = false;
+
+        // Update greeting with name if available
+        function updateHeaderGreeting() {
+            if (userName) {
+                greetingText.textContent = `welcome, ${userName}`;
+            } else {
+                greetingText.textContent = 'employee support';
+            }
+        }
+        updateHeaderGreeting();
+
+        // Auto resize textarea
+        const autoResize = () => {
+            messageInput.style.height = 'auto';
+            messageInput.style.height = Math.min(messageInput.scrollHeight, 112) + 'px';
+        };
+        messageInput.addEventListener('input', autoResize);
+
+        // Format message text
+        function formatMessage(text) {
+            // Replace [name] placeholder with actual name
+            if (userName) {
+                text = text.replace(/\[name\]/g, userName);
+            }
+            
+            // Handle bold
+            text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            
+            // Handle bullet points
+            text = text.replace(/• (.*?)(?:\n|$)/g, '• $1<br>');
+            
+            // Handle line breaks
+            text = text.replace(/\n/g, '<br>');
+            
+            // Handle URLs
+            text = text.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+            
+            // Handle email addresses
+            text = text.replace(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, '<a href="mailto:$1">$1</a>');
+            
+            return text;
+        }
+
+        // Add message bubble
+        function addMessage(text, isUser = false) {
+            const welcomeBlock = document.getElementById('welcomeBlock');
+            if (welcomeBlock) welcomeBlock.remove();
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `flex gap-3 items-start chat-transition ${isUser ? 'flex-row-reverse' : ''}`;
+
+            const avatar = document.createElement('div');
+            avatar.className = `w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-sm shadow-sm ${
+                isUser 
+                    ? 'bg-primary/10 text-primary' 
+                    : 'bg-white text-slate-500 border border-slate-200'
+            }`;
+            
+            if (isUser) {
+                avatar.innerHTML = userName ? 
+                    `<span class="font-semibold text-xs">${userName.charAt(0).toUpperCase()}</span>` : 
+                    '<i class="fas fa-user text-sm"></i>';
+            } else {
+                avatar.innerHTML = '<i class="fas fa-robot text-sm"></i>';
+            }
+
+            const bubbleWrapper = document.createElement('div');
+            bubbleWrapper.className = `max-w-[80%] ${isUser ? 'ml-auto' : 'mr-auto'}`;
+
+            const bubble = document.createElement('div');
+            bubble.className = `px-4 py-3 rounded-2xl text-sm leading-relaxed break-words ${
+                isUser 
+                    ? 'user-message text-white rounded-br-none' 
+                    : 'bot-message text-slate-700 rounded-bl-none shadow-sm'
+            } message-bubble`;
+            
+            // Set formatted content for bot messages, plain text for user
+            if (isUser) {
+                bubble.textContent = text;
+            } else {
+                bubble.innerHTML = formatMessage(text);
+            }
+
+            const time = document.createElement('div');
+            time.className = 'text-[11px] text-slate-400 mt-1.5 text-right';
+            const now = new Date();
+            const hours = now.getHours().toString().padStart(2, '0');
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            time.textContent = `${hours}:${minutes}`;
+
+            bubbleWrapper.appendChild(bubble);
+            bubbleWrapper.appendChild(time);
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(bubbleWrapper);
+
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
+        }
+
+        // Typing indicator
+        function showTyping() { 
+            typingIndicator.classList.remove('hidden'); 
+            typingIndicator.classList.add('flex');
+            statusText.textContent = userName ? `${userName}, assistant is typing...` : 'assistant is typing...';
+            chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
+        }
+        
+        function hideTyping() { 
+            typingIndicator.classList.add('hidden'); 
+            typingIndicator.classList.remove('flex');
+            statusText.textContent = userName ? `ready to help, ${userName}` : 'ready to help';
+        }
+
+        // Save user's name
+        function saveName(name) {
+            userName = name.trim();
+            localStorage.setItem('hr_user_name', userName);
+            nameAsked = false;
+            updateHeaderGreeting();
+            
+            setTimeout(() => {
+                addMessage(`Nice to meet you, **${userName}**! 👋 How can I help you with HR today?`, false);
+                statusText.textContent = `ready to help, ${userName}`;
+            }, 500);
+        }
+
+        // Welcome screen with name input
+        function renderWelcomeScreen() {
+            const welcomeDiv = document.createElement('div');
+            welcomeDiv.id = 'welcomeBlock';
+            
+            if (!userName) {
+                // Show welcome screen with name input
+                welcomeDiv.className = 'text-center py-12 px-4 max-w-lg mx-auto';
+                welcomeDiv.innerHTML = `
+                    <div class="w-16 h-16 bg-primary/5 rounded-xl flex items-center justify-center mx-auto mb-5">
+                        <i class="fas fa-building text-primary text-2xl"></i>
+                    </div>
+                    <h2 class="text-xl font-light text-slate-800 mb-2">Welcome to HR Support</h2>
+                    <p class="text-sm text-slate-500 mb-6">Please enter your name to get personalized assistance</p>
+                    
+                    <div class="flex gap-2 max-w-sm mx-auto">
+                        <input type="text" id="nameInput" placeholder="Your name" 
+                               class="name-input flex-1 px-4 py-3 border border-slate-200 rounded-xl focus:outline-none">
+                        <button id="nameSubmitBtn" 
+                                class="px-6 py-3 bg-primary text-white rounded-xl hover:bg-primary-light transition-all shadow-sm">
+                            Start
+                        </button>
+                    </div>
+                    
+                    <p class="text-xs text-slate-400 mt-8">For assistance: <a href="mailto:administration@lsituoe.edu.pk" class="text-primary hover:underline">administration@lsituoe.edu.pk</a></p>
+                `;
+                
+                chatContainer.appendChild(welcomeDiv);
+                
+                // Add event listeners for name input
+                setTimeout(() => {
+                    const nameInput = document.getElementById('nameInput');
+                    const nameSubmitBtn = document.getElementById('nameSubmitBtn');
+                    
+                    if (nameInput) {
+                        nameInput.focus();
+                        nameInput.addEventListener('keypress', (e) => {
+                            if (e.key === 'Enter' && nameInput.value.trim()) {
+                                saveName(nameInput.value);
+                                welcomeDiv.remove();
+                            }
+                        });
+                    }
+                    
+                    if (nameSubmitBtn) {
+                        nameSubmitBtn.addEventListener('click', () => {
+                            if (nameInput && nameInput.value.trim()) {
+                                saveName(nameInput.value);
+                                welcomeDiv.remove();
+                            }
+                        });
+                    }
+                }, 100);
+                
+            } else {
+                // Show regular welcome with personalized greeting
+                const hour = new Date().getHours();
+                let timeGreeting = "Hello";
+                if (hour < 12) timeGreeting = "Good morning";
+                else if (hour < 17) timeGreeting = "Good afternoon";
+                else timeGreeting = "Good evening";
+                
+                welcomeDiv.className = 'text-center py-12 px-4 max-w-lg mx-auto';
+                welcomeDiv.innerHTML = `
+                    <div class="w-16 h-16 bg-primary/5 rounded-xl flex items-center justify-center mx-auto mb-5">
+                        <i class="fas fa-building text-primary text-2xl"></i>
+                    </div>
+                    <h2 class="text-xl font-light text-slate-800 mb-2">${timeGreeting}, <span class="font-semibold text-primary">${userName}</span>!</h2>
+                    <p class="text-sm text-slate-500 mb-8">How can I help you with HR today?</p>
+                    
+                    <div class="space-y-2 text-left bg-slate-100/50 p-4 rounded-xl border border-slate-200">
+                        <p class="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">Example Questions:</p>
+                        <p class="text-sm text-slate-600"><span class="text-primary">•</span> Where do I mark my attendance?</p>
+                        <p class="text-sm text-slate-600"><span class="text-primary">•</span> How do I get my payslip?</p>
+                        <p class="text-sm text-slate-600"><span class="text-primary">•</span> Check my leave balance</p>
+                        <p class="text-sm text-slate-600"><span class="text-primary">•</span> When is payday?</p>
+                        <p class="text-sm text-slate-600"><span class="text-primary">•</span> Apply for leave</p>
+                    </div>
+                    
+                    <p class="text-xs text-slate-400 mt-6">
+                        Not ${userName}? <button id="changeNameBtn" class="text-primary hover:underline font-medium">Click here to change name</button>
+                    </p>
+                `;
+                
+                chatContainer.appendChild(welcomeDiv);
+                
+                // Add change name button listener
+                setTimeout(() => {
+                    const changeNameBtn = document.getElementById('changeNameBtn');
+                    if (changeNameBtn) {
+                        changeNameBtn.addEventListener('click', () => {
+                            localStorage.removeItem('hr_user_name');
+                            userName = null;
+                            updateHeaderGreeting();
+                            welcomeDiv.remove();
+                            renderWelcomeScreen();
+                        });
+                    }
+                }, 100);
+            }
+        }
+
+        // Initialize
+        if (chatContainer.children.length === 0) {
+            renderWelcomeScreen();
+        }
+
+        // Send message to backend
+        async function sendMessage() {
+            const rawMessage = messageInput.value.trim();
+            if (!rawMessage) return;
+
+            // If we're asking for name, handle that specially
+            if (nameAsked) {
+                saveName(rawMessage);
+                messageInput.value = '';
+                autoResize();
+                return;
+            }
+
+            sendBtn.disabled = true;
+            const userText = rawMessage;
+            messageInput.value = '';
+            autoResize();
+
+            addMessage(userText, true);
+            showTyping();
+
+            try {
+                // Add user name to the request if available
+                const requestBody = { message: userText };
+                if (userName) {
+                    requestBody.user_name = userName;
+                }
+
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                const data = await response.json();
+                hideTyping();
+                
+                if (data.answer) {
+                    // Check if answer already has name, if not, sometimes add it
+                    let answer = data.answer;
+                    if (userName && !answer.includes(userName) && 
+                        (answer.toLowerCase().includes('hello') || answer.toLowerCase().includes('hi'))) {
+                        answer = answer.replace('Hello', `Hello ${userName}`);
+                    }
+                    addMessage(answer, false);
+                } else {
+                    addMessage(userName ? 
+                        `I couldn't find an answer, ${userName}. Please contact: administration@lsituoe.edu.pk` : 
+                        "I couldn't find an answer. Please contact: administration@lsituoe.edu.pk", false);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                hideTyping();
+                addMessage(userName ? 
+                    `Unable to connect, ${userName}. Please email: administration@lsituoe.edu.pk` : 
+                    "Unable to connect. Please email: administration@lsituoe.edu.pk", false);
+            } finally {
+                sendBtn.disabled = false;
+                messageInput.focus();
+            }
+        }
+
+        // Clear conversation
+        async function clearConversation() {
+            while (chatContainer.firstChild) {
+                chatContainer.removeChild(chatContainer.firstChild);
+            }
+            renderWelcomeScreen();
+            hideTyping();
+            messageInput.focus();
+        }
+
+        // Event listeners
+        sendBtn.addEventListener('click', sendMessage);
+
+        messageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        clearBtn.addEventListener('click', clearConversation);
+
+        messageInput.focus();
+
+        // Check backend health
+        fetch('/health')
+            .then(response => response.json())
+            .then(data => {
+                console.log('Backend connected:', data);
+                statusText.textContent = userName ? 
+                    `${data.qa_pairs || 0} answers loaded, ${userName}` : 
+                    `${data.qa_pairs || 0} answers loaded`;
+            })
+            .catch(err => {
+                console.error('Backend not reachable:', err);
+                statusText.textContent = userName ? `offline mode, ${userName}` : 'offline mode';
+            });
+    })();
+</script>
+</body>
+</html>

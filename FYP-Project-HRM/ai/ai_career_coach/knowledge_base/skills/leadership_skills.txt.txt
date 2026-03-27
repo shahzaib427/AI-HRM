@@ -1,0 +1,56 @@
+CATEGORY: skill
+TITLE: Engineering Leadership Skills
+KEYWORDS: leadership, management, mentoring, communication, team lead, soft skills
+SKILLS_REQUIRED: Communication, Mentoring, Conflict Resolution, Strategic Thinking, Decision Making
+
+Essential leadership skills for Tech Leads and Engineering Managers:
+
+1. Technical Leadership
+   - Architecture decision making
+   - Code review best practices
+   - Technical debt management
+   - Innovation encouragement
+
+2. People Management
+   - 1:1 meetings effectively
+   - Performance reviews
+   - Career growth planning
+   - Mentoring and coaching
+   - Feedback delivery (SBI model)
+
+3. Project Management
+   - Sprint planning and estimation
+   - Risk management
+   - Stakeholder communication
+   - Priority setting
+   - Resource allocation
+
+4. Communication Skills
+   - Technical presentations
+   - Cross-team collaboration
+   - Conflict resolution
+   - Negotiation skills
+   - Active listening
+
+5. Strategic Thinking
+   - Technical roadmap planning
+   - Team structure optimization
+   - Process improvement
+   - Business alignment
+
+Books for Leadership (Prices in PKR):
+- "The Manager's Path" by Camille Fournier (Rs. 2,200 - Rs. 3,500)
+- "Radical Candor" by Kim Scott (Rs. 1,800 - Rs. 2,800)
+- "Drive" by Daniel Pink (Rs. 1,500 - Rs. 2,500)
+- "The Making of a Manager" by Julie Zhuo (Rs. 1,900 - Rs. 3,000)
+
+Online Courses:
+- LinkedIn Learning: Leadership Principles (Rs. 3,000 - Rs. 5,000/month)
+- Coursera: Engineering Leadership (Rs. 5,000 - Rs. 8,000/course)
+- Local Workshops: NIC, LUMS, IBA executive education (Rs. 30,000 - Rs. 60,000)
+
+Pakistani Leadership Programs:
+- NIC Leadership Fellowship
+- LUMS Executive Education
+- IBA Karachi Management Courses
+- Systems Limited Leadership Program

@@ -1,0 +1,98 @@
+LEAVE APPLICATION PROCESS - LSIT
+
+HOW TO APPLY FOR LEAVE:
+1. Log into LSIT HR portal
+2. Click on "Leave Requests"
+3. Fill out the leave application form with:
+   - Leave type
+   - Start date
+   - End date
+   - Reason for leave
+4. Submit for approval
+
+LEAVE SUBMISSION TIMELINE:
+- Planned Leave: Submit at least 3 days in advance
+- Sick Leave: Notify manager by 9:00 AM on the day of absence
+- Emergency Leave: Notify manager immediately and submit application as soon as possible
+
+LEAVE TYPES AND ALLOCATION:
+| Leave Type | Allocation | Notes |
+|------------|------------|-------|
+| Annual Leave | 20 days per year | Planned vacation/personal time |
+| Sick Leave | 10 days per year | Medical illness or appointment |
+| Casual Leave | 5 days per year | Urgent personal work |
+| Unpaid Leave | As per manager approval | When leave balance is exhausted |
+
+KEY INFORMATION:
+| Field | Details |
+|-------|--------|
+| Application Method | LSIT HR Portal → Leave Requests |
+| Advance Notice | 3 days for planned leave |
+| Sick Leave Notification | By 9:00 AM on day of absence |
+| Annual Leave | 20 days per year |
+| Sick Leave | 10 days per year |
+| Casual Leave | 5 days per year |
+| Unpaid Leave | Manager approval required |
+| Leave Balance | Check in HR portal |
+| Support Contact | administration@lsituoe.edu.pk |
+
+FAQ:
+Q: How do I apply for leave?
+A: Log into LSIT HR portal, click on "Leave Requests", fill out the form with dates and reason, then submit.
+
+Q: How many annual leave days do I get?
+A: 20 days of annual leave per year.
+
+Q: How many sick leave days are available?
+A: 10 days of sick leave per year.
+
+Q: What is casual leave?
+A: Casual leave is 5 days per year for urgent personal work that cannot be planned in advance.
+
+Q: How far in advance should I apply for planned leave?
+A: Submit leave application at least 3 days in advance for planned leave.
+
+Q: What if I am sick and cannot come to institute?
+A: Notify your manager by 9:00 AM on the day of absence and apply for sick leave through HR portal.
+
+Q: Can I apply for unpaid leave?
+A: Yes, unpaid leave can be requested with manager approval when leave balance is exhausted.
+
+Q: How do I check my leave balance?
+A: Log into LSIT HR portal and go to Leave Balance section.
+
+Q: Who approves leave requests?
+A: Your manager/department head approves leave requests.
+
+Q: What if I need to cancel or modify my leave?
+A: Contact your manager and submit a new request or modification through HR portal.
+
+Q: Can leave be carried forward to next year?
+A: Check with HR or your manager regarding carry-forward policy.
+
+Q: What if I have an emergency and cannot apply in advance?
+A: Notify your manager immediately by phone or email, then submit leave application as soon as possible.
+
+Q: Do I need to apply for leave if I am attending a training?
+A: Training requests are separate. Discuss with manager about training vs leave application.
+
+Q: What happens if I exceed my sick leave?
+A: Additional sick days may be considered as unpaid leave with manager approval.
+
+Q: Can I take half-day leave?
+A: Yes, specify half-day leave in the application with timings.
+
+Q: Where can I view my leave history?
+A: Log into LSIT HR portal and go to Leave History section.
+
+Q: Who do I contact for leave-related questions?
+A: Email administration@lsituoe.edu.pk for any leave-related inquiries.
+
+Q: What if my manager is unavailable to approve leave?
+A: Contact the department head or email administration@lsituoe.edu.pk for assistance.
+
+Q: Can I apply for leave through mobile app?
+A: Yes, leave requests can be submitted through LSIT Connect mobile app as well.
+
+Q: What documents are required for sick leave?
+A: For sick leave exceeding 2 days, a medical certificate may be required. Check with manager.

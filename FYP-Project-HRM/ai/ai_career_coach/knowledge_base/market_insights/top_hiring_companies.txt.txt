@@ -1,0 +1,85 @@
+CATEGORY: market_insight
+TITLE: Top Tech Companies in Pakistan 2024
+KEYWORDS: companies, employers, tech companies, pakistan, hiring, careers
+MARKET_YEAR: 2024
+
+Comprehensive list of top tech employers in Pakistan:
+
+Multinational Companies:
+1. Afiniti
+   - Locations: Karachi, Lahore, Islamabad
+   - Roles: AI/ML, Software Engineering, Data Science
+   - Salary Range: Rs. 150,000 - 800,000/month
+   - Perks: International exposure, stock options
+
+2. Systems Limited
+   - Locations: Lahore, Karachi, Islamabad
+   - Roles: Full Stack, DevOps, Cloud, AI
+   - Salary Range: Rs. 100,000 - 700,000/month
+   - Perks: Training programs, international projects
+
+3. IBM Pakistan
+   - Locations: Karachi, Lahore
+   - Roles: Consulting, Cloud, AI, Research
+   - Salary Range: Rs. 200,000 - 900,000/month
+   - Perks: Global certifications, research opportunities
+
+4. Carecloud
+   - Locations: Lahore
+   - Roles: Healthcare IT, DevOps, Full Stack
+   - Salary Range: Rs. 180,000 - 850,000/month
+   - Perks: US healthcare domain expertise
+
+Product Companies:
+5. Arbisoft
+   - Locations: Lahore
+   - Roles: Python/Django, Full Stack, DevOps
+   - Salary Range: Rs. 150,000 - 700,000/month
+   - Perks: edX projects, learning culture
+
+6. Confiz
+   - Locations: Lahore, Islamabad
+   - Roles: .NET, Java, Cloud, Data
+   - Salary Range: Rs. 140,000 - 650,000/month
+   - Perks: Microsoft partnership, certifications
+
+7. Devsinc
+   - Locations: Lahore, Karachi, Islamabad
+   - Roles: Ruby on Rails, React, DevOps
+   - Salary Range: Rs. 130,000 - 600,000/month
+   - Perks: International clients, growth fast
+
+8. 10Pearls
+   - Locations: Karachi, Lahore, Islamabad
+   - Roles: Mobile, Web, AI, Blockchain
+   - Salary Range: Rs. 150,000 - 750,000/month
+   - Perks: Innovation focus, US clients
+
+Service Companies:
+9. Techlogix
+   - Locations: Lahore, Karachi, Islamabad
+   - Roles: Enterprise solutions, Cloud
+   - Salary Range: Rs. 100,000 - 550,000/month
+
+10. Contour Software
+    - Locations: Karachi, Lahore, Islamabad
+    - Roles: .NET, Java, ERP, Cloud
+    - Salary Range: Rs. 110,000 - 500,000/month
+
+11. Folio3
+    - Locations: Karachi, Lahore, Bangalore
+    - Roles: Full Stack, AI, Mobile
+    - Salary Range: Rs. 120,000 - 600,000/month
+
+Startups to Watch:
+- Bazaar (E-commerce): Rs. 200,000 - 800,000/month
+- Tajir (B2B Commerce): Rs. 180,000 - 700,000/month
+- Educative (EdTech): Rs. 250,000 - 900,000/month
+- Bykea (Mobility): Rs. 150,000 - 600,000/month
+- Airlift (Logistics): Rs. 200,000 - 750,000/month
+
+Remote-First Companies:
+- Remote Pakistan (Marketplace)
+- Tkxel (Lahore-based, remote-friendly)
+- NorthBay Solutions (Cloud focus)
+- VentureDive (Karachi, remote options)

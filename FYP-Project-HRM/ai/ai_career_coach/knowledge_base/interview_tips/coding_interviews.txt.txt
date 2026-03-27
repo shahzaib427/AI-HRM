@@ -1,0 +1,99 @@
+CATEGORY: interview_tip
+TITLE: Cracking Coding Interviews in Pakistan
+KEYWORDS: coding, algorithms, data structures, interview preparation, leetcode, pakistan
+SKILLS_REQUIRED: Algorithms, Data Structures, Problem Solving, Time Complexity
+
+Comprehensive guide to ace coding interviews in Pakistani tech companies:
+
+Preparation Timeline (3 months):
+
+Month 1: Fundamentals
+- Week 1-2: Arrays, Strings, Hash Tables
+  - Two pointer technique
+  - Sliding window
+  - String manipulation
+  
+- Week 3-4: Linked Lists, Stacks, Queues
+  - Reverse linked list
+  - Detect cycles
+  - Stack applications
+
+Month 2: Advanced Data Structures
+- Week 5-6: Trees and Graphs
+  - BST operations
+  - Tree traversals
+  - BFS, DFS
+  - Graph algorithms
+  
+- Week 7-8: Dynamic Programming
+  - Memoization
+  - Tabulation
+  - Common patterns
+
+Month 3: Practice and Refinement
+- Week 9-10: System Design basics
+- Week 11-12: Mock interviews and revision
+
+Must-Know Algorithms:
+1. Sorting: QuickSort, MergeSort
+2. Searching: Binary Search variants
+3. Graph: Dijkstra, Bellman-Ford
+4. Tree: LCA, Diameter
+5. DP: Knapsack, LCS, Edit Distance
+
+Time Complexity Guide:
+- O(1): Hash table lookups
+- O(log n): Binary search, BST operations
+- O(n): Linear search
+- O(n log n): Efficient sorting
+- O(n²): Nested loops
+- O(2ⁿ): Recursive without memoization
+
+Practice Platforms (Costs in PKR):
+- LeetCode: 300+ problems (Premium: Rs. 20,000/year)
+- HackerRank: Free, topic-wise practice
+- CodeSignal: Company-specific prep
+- Pramp: Free mock interviews
+- AlgoExpert: Rs. 30,000 lifetime
+
+Company-specific focus in Pakistan:
+- Systems Limited: DSA, OOP, SQL
+- Afiniti: Algorithms, AI/ML basics
+- Arbisoft: Python/Django, DSA
+- Devsinc: Rails, React, DSA
+- Confiz: .NET, Cloud concepts
+- 10Pearls: Mobile, Web, DSA
+
+Local Interview Processes:
+
+Systems Limited (4-5 rounds):
+1. Online Assessment (DSA + SQL)
+2. Technical Interview (Coding + Design)
+3. Managerial Round
+4. HR Discussion
+
+Afiniti (5-6 rounds):
+1. HackerRank Test (Hard DSA)
+2. Technical Screen (Algorithms)
+3. System Design (2 rounds)
+4. Cultural Fit
+5. Leadership Round
+
+Arbisoft (4 rounds):
+1. Python/Django Assessment
+2. DSA Interview
+3. Project Discussion
+4. Partner Interview
+
+Resources Cost Breakdown (PKR):
+- LeetCode Premium: Rs. 20,000/year
+- AlgoExpert: Rs. 30,000 lifetime
+- Grokking Coding Interview: Rs. 15,000
+- Books (combined): Rs. 5,000 - Rs. 10,000
+- Local coaching: Rs. 25,000 - Rs. 50,000
+
+Free Local Resources:
+- Pakistan Developers Community (Facebook)
+- Google Developer Groups Pakistan
+- DevNation Pakistan (YouTube)
+- CodePakistan (Discord)
