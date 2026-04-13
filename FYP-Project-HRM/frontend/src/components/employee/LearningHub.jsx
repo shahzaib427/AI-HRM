@@ -1,1045 +1,1119 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 
-// Change this line to include /api
-const API_BASE_URL = 'http://localhost:5001/api';
+const API = axios.create({ baseURL: 'http://localhost:5001/api' });
 
+// ─── tiny helpers ────────────────────────────────────────────────────────────
+const getUserId = () =>
+  localStorage.getItem('userId') || localStorage.getItem('user_id') || 'user_default';
+
+const LEVEL_COLORS = {
+  Beginner: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  Intermediate: 'bg-amber-100 text-amber-700 border-amberald-200',
+  Advanced: 'bg-rose-100 text-rose-700 border-rose-200',
+};
+
+const DOMAIN_COLORS = {
+  violet: 'bg-violet-100 text-violet-700 border-violet-200',
+  blue: 'bg-blue-100 text-blue-700 border-blue-200',
+  emerald: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  green: 'bg-green-100 text-green-700 border-green-200',
+  orange: 'bg-orange-100 text-orange-700 border-orange-200',
+  yellow: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+  pink: 'bg-pink-100 text-pink-700 border-pink-200',
+  red: 'bg-red-100 text-red-700 border-red-200',
+  cyan: 'bg-cyan-100 text-cyan-700 border-cyan-200',
+  slate: 'bg-slate-100 text-slate-700 border-slate-200',
+};
+
+const Spinner = ({ size = 8, color = 'indigo' }) => (
+  <div
+    className={`w-${size} h-${size} rounded-full border-4 border-${color}-200 border-t-${color}-600 animate-spin`}
+  />
+);
+
+const Toast = ({ msg, type }) => (
+  <div
+    className={`fixed top-5 right-5 z-50 px-5 py-3 rounded-xl shadow-xl text-sm font-semibold transition-all
+      ${type === 'error' ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white'}`}
+  >
+    {msg}
+  </div>
+);
+
+// ─── Course Card ─────────────────────────────────────────────────────────────
+const CourseCard = ({ course, onEnroll }) => {
+  const lvlClass = LEVEL_COLORS[course.level] || 'bg-gray-100 text-gray-600';
+  const relevance = course.relevance || 0;
+  const barColor =
+    relevance >= 85 ? 'from-emerald-400 to-teal-400' :
+    relevance >= 70 ? 'from-blue-400 to-indigo-400' :
+                      'from-amber-400 to-orange-400';
+
+  return (
+    <div className="group bg-white border border-slate-100 rounded-2xl p-5 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 flex flex-col gap-3">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1">
+          <h3 className="font-bold text-slate-800 text-[15px] leading-snug line-clamp-2 group-hover:text-indigo-700 transition-colors">
+            {course.title}
+          </h3>
+          <p className="text-xs text-slate-500 mt-0.5 font-medium">{course.platform}</p>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="flex items-center gap-1">
+            <span className="text-amber-400 text-sm">★</span>
+            <span className="font-bold text-slate-700 text-sm">{course.rating}</span>
+          </div>
+          {relevance > 0 && (
+            <div className={`text-xs font-bold mt-0.5 ${relevance >= 85 ? 'text-emerald-600' : relevance >= 70 ? 'text-blue-600' : 'text-amber-600'}`}>
+              {relevance}% match
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Description */}
+      {course.description && (
+        <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">{course.description}</p>
+      )}
+
+      {/* Tags */}
+      <div className="flex flex-wrap gap-1.5">
+        <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border ${lvlClass}`}>
+          {course.level}
+        </span>
+        {course.category && (
+          <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+            {course.category}
+          </span>
+        )}
+        <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-50 text-slate-600 border border-slate-100">
+          ⏱ {course.duration}
+        </span>
+      </div>
+
+      {/* Skills */}
+      {course.skills && course.skills.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {course.skills.slice(0, 4).map(sk => (
+            <span key={sk} className="px-1.5 py-0.5 rounded text-[10px] bg-slate-50 text-slate-500 border border-slate-100">
+              {sk}
+            </span>
+          ))}
+          {course.skills.length > 4 && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] text-slate-400">+{course.skills.length - 4}</span>
+          )}
+        </div>
+      )}
+
+      {/* Relevance bar */}
+      {relevance > 0 && (
+        <div>
+          <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+            <span>AI Relevance</span>
+            <span>{relevance}%</span>
+          </div>
+          <div className="w-full bg-slate-100 rounded-full h-1.5">
+            <div
+              className={`bg-gradient-to-r ${barColor} h-1.5 rounded-full transition-all duration-700`}
+              style={{ width: `${relevance}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Footer */}
+      <div className="flex items-center justify-between pt-1">
+        {course.students && (
+          <span className="text-[11px] text-slate-400">
+            {Number(course.students).toLocaleString()} students
+          </span>
+        )}
+        <div className="flex gap-2 ml-auto">
+          {course.url && (
+            <a
+              href={course.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1.5 bg-slate-50 border border-slate-200 text-slate-600 rounded-lg text-xs font-semibold hover:bg-slate-100 transition-colors"
+            >
+              Preview
+            </a>
+          )}
+          <button
+            onClick={() => onEnroll(course)}
+            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors"
+          >
+            Enroll →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Learning Path Week Card ─────────────────────────────────────────────────
+const WeekCard = ({ week, index }) => {
+  const phaseColors = [
+    'border-l-violet-400 bg-violet-50/40',
+    'border-l-blue-400 bg-blue-50/40',
+    'border-l-emerald-400 bg-emerald-50/40',
+    'border-l-amber-400 bg-amber-50/40',
+  ];
+  const badgeColors = [
+    'bg-violet-100 text-violet-700',
+    'bg-blue-100 text-blue-700',
+    'bg-emerald-100 text-emerald-700',
+    'bg-amber-100 text-amber-700',
+  ];
+  const colorClass = phaseColors[index % 4];
+  const badgeClass = badgeColors[index % 4];
+
+  return (
+    <div className={`border-l-4 rounded-xl p-5 ${colorClass} transition-all hover:shadow-md`}>
+      {/* Week header */}
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-xl">{week.icon}</span>
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${badgeClass}`}>
+              Week {week.week}
+            </span>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${week.priority === 'Critical' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'}`}>
+              {week.priority}
+            </span>
+          </div>
+          <h4 className="font-bold text-slate-800 mt-1.5">{week.phase}</h4>
+          <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{week.focus}</p>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="text-lg font-black text-slate-700">{week.hours}h</div>
+          <div className="text-[10px] text-slate-400">per week</div>
+        </div>
+      </div>
+
+      {/* Activities */}
+      <div className="mb-3">
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Activities</p>
+        <div className="grid grid-cols-2 gap-1">
+          {(week.activities || []).map((act, i) => (
+            <div key={i} className="flex items-center gap-1.5 text-xs text-slate-600">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
+              {act}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Skills */}
+      {week.skills_covered && week.skills_covered.length > 0 && (
+        <div className="mb-3">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Skills Focus</p>
+          <div className="flex flex-wrap gap-1">
+            {week.skills_covered.map(sk => (
+              <span key={sk} className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white border border-slate-200 text-slate-600">
+                {sk}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Milestone */}
+      <div className="bg-white/70 rounded-lg p-3 border border-white">
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">🎯 Milestone</p>
+        <p className="text-xs text-slate-700 font-medium leading-relaxed">{week.milestone}</p>
+      </div>
+
+      {/* Assessment */}
+      <div className="mt-2 text-[11px] text-slate-500 flex items-center gap-1">
+        <span>📋</span>
+        <span><span className="font-semibold">Assessment:</span> {week.assessment}</span>
+      </div>
+    </div>
+  );
+};
+
+// ─── Resource Card ────────────────────────────────────────────────────────────
+const ResourceCard = ({ res }) => (
+  <a
+    href={res.url}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50 hover:bg-indigo-50 hover:border-indigo-200 transition-all group"
+  >
+    <span className="text-xl shrink-0">{res.icon}</span>
+    <div>
+      <p className="text-sm font-semibold text-slate-700 group-hover:text-indigo-700 transition-colors">{res.title}</p>
+      <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{res.desc}</p>
+    </div>
+  </a>
+);
+
+// ─── Skill Badge ──────────────────────────────────────────────────────────────
+const SkillBadge = ({ skill, confidence, onRemove, showConf }) => {
+  const conf = confidence || 0;
+  const colorClass =
+    conf >= 80 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+    conf >= 60 ? 'bg-blue-100 text-blue-700 border-blue-200' :
+    conf >= 40 ? 'bg-amber-100 text-amber-700 border-amber-200' :
+                 'bg-slate-100 text-slate-600 border-slate-200';
+
+  return (
+    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${colorClass}`}>
+      {skill}
+      {showConf && <span className="opacity-70 text-[10px]">{conf}%</span>}
+      {onRemove && (
+        <button onClick={onRemove} className="ml-0.5 hover:opacity-60 font-bold text-sm leading-none">×</button>
+      )}
+    </span>
+  );
+};
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 const LearningHub = () => {
-  const [learningProfile, setLearningProfile] = useState({
-    level: 'Intermediate',
-    preferredFormat: 'Video',
-    weeklyHours: 5,
-    currentSkills: [],
-    targetSkills: []
-  });
+  const userId = getUserId();
 
-  const [recommendedCourses, setRecommendedCourses] = useState([]);
-  const [learningPlan, setLearningPlan] = useState([]);
-  const [dailyRecommendation, setDailyRecommendation] = useState(null);
-  const [availableSkills, setAvailableSkills] = useState([]);
+  // Data state
+  const [skills, setSkills] = useState([]);
   const [jobRoles, setJobRoles] = useState([]);
-  const [loading, setLoading] = useState({
-    courses: false,
-    path: false,
-    daily: false,
-    detection: false
-  });
-  const [error, setError] = useState(null);
+  const [stats, setStats] = useState(null);
+  const [courses, setCourses] = useState([]);
+  const [learningPath, setLearningPath] = useState([]);
+  const [dailyTask, setDailyTask] = useState(null);
+  const [quickResources, setQuickResources] = useState([]);
+  const [learningTips, setLearningTips] = useState([]);
+  const [detectedSkills, setDetectedSkills] = useState([]);
+  const [matchedDomains, setMatchedDomains] = useState({});
+  const [profile, setProfile] = useState({ level: 'Beginner', weekly_hours: 5, current_skills: [], target_skills: [] });
+
+  // UI state
   const [activeTab, setActiveTab] = useState('courses');
+  const [mode, setMode] = useState('manual'); // 'manual' | 'auto'
+  const [showConf, setShowConf] = useState(false);
+  const [toast, setToast] = useState(null);
   const [newSkill, setNewSkill] = useState('');
-  
-  // Auto-detection states
-  const [detectionMode, setDetectionMode] = useState('manual'); // 'manual' or 'auto'
+  const [skillSuggestions, setSkillSuggestions] = useState([]);
   const [jobRole, setJobRole] = useState('');
   const [projects, setProjects] = useState([]);
-  const [newProject, setNewProject] = useState({ name: '', description: '', technologies: '' });
+  const [newProject, setNewProject] = useState({ name: '', technologies: '' });
   const [resumeFile, setResumeFile] = useState(null);
-  const [uploadingResume, setUploadingResume] = useState(false);
-  const [detectedSkills, setDetectedSkills] = useState([]);
-  const [skillSources, setSkillSources] = useState({});
-  const [showSkillConfidence, setShowSkillConfidence] = useState(false);
+  const [loading, setLoading] = useState({ courses: false, path: false, daily: false, detect: false, resume: false, stats: false });
 
-  // Fetch all data on component mount
+  const fileRef = useRef();
+
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  const setLoad = (key, val) => setLoading(p => ({ ...p, [key]: val }));
+
+  // ── Bootstrap ──────────────────────────────────────────────────────────────
   useEffect(() => {
-    fetchAvailableSkills();
-    fetchJobRoles();
+    Promise.all([
+      API.get('/skills').then(r => setSkills(r.data.all_skills || [])).catch(() => {}),
+      API.get('/job-roles').then(r => setJobRoles(r.data.job_roles || [])).catch(() => {}),
+      API.get('/stats', { params: { user_id: userId } }).then(r => setStats(r.data)).catch(() => {}),
+      API.get('/profile', { params: { user_id: userId } }).then(r => {
+        setProfile(r.data);
+      }).catch(() => {}),
+    ]);
   }, []);
 
-  // Fetch when target skills change (only in manual mode)
+  // ── Skill autocomplete ─────────────────────────────────────────────────────
   useEffect(() => {
-    if (detectionMode === 'manual' && learningProfile.targetSkills.length > 0) {
-      fetchRecommendations();
-      fetchLearningPath();
-      fetchDailyTask();
+    if (!newSkill.trim()) { setSkillSuggestions([]); return; }
+    const q = newSkill.toLowerCase();
+    setSkillSuggestions(skills.filter(s => s.toLowerCase().includes(q)).slice(0, 6));
+  }, [newSkill, skills]);
+
+  // ── Fetch when target skills change (manual mode) ──────────────────────────
+  useEffect(() => {
+    if (mode === 'manual' && profile.target_skills && profile.target_skills.length > 0) {
+      fetchRecommendations(profile.target_skills);
     }
-  }, [learningProfile.targetSkills, detectionMode]);
+  }, [profile.target_skills]);
 
-  const fetchAvailableSkills = async () => {
+  // ── API calls ──────────────────────────────────────────────────────────────
+  const fetchRecommendations = useCallback(async (skillList) => {
+    const allSkills = skillList || [...(profile.current_skills || []), ...(profile.target_skills || [])];
+    if (!allSkills.length) return;
+    setLoad('courses', true);
     try {
-      const response = await axios.get(`${API_BASE_URL}/skills`);
-      setAvailableSkills(response.data.all_skills || response.data);
-    } catch (err) {
-      console.error('Failed to fetch skills:', err);
-    }
-  };
-
-  const fetchJobRoles = async () => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/job-roles`);
-      setJobRoles(response.data.job_roles);
-    } catch (err) {
-      console.error('Failed to fetch job roles:', err);
-    }
-  };
-
-  const handleResumeUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    setUploadingResume(true);
-    const formData = new FormData();
-    formData.append('resume', file);
-
-    try {
-      const response = await axios.post(`${API_BASE_URL}/upload-resume`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      const { data } = await API.post('/recommend', {
+        user_id: userId,
+        skills: allSkills,
+        job_role: jobRole,
+        projects: projects.map(p => ({ name: p.name, technologies: p.technologies })),
       });
-      
-      setResumeFile(file);
-      // Add detected skills to temporary list
-      const newDetectedSkills = response.data.detected_skills.map(skill => ({
-        name: skill,
-        confidence: response.data.confidence_scores[skill] || 70,
-        source: 'resume'
-      }));
-      
-      setDetectedSkills(prev => {
-        const combined = [...prev, ...newDetectedSkills];
-        // Remove duplicates
-        const unique = Array.from(new Map(combined.map(item => [item.name, item])).values());
-        return unique;
-      });
-      
-      setSkillSources(prev => ({ ...prev, resume: true }));
-      
-    } catch (err) {
-      console.error('Failed to upload resume:', err);
-      setError('Failed to process resume');
+      setCourses(data.recommendations || []);
+      setQuickResources(data.quick_resources || []);
+      setLearningTips(data.learning_tips || []);
+      setMatchedDomains(data.detected_domains || {});
+    } catch (e) {
+      showToast('Failed to fetch recommendations', 'error');
     } finally {
-      setUploadingResume(false);
+      setLoad('courses', false);
     }
-  };
+  }, [profile, jobRole, projects, userId]);
 
-  const addProject = () => {
-    if (!newProject.name.trim()) return;
-    
-    const projectToAdd = {
-      ...newProject,
-      technologies: newProject.technologies.split(',').map(t => t.trim()).filter(t => t)
-    };
-    
-    setProjects([...projects, projectToAdd]);
-    setNewProject({ name: '', description: '', technologies: '' });
-  };
+  const fetchLearningPath = useCallback(async () => {
+    const target = mode === 'auto'
+      ? detectedSkills.slice(0, 6).map(s => s.name)
+      : (profile.target_skills || []);
+    if (!target.length) { showToast('Add target skills first', 'error'); return; }
+    setLoad('path', true);
+    try {
+      const { data } = await API.post('/learning-path', {
+        user_id: userId,
+        targetSkills: target,
+        weekly_hours: profile.weekly_hours || 5,
+      });
+      setLearningPath(data.learning_path || []);
+    } catch (e) {
+      showToast('Failed to generate learning path', 'error');
+    } finally {
+      setLoad('path', false);
+    }
+  }, [mode, detectedSkills, profile, userId]);
 
-  const removeProject = (index) => {
-    setProjects(projects.filter((_, i) => i !== index));
-  };
+  const fetchDailyTask = useCallback(async () => {
+    const target = mode === 'auto'
+      ? detectedSkills.slice(0, 3).map(s => s.name)
+      : (profile.target_skills || []);
+    if (!target.length) return;
+    setLoad('daily', true);
+    try {
+      const { data } = await API.post('/daily-task', { user_id: userId, skills: target });
+      setDailyTask(data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoad('daily', false);
+    }
+  }, [mode, detectedSkills, profile, userId]);
 
   const detectSkills = async () => {
-    setLoading(prev => ({ ...prev, detection: true }));
-    setError(null);
-
+    setLoad('detect', true);
     try {
-      const payload = {
-        job_role: jobRole || undefined,
-        projects: projects.map(p => ({
-          name: p.name,
-          description: p.description,
-          technologies: p.technologies
-        }))
-      };
-
-      // If resume was uploaded, we already have those skills
-      const response = await axios.post(`${API_BASE_URL}/detect-skills`, payload);
-      
-      const detectedFromAPI = response.data.detected_skills;
-      
-      // Combine with resume-detected skills
-      setDetectedSkills(prev => {
-        const combined = [...prev, ...detectedFromAPI];
-        // Remove duplicates, keep highest confidence
-        const skillMap = new Map();
-        combined.forEach(skill => {
-          if (!skillMap.has(skill.name) || skillMap.get(skill.name).confidence < skill.confidence) {
-            skillMap.set(skill.name, skill);
-          }
-        });
-        return Array.from(skillMap.values());
+      const { data } = await API.post('/detect-skills', {
+        user_id: userId,
+        job_role: jobRole,
+        projects,
       });
-      
-      setSkillSources(response.data.sources_used);
-      
-    } catch (err) {
-      setError('Failed to detect skills');
-      console.error('Skill detection error:', err);
+      setDetectedSkills(prev => {
+        const map = new Map(prev.map(s => [s.name, s]));
+        (data.detected_skills || []).forEach(s => {
+          if (!map.has(s.name) || map.get(s.name).confidence < s.confidence)
+            map.set(s.name, s);
+        });
+        return Array.from(map.values()).sort((a, b) => b.confidence - a.confidence);
+      });
+      setMatchedDomains(data.matched_domains || {});
+      showToast(`Detected ${data.total} skills from ${Object.keys(data.sources_used || {}).length} sources`);
+    } catch (e) {
+      showToast('Skill detection failed', 'error');
     } finally {
-      setLoading(prev => ({ ...prev, detection: false }));
+      setLoad('detect', false);
+    }
+  };
+
+  const uploadResume = async (file) => {
+    if (!file) return;
+    setLoad('resume', true);
+    const form = new FormData();
+    form.append('resume', file);
+    form.append('user_id', userId);
+    try {
+      const { data } = await API.post('/upload-resume', form);
+      const incoming = (data.skill_details || []).map(s => ({ ...s, source: 'resume' }));
+      setDetectedSkills(prev => {
+        const map = new Map(prev.map(s => [s.name, s]));
+        incoming.forEach(s => {
+          if (!map.has(s.name) || map.get(s.name).confidence < s.confidence)
+            map.set(s.name, s);
+        });
+        return Array.from(map.values()).sort((a, b) => b.confidence - a.confidence);
+      });
+      showToast(`Extracted ${data.total_skills} skills from resume`);
+    } catch (e) {
+      showToast(e.response?.data?.error || 'Resume processing failed', 'error');
+    } finally {
+      setLoad('resume', false);
     }
   };
 
   const applyDetectedSkills = () => {
-    const skillNames = detectedSkills.map(s => s.name);
-    setLearningProfile(prev => ({
-      ...prev,
-      currentSkills: skillNames.slice(0, 5), // Top 5 as current skills
-      targetSkills: skillNames.slice(5, 10) // Next 5 as target skills
-    }));
-    
-    // Fetch recommendations with these skills
-    setTimeout(() => {
-      fetchRecommendationsWithSkills(skillNames);
-    }, 100);
+    const names = detectedSkills.map(s => s.name);
+    const updated = {
+      ...profile,
+      current_skills: names.slice(0, 5),
+      target_skills: names.slice(5, 10),
+    };
+    setProfile(updated);
+    API.put('/profile', { user_id: userId, ...updated }).catch(() => {});
+    fetchRecommendations(names);
+    fetchDailyTask();
+    showToast('Skills applied! Fetching AI recommendations…');
   };
 
-  const fetchRecommendationsWithSkills = async (skills) => {
-    setLoading(prev => ({ ...prev, courses: true }));
-    
-    try {
-      const response = await axios.post(`${API_BASE_URL}/recommend`, {
-        use_auto_detection: false,
-        skills: skills
-      });
-      
-      setRecommendedCourses(response.data.recommendations || response.data);
-    } catch (err) {
-      setError('Failed to fetch course recommendations');
-      console.error('API Error:', err);
-    } finally {
-      setLoading(prev => ({ ...prev, courses: false }));
-    }
-  };
-
-  const fetchRecommendations = async () => {
-    setLoading(prev => ({ ...prev, courses: true }));
-    setError(null);
-    
-    try {
-      let payload;
-      
-      if (detectionMode === 'auto' && detectedSkills.length > 0) {
-        // Use auto-detected skills
-        payload = {
-          use_auto_detection: true,
-          job_role: jobRole || undefined,
-          projects: projects.map(p => ({
-            name: p.name,
-            description: p.description,
-            technologies: p.technologies
-          }))
-        };
-      } else {
-        // Use manual skills
-        const allSkills = [...learningProfile.currentSkills, ...learningProfile.targetSkills];
-        payload = {
-          use_auto_detection: false,
-          skills: allSkills
-        };
-      }
-      
-      const response = await axios.post(`${API_BASE_URL}/recommend`, payload);
-      
-      // Handle both old and new response formats
-      const courses = response.data.recommendations || response.data;
-      setRecommendedCourses(courses);
-      
-      // If we have skill gap analysis, show it
-      if (response.data.skill_gap_analysis) {
-        console.log('Skill gaps:', response.data.skill_gap_analysis);
-      }
-      
-    } catch (err) {
-      setError('Failed to fetch course recommendations');
-      console.error('API Error:', err);
-    } finally {
-      setLoading(prev => ({ ...prev, courses: false }));
-    }
-  };
-
-  const fetchLearningPath = async () => {
-    setLoading(prev => ({ ...prev, path: true }));
-    
-    try {
-      const skills = detectionMode === 'auto' && detectedSkills.length > 0
-        ? detectedSkills.map(s => s.name)
-        : learningProfile.targetSkills;
-        
-      const response = await axios.post(`${API_BASE_URL}/learning-path`, {
-        targetSkills: skills
-      });
-      
-      setLearningPlan(response.data.learning_path || response.data);
-    } catch (err) {
-      console.error('Failed to fetch learning path:', err);
-    } finally {
-      setLoading(prev => ({ ...prev, path: false }));
-    }
-  };
-
-  const fetchDailyTask = async () => {
-    setLoading(prev => ({ ...prev, daily: true }));
-    
-    try {
-      const skills = detectionMode === 'auto' && detectedSkills.length > 0
-        ? detectedSkills.map(s => s.name)
-        : learningProfile.targetSkills;
-        
-      const response = await axios.post(`${API_BASE_URL}/daily-task`, {
-        skills: skills
-      });
-      
-      setDailyRecommendation(response.data);
-    } catch (err) {
-      console.error('Failed to fetch daily task:', err);
-    } finally {
-      setLoading(prev => ({ ...prev, daily: false }));
-    }
-  };
-
-  const addTargetSkill = (skill) => {
-    if (!skill.trim() || learningProfile.targetSkills.includes(skill)) return;
-    
-    setLearningProfile(prev => ({
-      ...prev,
-      targetSkills: [...prev.targetSkills, skill]
-    }));
+  const addSkill = (sk) => {
+    const s = (sk || newSkill).trim().toLowerCase();
+    if (!s || (profile.target_skills || []).includes(s)) return;
+    const updated = { ...profile, target_skills: [...(profile.target_skills || []), s] };
+    setProfile(updated);
+    API.put('/profile', { user_id: userId, target_skills: updated.target_skills }).catch(() => {});
     setNewSkill('');
+    setSkillSuggestions([]);
   };
 
-  const removeTargetSkill = (skillToRemove) => {
-    setLearningProfile(prev => ({
-      ...prev,
-      targetSkills: prev.targetSkills.filter(skill => skill !== skillToRemove)
-    }));
+  const removeSkill = (sk) => {
+    const updated = { ...profile, target_skills: (profile.target_skills || []).filter(x => x !== sk) };
+    setProfile(updated);
+    API.put('/profile', { user_id: userId, target_skills: updated.target_skills }).catch(() => {});
   };
 
-  const removeDetectedSkill = (skillToRemove) => {
-    setDetectedSkills(prev => prev.filter(s => s.name !== skillToRemove));
+  const enrollCourse = async (course) => {
+    try {
+      await API.post('/enroll', {
+        user_id: userId,
+        course_id: course.id,
+        course_title: course.title,
+        platform: course.platform,
+      });
+      showToast(`Enrolled in "${course.title}"! 🎓`);
+      if (course.url) window.open(course.url, '_blank');
+    } catch (e) {
+      showToast(e.response?.data?.message || 'Enroll failed', 'error');
+    }
   };
 
-  const getConfidenceColor = (confidence) => {
-    if (confidence >= 80) return 'text-green-600 bg-green-100';
-    if (confidence >= 60) return 'text-blue-600 bg-blue-100';
-    if (confidence >= 40) return 'text-yellow-600 bg-yellow-100';
-    return 'text-gray-600 bg-gray-100';
-  };
+  // ── Computed ───────────────────────────────────────────────────────────────
+  const allUserSkills = [
+    ...(profile.current_skills || []),
+    ...(profile.target_skills || []),
+  ];
 
-  // Course Card Component
-  const CourseCard = ({ course }) => (
-    <div className="bg-white rounded-xl border border-gray-200 hover:border-blue-300 transition-all duration-300 hover:scale-[1.02] shadow-sm">
-      <div className="p-5">
-        <div className="flex justify-between items-start mb-3">
-          <div>
-            <h3 className="font-bold text-gray-900 text-lg">{course.title}</h3>
-            <div className="flex items-center space-x-2 mt-1 flex-wrap gap-1">
-              <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
-                {course.platform || 'Online Course'}
-              </span>
-              <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
-                {course.level || 'All Levels'}
-              </span>
-              {course.category && (
-                <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-medium">
-                  {course.category}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="flex items-center space-x-1">
-              <span className="text-yellow-500">⭐</span>
-              <span className="font-bold text-gray-900">{course.rating || '4.5'}</span>
-            </div>
-            {course.relevance && (
-              <div className={`text-xs font-medium ${
-                course.relevance >= 90 ? 'text-green-600' :
-                course.relevance >= 80 ? 'text-blue-600' : 'text-amber-600'
-              }`}>
-                {course.relevance}% Match
-              </div>
-            )}
-          </div>
-        </div>
-        
-        <div className="space-y-3">
-          <p className="text-sm text-gray-600 line-clamp-2">
-            {course.skills}
-          </p>
-          
-          <div className="flex justify-between text-sm text-gray-500">
-            <span>{course.duration || 'Self-paced'}</span>
-            {course.students && (
-              <span>{typeof course.students === 'number' ? course.students.toLocaleString() : course.students} students</span>
-            )}
-          </div>
-          
-          {course.progress > 0 && (
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-gray-600">Progress</span>
-                <span className="font-medium text-gray-900">{course.progress}%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-gradient-to-r from-green-500 to-emerald-500 h-2 rounded-full"
-                  style={{ width: `${course.progress}%` }}
-                ></div>
-              </div>
-            </div>
-          )}
-          
-          <div className="flex space-x-2 pt-2">
-            <button className="flex-1 py-2 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white rounded-lg transition-all duration-200 text-sm font-medium">
-              {course.progress > 0 ? 'Continue' : 'Start'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Learning Plan Week Component
-  const LearningWeek = ({ week }) => (
-    <div className="p-4 rounded-xl border border-gray-200 hover:border-green-300 transition-colors bg-white">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h4 className="font-bold text-gray-900">Week {week.week}</h4>
-          <p className="text-sm text-gray-600">{week.focus}</p>
-        </div>
-        <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-          {week.hours} hrs
-        </span>
-      </div>
-      
-      <div className="space-y-2">
-        <div className="flex items-center text-sm text-gray-600">
-          <span className="mr-2">📚</span>
-          <span>{week.resources} resources</span>
-        </div>
-        <div className="flex items-center text-sm text-gray-600">
-          <span className="mr-2">🎯</span>
-          <span>Priority: {week.priority}</span>
-        </div>
-        {week.skills_covered && (
-          <div className="flex flex-wrap gap-1 mt-2">
-            {week.skills_covered.map(skill => (
-              <span key={skill} className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
-                {skill}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  if (loading.courses && recommendedCourses.length === 0 && detectionMode === 'manual') {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-white to-emerald-50/30">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Finding the best courses for you...</p>
-        </div>
-      </div>
-    );
-  }
+  const domainList = Object.entries(matchedDomains);
 
   return (
-    <div className="min-h-screen py-6 bg-gradient-to-br from-green-50 via-white to-emerald-50/30">
-      {/* Animated Background */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 rounded-full bg-green-200/20 blur-3xl animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 rounded-full bg-emerald-200/20 blur-3xl animate-pulse delay-1000"></div>
-      </div>
+    <div className="min-h-screen bg-[#f8f9fc] font-sans">
+      {toast && <Toast {...toast} />}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-emerald-600">
-                AI Learning Hub
-              </h1>
-              <p className="mt-2 text-gray-600">
-                {detectionMode === 'auto' 
-                  ? 'Smart skill detection from your profile' 
-                  : 'Personalized learning recommendations powered by AI'}
-              </p>
+      {/* ── Top Bar ── */}
+      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-100 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-sm font-black">
+              L
             </div>
-            <div className="flex items-center space-x-3">
-              <div className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg">
-                <span className="font-bold">{learningProfile.weeklyHours} hrs/week</span>
-              </div>
-              
-              {/* Mode Toggle */}
-              <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-                <button
-                  onClick={() => setDetectionMode('manual')}
-                  className={`px-3 py-2 text-sm font-medium transition-colors ${
-                    detectionMode === 'manual'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  Manual
-                </button>
-                <button
-                  onClick={() => setDetectionMode('auto')}
-                  className={`px-3 py-2 text-sm font-medium transition-colors ${
-                    detectionMode === 'auto'
-                      ? 'bg-green-600 text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  Auto Detect
-                </button>
-              </div>
-              
-              <button 
-                onClick={fetchRecommendations}
-                className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm font-medium"
-              >
-                Refresh
-              </button>
+            <div>
+              <h1 className="font-black text-slate-800 text-lg leading-none">Learning Hub</h1>
+              <p className="text-[11px] text-slate-400 leading-none mt-0.5">AI-Powered Career Learning</p>
             </div>
           </div>
-        </div>
 
-        {/* Error Message */}
-        {error && (
-          <div className="mb-8 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-            <p>{error}</p>
-            <button 
-              onClick={fetchRecommendations}
-              className="mt-2 text-sm font-medium text-red-800 hover:text-red-900"
+          <div className="flex items-center gap-2">
+            {/* Mode toggle */}
+            <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold">
+              {['manual', 'auto'].map(m => (
+                <button
+                  key={m}
+                  onClick={() => setMode(m)}
+                  className={`px-3 py-1.5 transition-colors capitalize ${mode === m ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                >
+                  {m === 'auto' ? '🔍 Auto Detect' : '✏️ Manual'}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => fetchRecommendations()}
+              className="px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
             >
-              Try Again
+              ↻ Refresh
             </button>
           </div>
-        )}
+        </div>
+      </header>
 
-        {/* Auto-Detection Panel */}
-        {detectionMode === 'auto' && (
-          <div className="mb-8 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-            <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4">
-              <h2 className="text-xl font-bold text-white">🎯 Auto Skill Detection</h2>
-              <p className="text-green-100 text-sm">Upload your resume, add projects, or enter your job role</p>
-            </div>
-            
-            <div className="p-6">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Job Role */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Job Role
-                  </label>
-                  <input
-                    type="text"
-                    value={jobRole}
-                    onChange={(e) => setJobRole(e.target.value)}
-                    placeholder="e.g., Senior Full Stack Developer"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    list="job-roles-list"
-                  />
-                  <datalist id="job-roles-list">
-                    {jobRoles.map(role => (
-                      <option key={role} value={role} />
-                    ))}
-                  </datalist>
-                </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8">
 
-                {/* Resume Upload */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Resume (PDF)
-                  </label>
-                  <div className="flex items-center space-x-2">
-                    <label className={`flex-1 px-4 py-2 border-2 border-dashed rounded-lg text-center cursor-pointer transition-colors ${
-                      resumeFile ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:border-green-500'
-                    }`}>
-                      <input
-                        type="file"
-                        accept=".pdf,.txt"
-                        onChange={handleResumeUpload}
-                        className="hidden"
-                      />
-                      <span className="text-sm text-gray-600">
-                        {uploadingResume ? 'Uploading...' : resumeFile ? resumeFile.name : 'Choose file'}
-                      </span>
-                    </label>
-                  </div>
-                </div>
+          {/* ── LEFT COLUMN ── */}
+          <div className="space-y-6">
 
-                {/* Projects */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Add Project
-                  </label>
-                  <div className="space-y-2">
-                    <input
-                      type="text"
-                      value={newProject.name}
-                      onChange={(e) => setNewProject({...newProject, name: e.target.value})}
-                      placeholder="Project name"
-                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded"
-                    />
-                    <input
-                      type="text"
-                      value={newProject.technologies}
-                      onChange={(e) => setNewProject({...newProject, technologies: e.target.value})}
-                      placeholder="Technologies (comma-separated)"
-                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded"
-                    />
-                    <button
-                      onClick={addProject}
-                      className="w-full px-3 py-1.5 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+            {/* Detected Domains */}
+            {domainList.length > 0 && (
+              <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Detected Domains</p>
+                <div className="flex flex-wrap gap-2">
+                  {domainList.map(([key, info]) => (
+                    <span
+                      key={key}
+                      className={`px-3 py-1.5 rounded-full text-xs font-bold border ${DOMAIN_COLORS[info.color] || 'bg-slate-100 text-slate-600 border-slate-200'}`}
                     >
-                      Add Project
-                    </button>
-                  </div>
+                      {info.label}
+                      {info.matched && (
+                        <span className="ml-1 opacity-60">· {info.matched.slice(0, 2).join(', ')}{info.matched.length > 2 ? '…' : ''}</span>
+                      )}
+                    </span>
+                  ))}
                 </div>
               </div>
+            )}
 
-              {/* Projects List */}
-              {projects.length > 0 && (
-                <div className="mt-4">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Added Projects:</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {projects.map((project, index) => (
-                      <span key={index} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm flex items-center">
-                        {project.name}
-                        <button onClick={() => removeProject(index)} className="ml-2 text-blue-600 hover:text-blue-800">
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
+            {/* ── AUTO DETECT PANEL ── */}
+            {mode === 'auto' && (
+              <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
+                <div className="bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-4">
+                  <h2 className="text-base font-bold text-white">🔍 Smart Skill Detection</h2>
+                  <p className="text-indigo-200 text-xs mt-0.5">
+                    Upload a résumé, enter your job role, or describe projects — AI will extract your skills
+                  </p>
                 </div>
-              )}
 
-              {/* Detect Button */}
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={detectSkills}
-                  disabled={loading.detection}
-                  className="px-6 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 font-medium flex items-center space-x-2"
-                >
-                  {loading.detection ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      <span>Detecting...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>🔍</span>
-                      <span>Detect Skills</span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-              {/* Detected Skills */}
-              {detectedSkills.length > 0 && (
-                <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-medium text-gray-900">
-                      Detected Skills ({detectedSkills.length})
-                    </h3>
-                    <button
-                      onClick={() => setShowSkillConfidence(!showSkillConfidence)}
-                      className="text-sm text-blue-600 hover:text-blue-800"
-                    >
-                      {showSkillConfidence ? 'Hide confidence' : 'Show confidence'}
-                    </button>
-                  </div>
-                  
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {detectedSkills.map(skill => (
-                      <div key={skill.name} className="relative group">
-                        <span className={`px-3 py-1 rounded-full text-sm flex items-center ${
-                          showSkillConfidence ? getConfidenceColor(skill.confidence) : 'bg-purple-100 text-purple-800'
-                        }`}>
-                          {skill.name}
-                          {showSkillConfidence && (
-                            <span className="ml-1 text-xs font-bold">
-                              {skill.confidence}%
-                            </span>
-                          )}
-                          <button 
-                            onClick={() => removeDetectedSkill(skill.name)}
-                            className="ml-2 hover:text-red-600"
-                          >
-                            ×
-                          </button>
-                        </span>
-                        {skill.source && (
-                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 hidden group-hover:block">
-                            <div className="bg-gray-800 text-white text-xs rounded py-1 px-2 whitespace-nowrap">
-                              Source: {skill.source}
-                            </div>
-                          </div>
+                <div className="p-6 space-y-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {/* Resume */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">📄 Résumé (PDF / TXT / DOCX)</label>
+                      <div
+                        onClick={() => fileRef.current?.click()}
+                        className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-colors
+                          ${resumeFile ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-indigo-300 bg-slate-50'}`}
+                      >
+                        <input
+                          ref={fileRef}
+                          type="file"
+                          accept=".pdf,.txt,.docx"
+                          className="hidden"
+                          onChange={e => {
+                            const f = e.target.files[0];
+                            if (f) { setResumeFile(f); uploadResume(f); }
+                          }}
+                        />
+                        {loading.resume ? (
+                          <div className="flex justify-center"><Spinner size={6} color="indigo" /></div>
+                        ) : (
+                          <>
+                            <p className="text-2xl mb-1">📎</p>
+                            <p className="text-xs text-slate-500 font-medium">
+                              {resumeFile ? resumeFile.name : 'Click to upload'}
+                            </p>
+                          </>
                         )}
                       </div>
-                    ))}
+                    </div>
+
+                    {/* Job Role */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">💼 Job Role</label>
+                      <input
+                        type="text"
+                        value={jobRole}
+                        onChange={e => setJobRole(e.target.value)}
+                        placeholder="e.g. ML Engineer"
+                        list="job-roles-dl"
+                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-slate-50"
+                      />
+                      <datalist id="job-roles-dl">
+                        {jobRoles.map(r => <option key={r} value={r} />)}
+                      </datalist>
+                    </div>
+
+                    {/* Project */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">🏗️ Project</label>
+                      <input
+                        type="text"
+                        value={newProject.name}
+                        onChange={e => setNewProject(p => ({ ...p, name: e.target.value }))}
+                        placeholder="Project name"
+                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-slate-50 mb-1.5"
+                      />
+                      <input
+                        type="text"
+                        value={newProject.technologies}
+                        onChange={e => setNewProject(p => ({ ...p, technologies: e.target.value }))}
+                        placeholder="Technologies (comma-separated)"
+                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-slate-50 mb-1.5"
+                      />
+                      <button
+                        onClick={() => {
+                          if (!newProject.name.trim()) return;
+                          setProjects(p => [...p, newProject]);
+                          setNewProject({ name: '', technologies: '' });
+                        }}
+                        className="w-full py-1.5 bg-slate-700 text-white text-xs font-semibold rounded-lg hover:bg-slate-800 transition-colors"
+                      >
+                        + Add Project
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Sources Used */}
-                  {Object.keys(skillSources).length > 0 && (
-                    <div className="text-xs text-gray-500 mb-4">
-                      Sources: {Object.entries(skillSources)
-                        .filter(([_, used]) => used)
-                        .map(([source]) => source)
-                        .join(', ')}
+                  {/* Project pills */}
+                  {projects.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {projects.map((p, i) => (
+                        <span key={i} className="flex items-center gap-1 px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-full text-xs font-semibold">
+                          🏗️ {p.name}
+                          <button onClick={() => setProjects(ps => ps.filter((_, j) => j !== i))} className="hover:opacity-60 ml-0.5">×</button>
+                        </span>
+                      ))}
                     </div>
                   )}
 
                   <button
-                    onClick={applyDetectedSkills}
-                    className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+                    onClick={detectSkills}
+                    disabled={loading.detect}
+                    className="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-bold text-sm rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-60"
                   >
-                    Apply These Skills & Get Recommendations
+                    {loading.detect ? <><Spinner size={4} color="white" /><span>Detecting…</span></> : '🔍 Detect Skills from All Sources'}
                   </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
-        {/* Daily Recommendation */}
-        {dailyRecommendation && (
-          <div className="mb-8 bg-gradient-to-r from-blue-600 to-cyan-500 rounded-2xl p-6 text-white">
-            <div className="flex flex-col md:flex-row md:items-center justify-between">
-              <div>
-                <div className="flex items-center space-x-2 mb-2">
-                  <span className="text-2xl">🎯</span>
-                  <span className="font-bold text-lg">Today's Learning Task</span>
-                </div>
-                <h2 className="text-2xl font-bold mb-2">{dailyRecommendation.topic}</h2>
-                <div className="flex items-center space-x-4 text-blue-100 flex-wrap gap-2">
-                  <span className="flex items-center">
-                    <span className="mr-1">⏱️</span>
-                    {dailyRecommendation.duration}
-                  </span>
-                  <span className="flex items-center">
-                    <span className="mr-1">📖</span>
-                    {dailyRecommendation.format}
-                  </span>
-                  <span className={`px-2 py-1 rounded text-sm ${
-                    dailyRecommendation.priority === 'High' ? 'bg-red-500/30' : 'bg-yellow-500/30'
-                  }`}>
-                    {dailyRecommendation.priority} Priority
-                  </span>
-                  {dailyRecommendation.category && (
-                    <span className="px-2 py-1 bg-purple-500/30 rounded text-sm">
-                      {dailyRecommendation.category}
-                    </span>
+                  {/* Detected skills */}
+                  {detectedSkills.length > 0 && (
+                    <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-xs font-bold text-slate-600">
+                          Detected Skills <span className="text-indigo-600">({detectedSkills.length})</span>
+                        </p>
+                        <button
+                          onClick={() => setShowConf(v => !v)}
+                          className="text-xs text-indigo-500 hover:text-indigo-700 font-semibold"
+                        >
+                          {showConf ? 'Hide' : 'Show'} confidence
+                        </button>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {detectedSkills.map(s => (
+                          <SkillBadge
+                            key={s.name}
+                            skill={s.name}
+                            confidence={s.confidence}
+                            showConf={showConf}
+                            onRemove={() => setDetectedSkills(p => p.filter(x => x.name !== s.name))}
+                          />
+                        ))}
+                      </div>
+
+                      <button
+                        onClick={applyDetectedSkills}
+                        className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-colors"
+                      >
+                        ✓ Apply Skills & Get AI Recommendations
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
-              <button className="mt-4 md:mt-0 px-6 py-3 bg-white text-blue-600 hover:bg-blue-50 rounded-xl font-bold transition-colors">
-                Start Learning
-              </button>
-            </div>
-          </div>
-        )}
+            )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Content */}
-          <div className="lg:col-span-2 space-y-8">
-            {/* Tab Navigation */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-              <div className="flex border-b border-gray-200">
-                {['courses', 'path', 'skills'].map(tab => (
+            {/* ── Daily Task Banner ── */}
+            {dailyTask ? (
+              <div className="bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 rounded-2xl p-6 text-white shadow-lg">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-lg">🎯</span>
+                      <span className="text-xs font-bold uppercase tracking-widest opacity-80">Today's AI-Picked Task</span>
+                    </div>
+                    <h3 className="text-lg font-black leading-snug mb-2">{dailyTask.topic}</h3>
+                    <div className="flex flex-wrap gap-3 text-sm opacity-90">
+                      <span>⏱ {dailyTask.duration}</span>
+                      <span>📖 {dailyTask.format}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${dailyTask.priority === 'High' ? 'bg-red-500/40' : 'bg-yellow-500/40'}`}>
+                        {dailyTask.priority} Priority
+                      </span>
+                      {dailyTask.category && (
+                        <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-white/20">{dailyTask.category}</span>
+                      )}
+                    </div>
+                    {dailyTask.encouragement && (
+                      <p className="text-xs opacity-70 mt-2 italic">{dailyTask.encouragement}</p>
+                    )}
+                  </div>
+                  {dailyTask.resource && (
+                    <a
+                      href={dailyTask.resource}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 px-5 py-2.5 bg-white text-indigo-700 hover:bg-indigo-50 rounded-xl font-bold text-sm transition-colors"
+                    >
+                      Start Learning →
+                    </a>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={fetchDailyTask}
+                disabled={loading.daily}
+                className="w-full py-3 border-2 border-dashed border-indigo-200 rounded-2xl text-indigo-500 text-sm font-semibold hover:border-indigo-400 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2"
+              >
+                {loading.daily ? <Spinner size={5} color="indigo" /> : '🎯 Generate Today\'s Learning Task'}
+              </button>
+            )}
+
+            {/* ── Tabs ── */}
+            <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
+              <div className="flex border-b border-slate-100">
+                {[
+                  { id: 'courses', label: '📚 Courses' },
+                  { id: 'path', label: '🗺️ Learning Path' },
+                  { id: 'skills', label: '🎯 Skills' },
+                ].map(tab => (
                   <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`flex-1 px-6 py-4 font-medium transition-colors ${
-                      activeTab === tab
-                        ? 'text-blue-600 border-b-2 border-blue-600'
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex-1 py-3.5 text-sm font-semibold transition-colors
+                      ${activeTab === tab.id
+                        ? 'border-b-2 border-indigo-600 text-indigo-700 bg-indigo-50/50'
+                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
                   >
-                    {tab === 'courses' ? '📚 Courses' : tab === 'path' ? '🗺️ Learning Path' : '🎯 Skills'}
+                    {tab.label}
                   </button>
                 ))}
               </div>
 
-              {/* Tab Content */}
               <div className="p-6">
+
+                {/* COURSES TAB */}
                 {activeTab === 'courses' && (
-                  <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-bold text-gray-900">Recommended Courses</h3>
-                      <span className="text-sm text-gray-500">
-                        {detectionMode === 'auto' ? 'Based on detected skills' : 'Based on your skills'}
-                      </span>
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="font-bold text-slate-800">AI Recommended Courses</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {courses.length > 0
+                            ? `${courses.length} courses matched to your skills via RAG`
+                            : 'Add skills or detect them to get personalised recommendations'}
+                        </p>
+                      </div>
+                      {courses.length > 0 && (
+                        <button
+                          onClick={() => fetchRecommendations()}
+                          className="text-xs text-indigo-500 font-semibold hover:text-indigo-700"
+                        >
+                          Refresh
+                        </button>
+                      )}
                     </div>
-                    
+
                     {loading.courses ? (
-                      <div className="text-center py-8">
-                        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                      </div>
-                    ) : recommendedCourses.length > 0 ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {recommendedCourses.map((course, index) => (
-                          <CourseCard key={course.id || index} course={course} />
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-12 bg-gray-50 rounded-lg">
-                        <p className="text-gray-500">No recommendations yet. Add some skills or use auto-detection!</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                {activeTab === 'path' && (
-                  <div className="space-y-6">
-                    <h3 className="text-lg font-bold text-gray-900">4-Week Learning Plan</h3>
-                    {loading.path ? (
-                      <div className="text-center py-8">
-                        <div className="w-12 h-12 border-4 border-green-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                      </div>
-                    ) : learningPlan.length > 0 ? (
+                      <div className="flex justify-center py-12"><Spinner size={10} color="indigo" /></div>
+                    ) : courses.length > 0 ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {learningPlan.map(week => (
-                          <LearningWeek key={week.week} week={week} />
+                        {courses.map((c, i) => (
+                          <CourseCard key={c.id || i} course={c} onEnroll={enrollCourse} />
                         ))}
                       </div>
                     ) : (
-                      <div className="text-center py-12 bg-gray-50 rounded-lg">
-                        <p className="text-gray-500">No learning path yet. Add target skills first!</p>
+                      <div className="text-center py-16 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
+                        <p className="text-3xl mb-3">🎓</p>
+                        <p className="text-slate-500 font-semibold">No recommendations yet</p>
+                        <p className="text-slate-400 text-sm mt-1">
+                          {mode === 'auto' ? 'Detect skills and click Apply' : 'Add target skills in the Skills tab'}
+                        </p>
                       </div>
                     )}
                   </div>
                 )}
 
+                {/* LEARNING PATH TAB */}
+                {activeTab === 'path' && (
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="font-bold text-slate-800">4-Week Structured Learning Path</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Cognitive Foundation → Applied Mechanics → Structured Creation → Professional Synthesis
+                        </p>
+                      </div>
+                      <button
+                        onClick={fetchLearningPath}
+                        disabled={loading.path}
+                        className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1 disabled:opacity-60"
+                      >
+                        {loading.path ? <Spinner size={4} color="white" /> : '⚡ Generate Path'}
+                      </button>
+                    </div>
+
+                    {loading.path ? (
+                      <div className="flex justify-center py-12"><Spinner size={10} color="indigo" /></div>
+                    ) : learningPath.length > 0 ? (
+                      <div className="space-y-4">
+                        {learningPath.map((week, i) => <WeekCard key={week.week} week={week} index={i} />)}
+                      </div>
+                    ) : (
+                      <div className="text-center py-16 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
+                        <p className="text-3xl mb-3">🗺️</p>
+                        <p className="text-slate-500 font-semibold">No path generated yet</p>
+                        <p className="text-slate-400 text-sm mt-1">Click "Generate Path" above after adding skills</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* SKILLS TAB */}
                 {activeTab === 'skills' && (
                   <div className="space-y-6">
-                    <h3 className="text-lg font-bold text-gray-900">Your Skills</h3>
-                    
-                    {detectionMode === 'auto' && detectedSkills.length > 0 ? (
-                      <>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Detected Skills (with confidence)
-                          </label>
-                          <div className="flex flex-wrap gap-2 mb-4">
-                            {detectedSkills.map(skill => (
-                              <span key={skill.name} className={`px-3 py-1 rounded-full text-sm flex items-center ${getConfidenceColor(skill.confidence)}`}>
-                                {skill.name}
-                                <span className="ml-1 text-xs font-bold">
-                                  {skill.confidence}%
-                                </span>
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Current Skills (Top 5)
-                          </label>
-                          <div className="flex flex-wrap gap-2 mb-4">
-                            {detectedSkills.slice(0, 5).map(skill => (
-                              <span key={skill.name} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-                                {skill.name}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
+                    <h3 className="font-bold text-slate-800">Manage Your Skills</h3>
 
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Target Skills (Next 5)
-                          </label>
-                          <div className="flex flex-wrap gap-2 mb-4">
-                            {detectedSkills.slice(5, 10).map(skill => (
-                              <span key={skill.name} className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                                {skill.name}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Current Skills
-                          </label>
-                          <div className="flex flex-wrap gap-2 mb-4">
-                            {learningProfile.currentSkills.map(skill => (
-                              <span key={skill} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-                                {skill}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
+                    {/* Current skills */}
+                    <div>
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Current Skills</p>
+                      <div className="flex flex-wrap gap-2">
+                        {(profile.current_skills || []).length === 0 ? (
+                          <p className="text-sm text-slate-400 italic">No current skills added yet</p>
+                        ) : (
+                          (profile.current_skills || []).map(sk => (
+                            <SkillBadge key={sk} skill={sk} confidence={90} showConf={false} />
+                          ))
+                        )}
+                      </div>
+                    </div>
 
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Target Skills
-                          </label>
-                          <div className="flex flex-wrap gap-2 mb-4">
-                            {learningProfile.targetSkills.map(skill => (
-                              <span key={skill} className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm flex items-center">
-                                {skill}
-                                <button 
-                                  onClick={() => removeTargetSkill(skill)}
-                                  className="ml-2 text-green-600 hover:text-green-800"
-                                >
-                                  ×
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        </div>
+                    {/* Target skills */}
+                    <div>
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Target Skills</p>
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {(profile.target_skills || []).length === 0 ? (
+                          <p className="text-sm text-slate-400 italic">No target skills — add them below</p>
+                        ) : (
+                          (profile.target_skills || []).map(sk => (
+                            <SkillBadge key={sk} skill={sk} confidence={75} showConf={false}
+                              onRemove={() => removeSkill(sk)} />
+                          ))
+                        )}
+                      </div>
 
-                        <div className="flex space-x-2">
+                      {/* Skill input with autocomplete */}
+                      <div className="relative">
+                        <div className="flex gap-2">
                           <input
                             type="text"
                             value={newSkill}
-                            onChange={(e) => setNewSkill(e.target.value)}
-                            placeholder="Add a target skill..."
-                            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                            list="skills-list"
+                            onChange={e => setNewSkill(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && addSkill()}
+                            placeholder="Type a skill (e.g. react, machine learning)…"
+                            className="flex-1 px-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-slate-50"
                           />
-                          <datalist id="skills-list">
-                            {availableSkills.map(skill => (
-                              <option key={skill} value={skill} />
-                            ))}
-                          </datalist>
                           <button
-                            onClick={() => addTargetSkill(newSkill)}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                            onClick={() => addSkill()}
+                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl transition-colors"
                           >
                             Add
                           </button>
                         </div>
-                      </>
+
+                        {skillSuggestions.length > 0 && (
+                          <div className="absolute top-full left-0 right-12 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-10 overflow-hidden">
+                            {skillSuggestions.map(s => (
+                              <button
+                                key={s}
+                                onClick={() => addSkill(s)}
+                                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+                              >
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {(profile.target_skills || []).length > 0 && (
+                        <button
+                          onClick={() => fetchRecommendations()}
+                          disabled={loading.courses}
+                          className="mt-3 w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+                        >
+                          {loading.courses ? <Spinner size={4} color="white" /> : '🚀 Get AI Course Recommendations'}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Skill progress bars */}
+                    {allUserSkills.length > 0 && (
+                      <div>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Skill Proficiency (estimated)</p>
+                        <div className="space-y-3">
+                          {allUserSkills.slice(0, 8).map((sk, i) => {
+                            const pct = Math.min(95, 40 + i * 7);
+                            return (
+                              <div key={sk}>
+                                <div className="flex justify-between text-xs mb-1">
+                                  <span className="font-semibold text-slate-700 capitalize">{sk}</span>
+                                  <span className="text-slate-400">{pct}%</span>
+                                </div>
+                                <div className="w-full bg-slate-100 rounded-full h-2">
+                                  <div
+                                    className="bg-gradient-to-r from-indigo-400 to-violet-400 h-2 rounded-full transition-all duration-700"
+                                    style={{ width: `${pct}%` }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
                     )}
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Skill Progress */}
-            {(learningProfile.targetSkills.length > 0 || detectedSkills.length > 0) && (
-              <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-6">
-                  {detectionMode === 'auto' ? 'Detected Skills Progress' : 'Target Skills Progress'}
+            {/* ── Quick Resources (shown after courses load) ── */}
+            {quickResources.length > 0 && (
+              <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
+                <h3 className="font-bold text-slate-800 mb-4">
+                  🔗 Curated Resources
+                  <span className="text-xs font-normal text-slate-400 ml-2">personalised to your skills</span>
                 </h3>
-                
-                <div className="space-y-4">
-                  {(detectionMode === 'auto' ? detectedSkills.slice(0, 5) : learningProfile.targetSkills).map((item, index) => {
-                    const skillName = typeof item === 'string' ? item : item.name;
-                    const confidence = typeof item === 'object' ? item.confidence : Math.floor(Math.random() * 30 + 20);
-                    
-                    return (
-                      <div key={index} className="space-y-2">
-                        <div className="flex justify-between">
-                          <span className="font-medium text-gray-900">{skillName}</span>
-                          <span className="text-sm text-gray-600">
-                            {confidence}% Complete
-                          </span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-3">
-                          <div 
-                            className="bg-gradient-to-r from-purple-500 to-pink-500 h-3 rounded-full transition-all duration-1000"
-                            style={{ width: `${confidence}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {quickResources.map((r, i) => <ResourceCard key={i} res={r} />)}
                 </div>
+              </div>
+            )}
+
+            {/* ── Learning Tips (shown after courses load) ── */}
+            {learningTips.length > 0 && (
+              <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100 rounded-2xl p-6 shadow-sm">
+                <h3 className="font-bold text-slate-800 mb-4">
+                  💡 AI Learning Tips
+                  <span className="text-xs font-normal text-slate-400 ml-2">for your domain</span>
+                </h3>
+                <ul className="space-y-3">
+                  {learningTips.map((tip, i) => (
+                    <li key={i} className="flex items-start gap-3 text-sm text-slate-700">
+                      <span className="mt-0.5 w-5 h-5 rounded-full bg-amber-400 text-white text-[10px] font-black flex items-center justify-center shrink-0">
+                        {i + 1}
+                      </span>
+                      <span className="leading-relaxed">{tip}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
           </div>
 
-          {/* Sidebar */}
-          <div className="space-y-8">
-            {/* Learning Stats */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-              <h3 className="font-bold text-gray-900 mb-6">Learning Statistics</h3>
-              
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl border border-blue-200">
-                    <div className="text-2xl font-bold text-blue-600">18</div>
-                    <div className="text-sm text-blue-800">Hours This Month</div>
-                  </div>
-                  <div className="text-center p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border border-green-200">
-                    <div className="text-2xl font-bold text-green-600">3</div>
-                    <div className="text-sm text-green-800">Courses Completed</div>
-                  </div>
-                </div>
-                
-                <div className="p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border border-purple-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-purple-900">Learning Streak</span>
-                    <span className="font-bold text-purple-600">7 days 🔥</span>
-                  </div>
-                  <div className="w-full bg-purple-200 rounded-full h-2">
-                    <div className="w-7/12 h-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"></div>
-                  </div>
-                </div>
+          {/* ── RIGHT SIDEBAR ── */}
+          <div className="space-y-5">
 
-                {detectionMode === 'auto' && (
-                  <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border border-green-200">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium text-green-900">Skills Detected</span>
-                      <span className="font-bold text-green-600">{detectedSkills.length}</span>
-                    </div>
-                    <div className="text-xs text-gray-600">
-                      From {Object.values(skillSources).filter(Boolean).length} sources
-                    </div>
+            {/* Stats */}
+            <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
+              <h3 className="font-bold text-slate-800 mb-4 text-sm">📊 Your Progress</h3>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: 'Hours', value: stats?.total_learning_hours ?? 0, color: 'text-indigo-600', bg: 'bg-indigo-50', icon: '⏱' },
+                  { label: 'Completed', value: stats?.courses_completed ?? 0, color: 'text-emerald-600', bg: 'bg-emerald-50', icon: '✅' },
+                  { label: 'Skills', value: stats?.skills_count ?? allUserSkills.length, color: 'text-violet-600', bg: 'bg-violet-50', icon: '🎯' },
+                  { label: 'Streak', value: `${stats?.streak_days ?? 0}d`, color: 'text-amber-600', bg: 'bg-amber-50', icon: '🔥' },
+                ].map(s => (
+                  <div key={s.label} className={`${s.bg} rounded-xl p-3 text-center`}>
+                    <p className="text-lg mb-0.5">{s.icon}</p>
+                    <p className={`text-xl font-black ${s.color}`}>{s.value}</p>
+                    <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">{s.label}</p>
                   </div>
-                )}
+                ))}
               </div>
             </div>
 
-            {/* Quick Resources */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-              <h3 className="font-bold text-gray-900 mb-4">Quick Resources</h3>
+            {/* Learning Profile Settings */}
+            <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
+              <h3 className="font-bold text-slate-800 mb-4 text-sm">⚙️ Profile Settings</h3>
               <div className="space-y-3">
-                <a href="#" className="flex items-center space-x-3 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors">
-                  <span className="text-blue-600">📖</span>
-                  <div>
-                    <p className="font-medium text-gray-900">Documentation</p>
-                    <p className="text-xs text-gray-500">Official docs & tutorials</p>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1">Level</label>
+                  <select
+                    value={profile.level || 'Beginner'}
+                    onChange={e => {
+                      const updated = { ...profile, level: e.target.value };
+                      setProfile(updated);
+                      API.put('/profile', { user_id: userId, level: e.target.value }).catch(() => {});
+                    }}
+                    className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  >
+                    {['Beginner', 'Intermediate', 'Advanced'].map(l => (
+                      <option key={l}>{l}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+                    Weekly Hours: <span className="text-indigo-600">{profile.weekly_hours}h</span>
+                  </label>
+                  <input
+                    type="range"
+                    min={1}
+                    max={20}
+                    value={profile.weekly_hours || 5}
+                    onChange={e => {
+                      const v = Number(e.target.value);
+                      setProfile(p => ({ ...p, weekly_hours: v }));
+                    }}
+                    onMouseUp={e => {
+                      API.put('/profile', { user_id: userId, weekly_hours: Number(e.target.value) }).catch(() => {});
+                    }}
+                    className="w-full accent-indigo-600"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-400">
+                    <span>1h</span><span>20h</span>
                   </div>
-                </a>
-                <a href="#" className="flex items-center space-x-3 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors">
-                  <span className="text-green-600">🎥</span>
-                  <div>
-                    <p className="font-medium text-gray-900">Video Courses</p>
-                    <p className="text-xs text-gray-500">Hands-on video learning</p>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1">Format</label>
+                  <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold">
+                    {['Video', 'Article', 'Project'].map(f => (
+                      <button
+                        key={f}
+                        onClick={() => {
+                          setProfile(p => ({ ...p, preferred_format: f }));
+                          API.put('/profile', { user_id: userId, preferred_format: f }).catch(() => {});
+                        }}
+                        className={`flex-1 py-1.5 transition-colors ${profile.preferred_format === f ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                      >
+                        {f}
+                      </button>
+                    ))}
                   </div>
-                </a>
-                <a href="#" className="flex items-center space-x-3 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors">
-                  <span className="text-purple-600">💻</span>
-                  <div>
-                    <p className="font-medium text-gray-900">Practice Labs</p>
-                    <p className="text-xs text-gray-500">Interactive exercises</p>
-                  </div>
-                </a>
+                </div>
               </div>
             </div>
 
-            {/* Learning Tips */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-              <h3 className="font-bold text-gray-900 mb-4">💡 Learning Tips</h3>
-              <ul className="space-y-2 text-sm text-gray-600">
-                <li className="flex items-start space-x-2">
-                  <span className="text-green-500">•</span>
-                  <span>Practice coding daily for 30 minutes</span>
-                </li>
-                <li className="flex items-start space-x-2">
-                  <span className="text-green-500">•</span>
-                  <span>Join study groups for better retention</span>
-                </li>
-                <li className="flex items-start space-x-2">
-                  <span className="text-green-500">•</span>
-                  <span>Build projects to apply your skills</span>
-                </li>
-                <li className="flex items-start space-x-2">
-                  <span className="text-green-500">•</span>
-                  <span>Review and revise weekly</span>
-                </li>
-              </ul>
-            </div>
+            {/* Matched Domains mini-card */}
+            {domainList.length > 0 && (
+              <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
+                <h3 className="font-bold text-slate-800 mb-3 text-sm">🗂 Your Tech Domains</h3>
+                <div className="space-y-2">
+                  {domainList.slice(0, 5).map(([key, info]) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${DOMAIN_COLORS[info.color] || 'bg-slate-100 text-slate-600'}`}>
+                        {info.label}
+                      </span>
+                      <span className="text-[11px] text-slate-400">{(info.matched || []).length} skills</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Enrolments */}
+            {stats?.courses_enrolled > 0 && (
+              <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
+                <h3 className="font-bold text-slate-800 mb-3 text-sm">📋 Enrolled</h3>
+                <div className="text-center py-4">
+                  <p className="text-3xl font-black text-indigo-600">{stats.courses_enrolled}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">courses in progress</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

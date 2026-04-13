@@ -1,41 +1,219 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  Box, Paper, Typography, Grid, Card, CardContent, 
-  Button, Chip, IconButton, Tooltip, Avatar, Badge,
-  Table, TableBody, TableCell, TableContainer, TableHead, 
-  TableRow, TablePagination, TextField, MenuItem, Select,
-  FormControl, InputLabel, Checkbox, Dialog, DialogTitle,
-  DialogContent, DialogActions, Alert, LinearProgress,
-  Tabs, Tab, CircularProgress, Snackbar
-} from '@mui/material';
-import {
-  Email as EmailIcon,
-  Reply as ReplyIcon,
-  Visibility as ViewIcon,
-  Assignment as AssignIcon,
-  CheckCircle as ResolveIcon,
-  PriorityHigh as PriorityIcon,
-  FilterList as FilterIcon,
-  Refresh as RefreshIcon,
-  Search as SearchIcon,
-  ChatBubble as ChatIcon,
-  PersonAdd as PersonAddIcon,
-  Assessment as StatsIcon,
-  Archive as ArchiveIcon,
-  Send as SendIcon,
-  MoreVert as MoreIcon,
-  Delete as DeleteIcon,
-  CheckCircle as CheckCircleIcon
-} from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
+import {
+  Delete as DeleteIcon, Visibility as ViewIcon, Reply as ReplyIcon,
+  Send as SendIcon, Email as EmailIcon, Close as CloseIcon,
+  Inbox as InboxIcon, StarBorder as StarIcon, PriorityHigh as UrgentIcon,
+  CheckCircle as CheckCircleIcon, Error as ErrorIcon,
+  Schedule as ScheduleIcon, People as PeopleIcon,
+  Assignment as AssignIcon, FilterList as FilterIcon,
+  Refresh as RefreshIcon, Search as SearchIcon,
+  PersonAdd as PersonAddIcon, Assessment as StatsIcon,
+  Archive as ArchiveIcon, MoreVert as MoreIcon,
+  PriorityHigh as PriorityHighIcon,
+} from '@mui/icons-material';
+import { format } from 'date-fns';
 import axiosInstance from '../../utils/axiosInstance';
-import { format, subDays } from 'date-fns';
-import debounce from 'lodash/debounce';
+import { FaUser, FaEnvelope, FaPaperPlane, FaTrash, FaEye, FaReply, FaDownload, FaChartLine, FaFilter, FaSync } from 'react-icons/fa';
+
+// ─── Reusable UI Primitives ───────────────────────────────────────────────────
+
+const Badge = ({ children, variant = 'default' }) => {
+  const variants = {
+    default:  'bg-slate-100 text-slate-600',
+    primary:  'bg-indigo-50 text-indigo-700',
+    success:  'bg-emerald-50 text-emerald-700',
+    warning:  'bg-amber-50 text-amber-700',
+    danger:   'bg-red-50 text-red-700',
+    info:     'bg-sky-50 text-sky-700',
+    orange:   'bg-orange-50 text-orange-700',
+  };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${variants[variant]}`}>
+      {children}
+    </span>
+  );
+};
+
+const Avatar = ({ name = 'U', size = 'md' }) => {
+  const sizes = { sm: 'w-7 h-7 text-xs', md: 'w-9 h-9 text-sm', lg: 'w-11 h-11 text-base' };
+  const colors = ['bg-indigo-100 text-indigo-700', 'bg-violet-100 text-violet-700', 'bg-emerald-100 text-emerald-700', 'bg-amber-100 text-amber-700', 'bg-rose-100 text-rose-700'];
+  const color = colors[name.charCodeAt(0) % colors.length];
+  return (
+    <div className={`${sizes[size]} ${color} rounded-full flex items-center justify-center font-semibold flex-shrink-0`}>
+      {name.charAt(0).toUpperCase()}
+    </div>
+  );
+};
+
+const KpiCard = ({ icon: Icon, label, value, sub, iconBg }) => (
+  <div className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-all duration-200">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-xs text-slate-500 font-medium mb-2">{label}</p>
+        <p className="text-2xl font-semibold text-slate-900">{value}</p>
+        {sub && <p className="text-xs text-slate-400 mt-1">{sub}</p>}
+      </div>
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${iconBg}`}>
+        <Icon className="text-white text-sm" />
+      </div>
+    </div>
+  </div>
+);
+
+const IconBtn = ({ icon: Icon, onClick, title, className = '' }) => (
+  <button
+    onClick={onClick}
+    title={title}
+    className={`p-1.5 rounded-md transition-colors ${className}`}
+  >
+    <Icon style={{ fontSize: 16 }} />
+  </button>
+);
+
+const EmptyState = ({ icon: Icon, title, subtitle, action }) => (
+  <div className="flex flex-col items-center justify-center py-20 text-center">
+    <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mb-4">
+      <Icon className="text-slate-400" style={{ fontSize: 28 }} />
+    </div>
+    <p className="text-slate-800 font-medium mb-1">{title}</p>
+    <p className="text-slate-400 text-sm mb-5">{subtitle}</p>
+    {action}
+  </div>
+);
+
+// ─── Confirm Delete Dialog ────────────────────────────────────────────────────
+
+const ConfirmDialog = ({ open, onClose, onConfirm, loading, count = 1, permanent = false }) => {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+        <div className="w-12 h-12 bg-red-50 rounded-lg flex items-center justify-center mb-4">
+          <DeleteIcon className="text-red-500" style={{ fontSize: 22 }} />
+        </div>
+        <h3 className="text-slate-900 font-semibold text-lg mb-1">Delete {count > 1 ? `${count} messages` : 'message'}?</h3>
+        <p className="text-slate-500 text-sm mb-6">This action cannot be undone.</p>
+        {permanent && (
+          <div className="mb-4 p-3 bg-red-50 rounded-lg border border-red-200">
+            <p className="text-xs text-red-600 font-medium">⚠️ Warning: This will permanently delete these messages.</p>
+          </div>
+        )}
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">
+            Cancel
+          </button>
+          <button onClick={onConfirm} disabled={loading} className="flex-1 py-2.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-medium transition-colors disabled:opacity-50">
+            {loading ? 'Deleting…' : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Message View Drawer ──────────────────────────────────────────────────────
+
+const MessageDrawer = ({ message, open, onClose, onReply, onAssign }) => {
+  if (!open || !message) return null;
+  
+  const getPriorityColor = (priority) => {
+    if (priority === 'high' || priority === 'urgent') return 'danger';
+    if (priority === 'medium') return 'warning';
+    return 'default';
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white w-full max-w-lg h-full flex flex-col shadow-xl animate-slide-in-right">
+        {/* Header */}
+        <div className="flex items-start justify-between p-5 border-b border-slate-100">
+          <div className="flex-1 min-w-0 pr-3">
+            <h3 className="text-slate-900 font-semibold text-base truncate">{message.subject || 'No Subject'}</h3>
+            <div className="flex items-center gap-2 mt-2">
+              <Badge variant={message.status === 'read' ? 'default' : 'primary'}>{message.status || 'sent'}</Badge>
+              {message.priority === 'high' || message.priority === 'urgent' ? (
+                <Badge variant="danger">{message.priority}</Badge>
+              ) : null}
+              {message.confidential && <Badge variant="warning">Confidential</Badge>}
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors text-slate-400">
+            <CloseIcon style={{ fontSize: 20 }} />
+          </button>
+        </div>
+
+        {/* Sender strip */}
+        <div className="flex items-center gap-3 px-5 py-4 bg-slate-50 border-b border-slate-100">
+          <Avatar name={message.sender?.name || 'U'} size="md" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-slate-900">{message.sender?.name || 'Unknown'}</p>
+            <p className="text-xs text-slate-500">{message.sender?.role?.toUpperCase() || 'Employee'} · {message.category || 'General'}</p>
+          </div>
+          {message.createdAt && (
+            <span className="text-xs text-slate-400 flex-shrink-0">
+              {format(new Date(message.createdAt), 'MMM dd, yyyy · h:mm a')}
+            </span>
+          )}
+        </div>
+
+        {/* Assigned To */}
+        {message.assignedTo && (
+          <div className="px-5 py-3 bg-indigo-50 border-b border-indigo-100 flex items-center gap-2">
+            <PeopleIcon className="text-indigo-500" style={{ fontSize: 16 }} />
+            <span className="text-xs text-indigo-700">Assigned to: {message.assignedTo.name}</span>
+          </div>
+        )}
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-5">
+          <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">{message.message}</p>
+        </div>
+
+        {/* Actions */}
+        <div className="p-5 border-t border-slate-100 flex gap-3">
+          <button
+            onClick={() => { onReply(message._id); onClose(); }}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            <FaReply className="text-xs" />
+            Reply
+          </button>
+          <button
+            onClick={() => { onAssign(message._id); onClose(); }}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg transition-colors"
+          >
+            <PersonAddIcon style={{ fontSize: 16 }} />
+            Assign
+          </button>
+          <button onClick={onClose} className="px-4 py-2.5 border border-slate-200 rounded-lg text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Tab Bar ──────────────────────────────────────────────────────────────────
+
+const TABS = [
+  { id: 0, label: 'All', icon: InboxIcon, count: 'total' },
+  { id: 1, label: 'New', icon: EmailIcon, count: 'new' },
+  { id: 2, label: 'In Progress', icon: AssignIcon, count: 'inProgress' },
+  { id: 3, label: 'Urgent', icon: PriorityHighIcon, count: 'urgent' },
+  { id: 4, label: 'My Cases', icon: PersonAddIcon, count: 'assignedToMe' },
+  { id: 5, label: 'Resolved', icon: CheckCircleIcon, count: 'resolved' },
+];
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 const MessageDashboard = () => {
   const navigate = useNavigate();
-  
-  // State
+
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -48,110 +226,33 @@ const MessageDashboard = () => {
     search: '',
     timeRange: 'today'
   });
-  const [pagination, setPagination] = useState({
-    page: 0,
-    limit: 20,
-    total: 0
-  });
+  const [pagination, setPagination] = useState({ page: 0, limit: 20, total: 0 });
   const [selectedMessages, setSelectedMessages] = useState([]);
   const [tabValue, setTabValue] = useState(0);
-  const [bulkActionDialog, setBulkActionDialog] = useState(false);
-  const [bulkAction, setBulkAction] = useState('');
-  const [bulkActionData, setBulkActionData] = useState({
-    assignee: '',
-    newStatus: '',
-    newPriority: ''
-  });
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
-  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState({
-    open: false,
-    title: '',
-    message: '',
-    action: '',
-    ids: [],
-    permanent: false
-  });
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, messageId: null, permanent: false });
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [viewDialog, setViewDialog] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState(null);
+  const [showFilters, setShowFilters] = useState(false);
 
-  // Constants
-  const statusColors = {
-    'new': 'info',
-    'in-progress': 'warning',
-    'awaiting-approval': 'secondary',
-    'resolved': 'success',
-    'closed': 'default',
-    'escalated': 'error',
-    'sent': 'info',
-    'read': 'primary',
-    'deleted': 'error'
-  };
-
-  const priorityColors = {
-    'urgent': 'error',
-    'high': 'warning',
-    'normal': 'info',
-    'low': 'success'
-  };
-
-  const categoryIcons = {
-    'leave': '🏖️',
-    'payroll': '💰',
-    'benefits': '🏥',
-    'technical': '💻',
-    'complaint': '⚠️',
-    'suggestion': '💡',
-    'general': '📧',
-    'document': '📄',
-    'policy': '📋',
-    'other': '📝',
-    'announcement': '📢',
-    'training': '🎓',
-    'appreciation': '⭐',
-    'survey': '📊',
-    'warning': '🚨',
-    'compliance': '⚖️'
-  };
-
-  const timeRanges = [
-    { value: 'today', label: 'Today' },
-    { value: 'yesterday', label: 'Yesterday' },
-    { value: 'week', label: 'This Week' },
-    { value: 'month', label: 'This Month' }
-  ];
-
-  // Utils
   const getCurrentUser = () => {
     try {
       const userStr = localStorage.getItem('user');
       return userStr ? JSON.parse(userStr) : null;
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   };
 
   const currentUser = getCurrentUser();
 
-  // API Functions
-  const fetchMessages = async () => {
+  // Fetch messages
+  const fetchMessages = useCallback(async () => {
     try {
       setLoading(true);
       const params = {
         page: pagination.page + 1,
         limit: pagination.limit,
-        excludeDeleted: true,
         ...filters
       };
-
-      if (filters.timeRange && filters.timeRange !== 'today') {
-        const now = new Date();
-        let startDate;
-        switch (filters.timeRange) {
-          case 'yesterday': startDate = subDays(now, 1); break;
-          case 'week': startDate = subDays(now, 7); break;
-          case 'month': startDate = subDays(now, 30); break;
-          default: startDate = now;
-        }
-        params.startDate = startDate.toISOString();
-      }
 
       const response = await axiosInstance.get('/messages', { params });
       
@@ -165,13 +266,14 @@ const MessageDashboard = () => {
       if (response.data.stats) setStats(response.data.stats);
       else calculateLocalStats(filteredMessages);
     } catch (error) {
-      console.error('Error fetching messages:', error.response?.data || error.message);
-      showSnackbar(error.response?.data?.message || 'Failed to load messages', 'error');
+      console.error('Error fetching messages:', error);
+      toast.error('Failed to load messages');
+      setMessages([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [pagination.page, pagination.limit, filters]);
 
   const fetchStats = async () => {
     try {
@@ -199,7 +301,6 @@ const MessageDashboard = () => {
     });
   };
 
-  // Effects
   useEffect(() => {
     fetchMessages();
     fetchStats();
@@ -218,32 +319,20 @@ const MessageDashboard = () => {
     if (tabValue !== 0) {
       setFilters(prev => ({ ...prev, ...tabFilters[tabValue] }));
     } else {
-      setFilters(prev => ({
-        ...prev,
-        status: '',
-        priority: '',
-        assignedToMe: false
-      }));
+      setFilters(prev => ({ ...prev, status: '', priority: '', assignedToMe: false }));
     }
+    setPagination(prev => ({ ...prev, page: 0 }));
   }, [tabValue]);
 
   // Event Handlers
-  const debouncedSearch = useCallback(
-    debounce((value) => handleFilterChange('search', value), 500),
-    []
-  );
-
   const handleFilterChange = (name, value) => {
     setFilters(prev => ({ ...prev, [name]: value }));
-    if (name !== 'search') {
-      setPagination(prev => ({ ...prev, page: 0 }));
-    }
+    setPagination(prev => ({ ...prev, page: 0 }));
   };
 
   const handleSearchChange = (e) => {
-    const value = e.target.value;
-    setFilters(prev => ({ ...prev, search: value }));
-    debouncedSearch(value);
+    setFilters(prev => ({ ...prev, search: e.target.value }));
+    setPagination(prev => ({ ...prev, page: 0 }));
   };
 
   const handleSelectMessage = (id) => {
@@ -267,155 +356,64 @@ const MessageDashboard = () => {
     fetchStats();
   };
 
-  const handleBulkAction = async () => {
-    if (!bulkAction || selectedMessages.length === 0) {
-      showSnackbar('Please select messages first', 'warning');
-      return;
-    }
+  const handleViewMessage = (messageId) => {
+    const message = messages.find(msg => msg._id === messageId);
+    if (message) { setSelectedMessage(message); setViewDialog(true); }
+  };
 
-    // Handle delete actions
-    if (bulkAction === 'delete' || bulkAction === 'permanent-delete') {
-      setDeleteConfirmDialog({
-        open: true,
-        title: bulkAction === 'permanent-delete' ? 'Permanently Delete Messages' : 'Delete Messages',
-        message: `Are you sure you want to ${bulkAction === 'permanent-delete' ? 'permanently delete' : 'delete'} ${selectedMessages.length} selected message(s)?`,
-        action: 'bulk',
-        ids: selectedMessages,
-        permanent: bulkAction === 'permanent-delete'
-      });
-      setBulkActionDialog(false);
-      return;
-    }
+  const handleCloseView = () => { setViewDialog(false); setSelectedMessage(null); };
 
-    // Handle other bulk actions
+  const handleReplyMessage = (messageId) => {
+    navigate(`/admin/messages/${messageId}/reply`);
+  };
+
+  const handleAssignMessage = (messageId) => {
+    navigate(`/admin/messages/${messageId}/assign`);
+  };
+
+  const handleDelete = async (messageId) => {
     try {
-      let endpoint = '';
-      let data = { messageIds: selectedMessages };
-      
-      switch(bulkAction) {
-        case 'mark-as-read':
-          endpoint = '/messages/bulk-read';
-          data.status = 'read';
-          break;
-        case 'mark-as-unread':
-          endpoint = '/messages/bulk-unread';
-          data.status = 'new';
-          break;
-        case 'assign':
-          endpoint = '/messages/bulk-assign';
-          data.assignedTo = bulkActionData.assignee;
-          break;
-        case 'change-status':
-          endpoint = '/messages/bulk-status';
-          data.status = bulkActionData.newStatus;
-          break;
-        case 'change-priority':
-          endpoint = '/messages/bulk-priority';
-          data.priority = bulkActionData.newPriority;
-          break;
-        case 'archive':
-          endpoint = '/messages/bulk-archive';
-          break;
-        default:
-          throw new Error('Invalid bulk action');
-      }
+      setLoading(true);
+      await axiosInstance.delete(`/messages/${messageId}`);
+      toast.success('Message deleted');
+      await fetchMessages();
+      await fetchStats();
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast.error('Delete failed');
+    } finally {
+      setDeleteDialog({ open: false, messageId: null, permanent: false });
+      setLoading(false);
+    }
+  };
 
-      await axiosInstance.post(endpoint, data);
-      showSnackbar(`Bulk action '${bulkAction}' applied successfully`, 'success');
-      fetchMessages();
-      fetchStats();
+  const handleBulkDelete = async () => {
+    if (selectedMessages.length === 0) return;
+    try {
+      setLoading(true);
+      let successCount = 0;
+      for (const messageId of selectedMessages) {
+        try {
+          await axiosInstance.delete(`/messages/${messageId}`);
+          successCount++;
+        } catch (error) {
+          console.warn('Bulk delete error:', error);
+        }
+      }
+      await fetchMessages();
+      await fetchStats();
       setSelectedMessages([]);
-      setBulkActionDialog(false);
-      setBulkAction('');
-      setBulkActionData({ assignee: '', newStatus: '', newPriority: '' });
+      setBulkDeleteOpen(false);
+      toast.success(`Deleted ${successCount}/${selectedMessages.length} messages`);
     } catch (error) {
-      console.error('Error performing bulk action:', error.response?.data || error.message);
-      showSnackbar(error.response?.data?.message || 'Failed to perform bulk action', 'error');
+      toast.error('Bulk delete failed');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleDeleteMessage = (messageId, e) => {
-    e.stopPropagation();
-    setDeleteConfirmDialog({
-      open: true,
-      title: 'Delete Message',
-      message: 'Are you sure you want to delete this message?',
-      action: 'individual',
-      ids: [messageId],
-      permanent: false
-    });
-  };
-
-  const handleBulkDelete = () => {
-    if (selectedMessages.length === 0) {
-      showSnackbar('Please select messages first', 'warning');
-      return;
-    }
-    setDeleteConfirmDialog({
-      open: true,
-      title: 'Delete Messages',
-      message: `Are you sure you want to delete ${selectedMessages.length} selected message(s)?`,
-      action: 'bulk',
-      ids: selectedMessages,
-      permanent: false
-    });
-  };
-
-  const confirmDelete = async () => {
-    try {
-      const { action, ids, permanent } = deleteConfirmDialog;
-      
-      if (action === 'individual') {
-        await axiosInstance.delete(`/messages/${ids[0]}`);
-        showSnackbar('Message deleted successfully', 'success');
-      } else if (action === 'bulk') {
-        await axiosInstance.post('/messages/bulk-delete', { messageIds: ids });
-        showSnackbar(`${ids.length} message(s) deleted successfully`, 'success');
-      }
-      
-      // Update UI
-      setMessages(prev => prev.filter(msg => !ids.includes(msg._id)));
-      setSelectedMessages(prev => prev.filter(id => !ids.includes(id)));
-      fetchStats();
-      
-      setDeleteConfirmDialog({ open: false, title: '', message: '', action: '', ids: [], permanent: false });
-    } catch (error) {
-      console.error('Delete error:', error.response?.data || error.message);
-      showSnackbar(error.response?.data?.message || 'Failed to delete message(s)', 'error');
-      fetchMessages();
-    }
-  };
-
-  // Navigation
-  const handleViewMessage = (id) => navigate(`/admin/messages/${id}`);
-  const handleReply = (id) => navigate(`/admin/messages/${id}/reply`);
   const handleCompose = () => navigate('/admin/messages/compose');
   const handleAnalytics = () => navigate('/admin/messages/stats');
-
-  const handleTabChange = (event, newValue) => {
-    setTabValue(newValue);
-    setPagination(prev => ({ ...prev, page: 0 }));
-  };
-
-  const showSnackbar = (message, severity = 'success') => {
-    setSnackbar({ open: true, message, severity });
-  };
-
-  const handleCloseSnackbar = () => {
-    setSnackbar(prev => ({ ...prev, open: false }));
-  };
-
-  const handlePageChange = (event, newPage) => {
-    setPagination(prev => ({ ...prev, page: newPage }));
-  };
-
-  const handleRowsPerPageChange = (event) => {
-    setPagination(prev => ({ 
-      ...prev, 
-      limit: parseInt(event.target.value, 10),
-      page: 0 
-    }));
-  };
 
   const handleClearFilters = () => {
     setFilters({
@@ -425,544 +423,443 @@ const MessageDashboard = () => {
     setPagination(prev => ({ ...prev, page: 0 }));
   };
 
+  const getStatusBadge = (status) => {
+    const variants = {
+      'new': 'warning',
+      'sent': 'info',
+      'read': 'default',
+      'in-progress': 'primary',
+      'resolved': 'success',
+      'closed': 'default'
+    };
+    return <Badge variant={variants[status] || 'default'}>{status || 'unknown'}</Badge>;
+  };
+
+  const getPriorityBadge = (priority) => {
+    const variants = {
+      'urgent': 'danger',
+      'high': 'warning',
+      'normal': 'info',
+      'low': 'success'
+    };
+    return <Badge variant={variants[priority] || 'default'}>{priority || 'normal'}</Badge>;
+  };
+
+  const filteredMessages = messages;
+  const paginatedMessages = filteredMessages.slice(
+    pagination.page * pagination.limit,
+    (pagination.page + 1) * pagination.limit
+  );
+  const totalPages = Math.ceil(filteredMessages.length / pagination.limit);
+
+  if (loading && messages.length === 0) return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-slate-600 font-medium">Loading messages…</p>
+      </div>
+    </div>
+  );
+
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 600, color: '#1a237e' }}>
-            📨 Admin Message Center
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Manage all employee messages, replies, and communications
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <Button variant="outlined" startIcon={<StatsIcon />} onClick={handleAnalytics}>
-            Analytics
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<SendIcon />}
-            onClick={handleCompose}
-            sx={{
-              background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
-              boxShadow: '0 3px 5px 2px rgba(33, 203, 243, .3)'
-            }}
-          >
-            Compose Message
-          </Button>
-        </Box>
-      </Box>
-
-      {/* Tabs */}
-      <Paper sx={{ mb: 3 }}>
-        <Tabs 
-          value={tabValue} 
-          onChange={handleTabChange} 
-          variant="scrollable" 
-          scrollButtons="auto"
-          sx={{ borderBottom: 1, borderColor: 'divider' }}
-        >
-          <Tab label="All Messages" icon={<EmailIcon />} iconPosition="start" />
-          <Tab label="New" icon={<Badge color="error" badgeContent=" "><EmailIcon /></Badge>} iconPosition="start" />
-          <Tab label="In Progress" icon={<AssignIcon />} iconPosition="start" />
-          <Tab label="Urgent" icon={<PriorityIcon />} iconPosition="start" />
-          <Tab label="Assigned to Me" icon={<PersonAddIcon />} iconPosition="start" />
-          <Tab label="Resolved" icon={<CheckCircleIcon />} iconPosition="start" />
-        </Tabs>
-      </Paper>
-
-      {/* Stats Cards */}
-      {stats ? (
-        <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card sx={{ bgcolor: '#e3f2fd', height: '100%', borderLeft: '4px solid #1976d2' }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <EmailIcon sx={{ color: '#1976d2', mr: 1 }} />
-                  <Typography variant="h6">Total Messages</Typography>
-                </Box>
-                <Typography variant="h3" sx={{ fontWeight: 700, color: '#0d47a1' }}>
-                  {stats?.totals?.total || 0}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {stats?.totals?.new || 0} new • {stats?.totals?.urgent || 0} urgent
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card sx={{ bgcolor: '#fff3e0', height: '100%', borderLeft: '4px solid #f57c00' }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <ChatIcon sx={{ color: '#f57c00', mr: 1 }} />
-                  <Typography variant="h6">In Progress</Typography>
-                </Box>
-                <Typography variant="h3" sx={{ fontWeight: 700, color: '#e65100' }}>
-                  {stats?.totals?.inProgress || 0}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Actively being handled
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card sx={{ bgcolor: '#e8f5e9', height: '100%', borderLeft: '4px solid #388e3c' }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <CheckCircleIcon sx={{ color: '#388e3c', mr: 1 }} />
-                  <Typography variant="h6">Resolved</Typography>
-                </Box>
-                <Typography variant="h3" sx={{ fontWeight: 700, color: '#1b5e20' }}>
-                  {stats?.totals?.resolved || 0}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Successfully closed
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card sx={{ bgcolor: '#f3e5f5', height: '100%', borderLeft: '4px solid #7b1fa2' }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <PersonAddIcon sx={{ color: '#7b1fa2', mr: 1 }} />
-                  <Typography variant="h6">Assigned to Me</Typography>
-                </Box>
-                <Typography variant="h3" sx={{ fontWeight: 700, color: '#4a148c' }}>
-                  {stats?.performance?.assignedToMe || 0}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Your assigned tickets
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
-      ) : (
-        <Paper sx={{ p: 3, mb: 4 }}>
-          <LinearProgress sx={{ mb: 2 }} />
-          <Typography>Loading stats...</Typography>
-        </Paper>
-      )}
-
-      {/* Filters */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={3}>
-            <TextField
-              fullWidth
-              placeholder="Search messages..."
-              value={filters.search}
-              onChange={handleSearchChange}
-              InputProps={{ startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} /> }}
-            />
-          </Grid>
-          <Grid item xs={6} md={2}>
-            <FormControl fullWidth>
-              <InputLabel>Status</InputLabel>
-              <Select value={filters.status} onChange={(e) => handleFilterChange('status', e.target.value)} label="Status">
-                <MenuItem value="">All Status</MenuItem>
-                <MenuItem value="new">New</MenuItem>
-                <MenuItem value="sent">Sent</MenuItem>
-                <MenuItem value="read">Read</MenuItem>
-                <MenuItem value="in-progress">In Progress</MenuItem>
-                <MenuItem value="awaiting-approval">Awaiting Approval</MenuItem>
-                <MenuItem value="resolved">Resolved</MenuItem>
-                <MenuItem value="closed">Closed</MenuItem>
-                <MenuItem value="deleted" disabled>Deleted (Hidden)</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={6} md={2}>
-            <FormControl fullWidth>
-              <InputLabel>Priority</InputLabel>
-              <Select value={filters.priority} onChange={(e) => handleFilterChange('priority', e.target.value)} label="Priority">
-                <MenuItem value="">All Priority</MenuItem>
-                <MenuItem value="urgent">Urgent</MenuItem>
-                <MenuItem value="high">High</MenuItem>
-                <MenuItem value="normal">Normal</MenuItem>
-                <MenuItem value="low">Low</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={6} md={2}>
-            <FormControl fullWidth>
-              <InputLabel>Category</InputLabel>
-              <Select value={filters.category} onChange={(e) => handleFilterChange('category', e.target.value)} label="Category">
-                <MenuItem value="">All Categories</MenuItem>
-                <MenuItem value="leave">Leave Request</MenuItem>
-                <MenuItem value="payroll">Payroll</MenuItem>
-                <MenuItem value="benefits">Benefits</MenuItem>
-                <MenuItem value="technical">Technical</MenuItem>
-                <MenuItem value="complaint">Complaint</MenuItem>
-                <MenuItem value="announcement">Announcement</MenuItem>
-                <MenuItem value="policy">Policy</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={6} md={2}>
-            <FormControl fullWidth>
-              <InputLabel>Time Range</InputLabel>
-              <Select value={filters.timeRange} onChange={(e) => handleFilterChange('timeRange', e.target.value)} label="Time Range">
-                {timeRanges.map(range => (
-                  <MenuItem key={range.value} value={range.value}>{range.label}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={12} md={1}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Tooltip title="Show only messages assigned to me">
-                <Chip
-                  label="My Cases"
-                  color={filters.assignedToMe ? "primary" : "default"}
-                  onClick={() => handleFilterChange('assignedToMe', !filters.assignedToMe)}
-                  variant={filters.assignedToMe ? "filled" : "outlined"}
-                  sx={{ cursor: 'pointer' }}
-                />
-              </Tooltip>
-              <Tooltip title="Refresh">
-                <IconButton onClick={handleRefresh} disabled={refreshing} sx={{ ml: 1 }}>
-                  {refreshing ? <CircularProgress size={24} /> : <RefreshIcon />}
-                </IconButton>
-              </Tooltip>
-            </Box>
-          </Grid>
-        </Grid>
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
-          <Button size="small" onClick={handleClearFilters}>Clear Filters</Button>
-        </Box>
-      </Paper>
-
-      {/* Bulk Actions Bar */}
-      {selectedMessages.length > 0 && (
-        <Paper sx={{ p: 2, mb: 2, bgcolor: '#e3f2fd', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-            {selectedMessages.length} message(s) selected
-          </Typography>
-          <Box>
-            <Button variant="outlined" size="small" onClick={() => setBulkActionDialog(true)} sx={{ mr: 1 }}>
-              Bulk Actions
-            </Button>
-            <Button variant="contained" color="error" size="small" onClick={handleBulkDelete} startIcon={<DeleteIcon />} sx={{ mr: 1 }}>
-              Delete Selected
-            </Button>
-            <Button variant="text" size="small" onClick={() => setSelectedMessages([])}>
-              Clear Selection
-            </Button>
-          </Box>
-        </Paper>
-      )}
-
-      {/* Messages Table */}
-      <TableContainer component={Paper}>
-        {loading && <LinearProgress />}
-        <Table>
-          <TableHead>
-            <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-              <TableCell padding="checkbox">
-                <Checkbox
-                  indeterminate={selectedMessages.length > 0 && selectedMessages.length < messages.length}
-                  checked={messages.length > 0 && selectedMessages.length === messages.length}
-                  onChange={handleSelectAll}
-                />
-              </TableCell>
-              <TableCell>Ref #</TableCell>
-              <TableCell>Subject & Sender</TableCell>
-              <TableCell>Category</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell>Priority</TableCell>
-              <TableCell>Assigned To</TableCell>
-              <TableCell>Date</TableCell>
-              <TableCell>Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {messages.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
-                  <EmailIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-                  <Typography variant="h6" color="text.secondary">
-                    {loading ? 'Loading messages...' : 'No messages found'}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Try adjusting your filters or check back later
-                  </Typography>
-                  <Button variant="outlined" onClick={handleCompose}>
-                    Compose New Message
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ) : (
-              messages.map((message) => (
-                <TableRow 
-                  key={message._id}
-                  hover
-                  sx={{
-                    cursor: 'pointer',
-                    bgcolor: selectedMessages.includes(message._id) ? '#e3f2fd' : 'inherit',
-                    '&:hover': { bgcolor: '#f5f5f5' }
-                  }}
-                  onClick={() => handleViewMessage(message._id)}
-                >
-                  <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
-                    <Checkbox
-                      checked={selectedMessages.includes(message._id)}
-                      onChange={() => handleSelectMessage(message._id)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" sx={{ fontWeight: 500, fontFamily: 'monospace', color: '#1976d2' }}>
-                      {message.referenceNumber || message._id?.substring(0, 8) || 'N/A'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <Avatar sx={{ width: 32, height: 32, mr: 2, bgcolor: '#1976d2' }}>
-                        {message.sender?.name?.charAt(0) || 'E'}
-                      </Avatar>
-                      <Box>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                          {message.subject || 'No Subject'}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          From: {message.sender?.name || 'Unknown'} ({message.sender?.employeeId || 'N/A'})
-                        </Typography>
-                        {message.responses?.length > 0 && (
-                          <Chip label={`${message.responses.length} replies`} size="small" sx={{ ml: 1, mt: 0.5 }} />
-                        )}
-                      </Box>
-                    </Box>
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      icon={<span>{categoryIcons[message.category] || '📧'}</span>}
-                      label={message.category || 'general'}
-                      size="small"
-                      variant="outlined"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={message.status || 'unknown'}
-                      color={statusColors[message.status] || 'default'}
-                      size="small"
-                      sx={{ textTransform: 'capitalize' }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={message.priority || 'normal'}
-                      color={priorityColors[message.priority] || 'default'}
-                      size="small"
-                      icon={<PriorityIcon />}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {message.assignedTo ? (
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <Avatar sx={{ width: 24, height: 24, mr: 1, fontSize: '0.75rem' }}>
-                          {message.assignedTo.name?.charAt(0)}
-                        </Avatar>
-                        <Typography variant="body2">
-                          {message.assignedTo.name}
-                        </Typography>
-                      </Box>
-                    ) : (
-                      <Chip label="Unassigned" size="small" color="warning" variant="outlined" />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">
-                      {message.sentAt ? format(new Date(message.sentAt), 'MMM dd') : 
-                       message.createdAt ? format(new Date(message.createdAt), 'MMM dd') : 'N/A'}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {message.sentAt ? format(new Date(message.sentAt), 'hh:mm a') : 
-                       message.createdAt ? format(new Date(message.createdAt), 'hh:mm a') : ''}
-                    </Typography>
-                  </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Box sx={{ display: 'flex', gap: 0.5 }}>
-                      <Tooltip title="View">
-                        <IconButton size="small" onClick={() => handleViewMessage(message._id)}>
-                          <ViewIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Reply">
-                        <IconButton size="small" onClick={() => handleReply(message._id)}>
-                          <ReplyIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Delete">
-                        <IconButton size="small" color="error" onClick={(e) => handleDeleteMessage(message._id, e)}>
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-        <TablePagination
-          rowsPerPageOptions={[10, 20, 50]}
-          component="div"
-          count={pagination.total}
-          rowsPerPage={pagination.limit}
-          page={pagination.page}
-          onPageChange={handlePageChange}
-          onRowsPerPageChange={handleRowsPerPageChange}
-        />
-      </TableContainer>
-
-      {/* Bulk Action Dialog */}
-      <Dialog open={bulkActionDialog} onClose={() => setBulkActionDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Bulk Actions</DialogTitle>
-        <DialogContent>
-          <FormControl fullWidth sx={{ mt: 2 }}>
-            <InputLabel>Select Action</InputLabel>
-            <Select 
-              value={bulkAction} 
-              onChange={(e) => setBulkAction(e.target.value)} 
-              label="Select Action"
+    <div className="min-h-screen bg-slate-50">
+      {/* Page Header */}
+      <div className="bg-white border-b border-slate-200 px-6 py-5">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
+              <FaEnvelope className="text-indigo-600 text-sm" />
+              Admin Message Center
+            </h1>
+            <p className="text-slate-400 text-sm mt-0.5">Manage all employee messages, replies, and communications</p>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={handleAnalytics}
+              className="inline-flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
             >
-              <MenuItem value="mark-as-read">Mark as Read</MenuItem>
-              <MenuItem value="mark-as-unread">Mark as Unread</MenuItem>
-              <MenuItem value="assign">Assign to...</MenuItem>
-              <MenuItem value="change-status">Change Status</MenuItem>
-              <MenuItem value="change-priority">Change Priority</MenuItem>
-              <MenuItem value="archive">Archive</MenuItem>
-              <MenuItem value="delete">Delete</MenuItem>
-              {currentUser?.role === 'admin' && (
-                <MenuItem value="permanent-delete">Permanent Delete</MenuItem>
+              <FaChartLine className="text-xs" />
+              Analytics
+            </button>
+            <button
+              onClick={handleCompose}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+            >
+              <FaPaperPlane className="text-xs" />
+              Compose
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+        {/* KPI Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+          <KpiCard icon={InboxIcon} label="Total Messages" value={stats?.totals?.total || 0} sub={`${stats?.totals?.new || 0} new`} iconBg="bg-indigo-500" />
+          <KpiCard icon={EmailIcon} label="New" value={stats?.totals?.new || 0} sub="Unread messages" iconBg="bg-amber-500" />
+          <KpiCard icon={AssignIcon} label="In Progress" value={stats?.totals?.inProgress || 0} sub="Being handled" iconBg="bg-blue-500" />
+          <KpiCard icon={PriorityHighIcon} label="Urgent" value={stats?.totals?.urgent || 0} sub="High priority" iconBg="bg-red-500" />
+          <KpiCard icon={PersonAddIcon} label="My Cases" value={stats?.performance?.assignedToMe || 0} sub="Assigned to you" iconBg="bg-purple-500" />
+          <KpiCard icon={CheckCircleIcon} label="Resolved" value={stats?.totals?.resolved || 0} sub="Completed" iconBg="bg-emerald-500" />
+        </div>
+
+        {/* Tabs */}
+        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+          <div className="border-b border-slate-100">
+            <div className="flex overflow-x-auto">
+              {TABS.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setTabValue(tab.id)}
+                  className={`flex items-center gap-2 px-5 py-3.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
+                    tabValue === tab.id
+                      ? 'border-indigo-600 text-indigo-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <tab.icon style={{ fontSize: 16 }} />
+                  {tab.label}
+                  {stats?.totals?.[tab.count] > 0 && tabValue !== tab.id && (
+                    <span className="ml-1.5 bg-slate-100 text-slate-500 text-xs px-1.5 py-0.5 rounded-full">
+                      {stats?.totals?.[tab.count] || 0}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Filters Section */}
+        <div className="bg-white rounded-lg border border-slate-200 p-5">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="relative flex-1">
+              <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" style={{ fontSize: 18 }} />
+              <input
+                type="text"
+                placeholder="Search by subject, sender, or message..."
+                value={filters.search}
+                onChange={handleSearchChange}
+                className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
+              />
+            </div>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
+            >
+              <FaFilter className="text-xs" />
+              Filters
+            </button>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="inline-flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+            >
+              <FaSync className={`text-xs ${refreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
+
+          {/* Advanced Filters */}
+          {showFilters && (
+            <div className="border-t border-slate-100 pt-5 mt-5">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Status</label>
+                  <select
+                    value={filters.status}
+                    onChange={(e) => handleFilterChange('status', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  >
+                    <option value="">All Status</option>
+                    <option value="new">New</option>
+                    <option value="in-progress">In Progress</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="closed">Closed</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Priority</label>
+                  <select
+                    value={filters.priority}
+                    onChange={(e) => handleFilterChange('priority', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  >
+                    <option value="">All Priority</option>
+                    <option value="urgent">Urgent</option>
+                    <option value="high">High</option>
+                    <option value="normal">Normal</option>
+                    <option value="low">Low</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Category</label>
+                  <select
+                    value={filters.category}
+                    onChange={(e) => handleFilterChange('category', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  >
+                    <option value="">All Categories</option>
+                    <option value="leave">Leave Request</option>
+                    <option value="payroll">Payroll</option>
+                    <option value="benefits">Benefits</option>
+                    <option value="technical">Technical</option>
+                    <option value="complaint">Complaint</option>
+                    <option value="announcement">Announcement</option>
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={handleClearFilters}
+                    className="w-full px-3 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors"
+                  >
+                    Clear Filters
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Bulk Action Bar */}
+        {selectedMessages.length > 0 && (
+          <div className="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3 animate-fade-in">
+            <span className="text-indigo-700 text-sm font-medium">{selectedMessages.length} message(s) selected</span>
+            <div className="flex gap-2">
+              <button onClick={() => setBulkDeleteOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-medium rounded-lg transition-colors">
+                <FaTrash className="text-xs" /> Delete
+              </button>
+              <button onClick={() => setSelectedMessages([])} className="px-3 py-1.5 border border-indigo-300 text-indigo-700 text-xs font-medium rounded-lg hover:bg-indigo-100 transition-colors">
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Messages Table */}
+        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
+                  <EmailIcon className="text-indigo-500 text-sm" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">Messages</p>
+                  <p className="text-xs text-slate-500">{filteredMessages.length} total messages</p>
+                </div>
+              </div>
+              <div className="text-sm text-slate-500">
+                Page {pagination.page + 1} of {totalPages || 1}
+              </div>
+            </div>
+          </div>
+
+          {paginatedMessages.length === 0 ? (
+            <EmptyState
+              icon={EmailIcon}
+              title={loading ? 'Loading messages…' : 'No messages found'}
+              subtitle={loading ? 'Please wait' : 'Try adjusting your filters or check back later'}
+              action={!loading && (
+                <button onClick={handleCompose} className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+                  <FaPaperPlane className="text-xs" /> Compose Message
+                </button>
               )}
-            </Select>
-          </FormControl>
-          
-          {/* Show additional inputs based on selected action */}
-          {bulkAction === 'assign' && (
-            <FormControl fullWidth sx={{ mt: 2 }}>
-              <InputLabel>Assign To</InputLabel>
-              <Select 
-                value={bulkActionData.assignee} 
-                onChange={(e) => setBulkActionData(prev => ({ ...prev, assignee: e.target.value }))}
-                label="Assign To"
-              >
-                <MenuItem value="user1">John Doe</MenuItem>
-                <MenuItem value="user2">Jane Smith</MenuItem>
-              </Select>
-            </FormControl>
-          )}
-          
-          {bulkAction === 'change-status' && (
-            <FormControl fullWidth sx={{ mt: 2 }}>
-              <InputLabel>New Status</InputLabel>
-              <Select 
-                value={bulkActionData.newStatus} 
-                onChange={(e) => setBulkActionData(prev => ({ ...prev, newStatus: e.target.value }))}
-                label="New Status"
-              >
-                <MenuItem value="new">New</MenuItem>
-                <MenuItem value="in-progress">In Progress</MenuItem>
-                <MenuItem value="resolved">Resolved</MenuItem>
-                <MenuItem value="closed">Closed</MenuItem>
-              </Select>
-            </FormControl>
-          )}
-          
-          {bulkAction === 'change-priority' && (
-            <FormControl fullWidth sx={{ mt: 2 }}>
-              <InputLabel>New Priority</InputLabel>
-              <Select 
-                value={bulkActionData.newPriority} 
-                onChange={(e) => setBulkActionData(prev => ({ ...prev, newPriority: e.target.value }))}
-                label="New Priority"
-              >
-                <MenuItem value="urgent">Urgent</MenuItem>
-                <MenuItem value="high">High</MenuItem>
-                <MenuItem value="normal">Normal</MenuItem>
-                <MenuItem value="low">Low</MenuItem>
-              </Select>
-            </FormControl>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => {
-            setBulkActionDialog(false);
-            setBulkAction('');
-            setBulkActionData({ assignee: '', newStatus: '', newPriority: '' });
-          }}>
-            Cancel
-          </Button>
-          <Button 
-            onClick={handleBulkAction} 
-            variant="contained" 
-            disabled={!bulkAction || 
-              (bulkAction === 'assign' && !bulkActionData.assignee) ||
-              (bulkAction === 'change-status' && !bulkActionData.newStatus) ||
-              (bulkAction === 'change-priority' && !bulkActionData.newPriority)}
-          >
-            Apply Action
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog 
-        open={deleteConfirmDialog.open} 
-        onClose={() => setDeleteConfirmDialog({...deleteConfirmDialog, open: false})}
-        maxWidth="sm" 
-        fullWidth
-      >
-        <DialogTitle sx={{ color: 'error.main', fontWeight: 600 }}>
-          {deleteConfirmDialog.permanent ? '⚠️ Permanent Delete' : '🗑️ Delete Messages'}
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body1" sx={{ mb: 2 }}>
-            {deleteConfirmDialog.message}
-          </Typography>
-          {deleteConfirmDialog.permanent ? (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              <strong>WARNING:</strong> This will permanently delete {deleteConfirmDialog.ids.length} message(s) from the database. This action cannot be undone.
-            </Alert>
+            />
           ) : (
-            <Alert severity="warning" sx={{ mt: 2 }}>
-              Messages will be moved to trash. They can be restored by an administrator.
-            </Alert>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/60">
+                    <th className="pl-4 pr-3 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={selectedMessages.length === filteredMessages.length && filteredMessages.length > 0}
+                        onChange={handleSelectAll}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Ref #</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Subject & Sender</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Category</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Status</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Priority</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Assigned To</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Date</th>
+                    <th className="px-3 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wide w-28 pr-4">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {paginatedMessages.map((message) => (
+                    <tr
+                      key={message._id}
+                      className={`group hover:bg-slate-50 transition-colors cursor-pointer ${selectedMessages.includes(message._id) ? 'bg-indigo-50/40' : ''} ${message.status === 'new' ? 'bg-amber-50/20' : ''}`}
+                      onClick={() => handleViewMessage(message._id)}
+                    >
+                      <td className="pl-4 pr-3 py-3.5" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedMessages.includes(message._id)}
+                          onChange={() => handleSelectMessage(message._id)}
+                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <span className="text-xs font-mono font-medium text-indigo-600">
+                          {message.referenceNumber || message._id?.substring(0, 8) || 'N/A'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <div className="flex items-center gap-2">
+                          <Avatar name={message.sender?.name || 'U'} size="sm" />
+                          <div>
+                            <p className={`text-sm ${message.status === 'new' ? 'font-semibold text-slate-900' : 'font-medium text-slate-700'} truncate max-w-xs`}>
+                              {message.subject || 'No Subject'}
+                            </p>
+                            <p className="text-xs text-slate-400 truncate max-w-xs">
+                              From: {message.sender?.name || 'Unknown'} · {message.sender?.employeeId || 'N/A'}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <Badge variant="default">{message.category || 'general'}</Badge>
+                      </td>
+                      <td className="px-3 py-3.5">
+                        {getStatusBadge(message.status)}
+                      </td>
+                      <td className="px-3 py-3.5">
+                        {getPriorityBadge(message.priority)}
+                      </td>
+                      <td className="px-3 py-3.5">
+                        {message.assignedTo ? (
+                          <div className="flex items-center gap-1">
+                            <Avatar name={message.assignedTo.name} size="sm" />
+                            <span className="text-xs text-slate-700">{message.assignedTo.name}</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-amber-600">Unassigned</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <span className="text-xs text-slate-400">
+                          {message.createdAt ? format(new Date(message.createdAt), 'MMM dd, hh:mm a') : '—'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3.5 pr-4" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-0.5">
+                          <button
+                            onClick={() => handleViewMessage(message._id)}
+                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                            title="View"
+                          >
+                            <FaEye className="text-xs" />
+                          </button>
+                          <button
+                            onClick={() => handleReplyMessage(message._id)}
+                            className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors"
+                            title="Reply"
+                          >
+                            <FaReply className="text-xs" />
+                          </button>
+                          <button
+                            onClick={() => setDeleteDialog({ open: true, messageId: message._id, permanent: false })}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete"
+                          >
+                            <FaTrash className="text-xs" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteConfirmDialog({...deleteConfirmDialog, open: false})}>
-            Cancel
-          </Button>
-          <Button 
-            onClick={confirmDelete} 
-            variant="contained" 
-            color={deleteConfirmDialog.permanent ? "error" : "warning"}
-            startIcon={<DeleteIcon />}
-          >
-            {deleteConfirmDialog.permanent ? 'Permanently Delete' : 'Delete'}
-          </Button>
-        </DialogActions>
-      </Dialog>
 
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          {/* Pagination */}
+          {filteredMessages.length > pagination.limit && (
+            <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100 bg-slate-50/50">
+              <span className="text-sm text-slate-500">
+                {pagination.page * pagination.limit + 1}–{Math.min((pagination.page + 1) * pagination.limit, filteredMessages.length)} of {filteredMessages.length}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPagination(p => ({ ...p, page: Math.max(0, p.page - 1) }))}
+                  disabled={pagination.page === 0}
+                  className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+                <span className="px-3 py-1.5 text-sm text-slate-600">{pagination.page + 1} / {totalPages}</span>
+                <button
+                  onClick={() => setPagination(p => ({ ...p, page: Math.min(totalPages - 1, p.page + 1) }))}
+                  disabled={pagination.page >= totalPages - 1}
+                  className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Compose FAB */}
+      <button
+        onClick={handleCompose}
+        title="Compose new message"
+        className="fixed bottom-6 right-6 w-14 h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center"
       >
-        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-    </Box>
+        <FaPaperPlane style={{ fontSize: 18 }} />
+      </button>
+
+      {/* Dialogs */}
+      <ConfirmDialog
+        open={deleteDialog.open}
+        onClose={() => setDeleteDialog({ open: false, messageId: null, permanent: false })}
+        onConfirm={() => handleDelete(deleteDialog.messageId)}
+        loading={loading}
+      />
+
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onClose={() => setBulkDeleteOpen(false)}
+        onConfirm={handleBulkDelete}
+        loading={loading}
+        count={selectedMessages.length}
+      />
+
+      <MessageDrawer
+        message={selectedMessage}
+        open={viewDialog}
+        onClose={handleCloseView}
+        onReply={handleReplyMessage}
+        onAssign={handleAssignMessage}
+      />
+
+      {/* CSS Animations */}
+      <style>{`
+        @keyframes slide-in-right {
+          from { opacity: 0; transform: translateX(100%); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .animate-slide-in-right {
+          animation: slide-in-right 0.3s ease-out;
+        }
+        
+        .animate-fade-in {
+          animation: fade-in 0.2s ease-out;
+        }
+      `}</style>
+    </div>
   );
 };
 

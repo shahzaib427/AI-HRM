@@ -1,0 +1,25 @@
+# COMMON CAREER QUESTIONS
+
+Q: Which career should I learn in 2026?
+A: The most promising careers in Pakistan for 2026 are:
+• AI/ML Engineering (highest growth)
+• Cloud Computing (AWS/Azure)
+• Data Science
+• DevOps Engineering
+• Cybersecurity
+• Full Stack Development
+
+Q: What is the highest paying IT job in Pakistan?
+A: Highest paying roles (monthly):
+• AI/ML Engineer: Rs. 200,000 - 600,000
+• Cloud Architect: Rs. 300,000 - 800,000
+• DevOps Engineer: Rs. 150,000 - 500,000
+• Data Scientist: Rs. 150,000 - 600,000
+
+Q: How to become a Software Engineer in Pakistan?
+A: Path to become Software Engineer:
+1. Learn HTML/CSS/JavaScript (2 months)
+2. Learn React.js (2 months)
+3. Learn Node.js (2 months)
+4. Build 3 portfolio projects (2 months)
+5. Apply to companies like Systems Limited, Techlogix

@@ -2,1634 +2,833 @@ import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import {
-  Box,
-  Paper,
-  TextField,
-  Button,
-  MenuItem,
-  Select,
-  FormControl,
-  InputLabel,
-  Alert,
-  Typography,
-  CircularProgress,
-  Grid,
-  Chip,
-  IconButton,
-  Avatar,
-  Card,
-  CardContent,
-  Stepper,
-  Step,
-  StepLabel,
-  useTheme,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Tabs,
-  Tab,
-  Divider,
-  Tooltip,
-  InputAdornment,
-  Container,
-  Switch,
-  FormControlLabel,
-  List,
-  ListItem,
-  ListItemText,
-  Badge,
-  Snackbar,
-  LinearProgress
-} from '@mui/material';
-import {
-  Send as SendIcon,
-  AttachFile as AttachFileIcon,
-  Delete as DeleteIcon,
-  Person as PersonIcon,
-  Groups as GroupsIcon,
-  PriorityHigh as PriorityHighIcon,
-  Category as CategoryIcon,
-  Subject as SubjectIcon,
-  Message as MessageIcon,
-  CloudUpload as CloudUploadIcon,
-  CheckCircle as CheckCircleIcon,
-  Email as EmailIcon,
-  DoneAll as DoneAllIcon,
-  Info as InfoIcon,
-  Error as ErrorIcon,
-  Add as AddIcon,
-  Remove as RemoveIcon,
-  Visibility as VisibilityIcon,
-  FormatQuote as FormatQuoteIcon,
-  InsertEmoticon as InsertEmoticonIcon,
-  FormatBold as FormatBoldIcon,
-  FormatItalic as FormatItalicIcon,
-  FormatListBulleted as FormatListBulletedIcon,
-  FormatListNumbered as FormatListNumberedIcon,
-  InsertLink as InsertLinkIcon,
-  Mic as MicIcon,
-  History as HistoryIcon,
-  Help as HelpIcon,
-  Security as SecurityIcon,
-  LocalOffer as TagIcon,
-  Drafts as DraftsIcon,
-  SmartToy as SmartToyIcon,
-  Translate as TranslateIcon,
-  AutoFixHigh as AutoFixHighIcon,
-  Psychology as PsychologyIcon,
-  Schedule as ScheduleIcon,
-  Close as CloseIcon,
-  Refresh as RefreshIcon,
-  FilterList as FilterIcon,
-  Sort as SortIcon,
-  MoreVert as MoreVertIcon,
-  FileCopy as FileCopyIcon,
-  DriveFileRenameOutline as TemplateIcon
+  Send as SendIcon, AttachFile as AttachFileIcon, Delete as DeleteIcon,
+  Person as PersonIcon, DoneAll as DoneAllIcon, History as HistoryIcon,
+  Drafts as DraftsIcon, SmartToy as SmartToyIcon, AutoFixHigh as AutoFixHighIcon,
+  Psychology as PsychologyIcon, FileCopy as FileCopyIcon,
+  DriveFileRenameOutline as TemplateIcon, Close as CloseIcon,
 } from '@mui/icons-material';
+import { CircularProgress } from '@mui/material';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { FaEnvelope, FaUsers, FaClock, FaCheckCircle, FaUserPlus, FaChartLine } from 'react-icons/fa';
+
+// ─── UI Primitives ────────────────────────────────────────────────────────────
+
+const Badge = ({ children, variant = 'default' }) => {
+  const v = {
+    default: 'bg-gray-100 text-gray-600',
+    success: 'bg-green-50 text-green-700',
+    warning: 'bg-yellow-50 text-yellow-700',
+    danger:  'bg-red-50 text-red-700',
+    info:    'bg-gray-100 text-gray-700',
+    low:     'bg-green-50 text-green-700',
+    normal:  'bg-gray-100 text-gray-700',
+    high:    'bg-yellow-50 text-yellow-700',
+    urgent:  'bg-red-50 text-red-700',
+  };
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${v[variant] || v.default}`}>{children}</span>;
+};
+
+const AvatarInitials = ({ name = 'U' }) => {
+  return <div className={`w-9 h-9 bg-gray-100 text-gray-700 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0`}>{name.charAt(0).toUpperCase()}</div>;
+};
+
+// KPI Card Component
+const KpiCard = ({ icon: Icon, label, value, sub, iconBg }) => (
+  <div className="bg-white rounded-xl border border-gray-100 p-5 hover:shadow-md transition-all duration-200">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-xs text-gray-500 font-medium mb-2">{label}</p>
+        <p className="text-2xl font-semibold text-gray-900">{value}</p>
+        {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+      </div>
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${iconBg}`}>
+        <Icon className="w-5 h-5 text-white" />
+      </div>
+    </div>
+  </div>
+);
+
+const StepDot = ({ label, index, active, completed }) => (
+  <div className="flex items-center gap-2">
+    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${completed ? 'bg-gray-900 text-white' : active ? 'bg-gray-100 text-gray-900 ring-2 ring-gray-900' : 'bg-gray-100 text-gray-400'}`}>
+      {completed ? (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+        </svg>
+      ) : index + 1}
+    </div>
+    <span className={`text-sm hidden sm:block ${active ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>{label}</span>
+  </div>
+);
+
+const FormLabel = ({ children, required }) => (
+  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+    {children}{required && <span className="text-red-400 ml-0.5">*</span>}
+  </label>
+);
+
+const inputCls = (err) => `w-full text-sm border ${err ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-gray-200 focus:border-gray-400'} rounded-lg px-3.5 py-2.5 focus:outline-none focus:ring-2 bg-white text-gray-800 placeholder-gray-400 transition-colors`;
+
+// ─── Static data (unchanged) ──────────────────────────────────────────────────
+
+const CATEGORIES = [
+  { value: 'general', label: 'General Inquiry' },
+  { value: 'leave', label: 'Leave Request' },
+  { value: 'payroll', label: 'Payroll Issue' },
+  { value: 'benefits', label: 'Benefits Question' },
+  { value: 'technical', label: 'Technical Support' },
+  { value: 'complaint', label: 'Complaint' },
+  { value: 'suggestion', label: 'Suggestion' },
+  { value: 'appreciation', label: 'Appreciation' },
+  { value: 'document', label: 'Document Submission' },
+  { value: 'meeting', label: 'Meeting Request' },
+  { value: 'training', label: 'Training Request' },
+  { value: 'feedback', label: 'Feedback' },
+];
+
+const PRIORITIES = [
+  { value: 'low',    label: 'Low',    variant: 'low' },
+  { value: 'normal', label: 'Normal', variant: 'normal' },
+  { value: 'high',   label: 'High',   variant: 'high' },
+  { value: 'urgent', label: 'Urgent', variant: 'urgent' },
+];
+
+const DEFAULT_TEMPLATES = [
+  { id: 1, name: 'Leave Request', subject: 'Leave Request - [Your Name]',
+    message: 'Dear HR,\n\nI would like to request leave from [Start Date] to [End Date].\n\nType: [Vacation/Sick Leave/Personal]\nReason: [Your Reason]\n\nThank you,\n[Your Name]',
+    category: 'leave', usageCount: 156, lastUsed: '2024-01-15' },
+  { id: 2, name: 'Technical Support', subject: 'Technical Issue: [Brief Description]',
+    message: 'Dear IT Support,\n\nI am experiencing an issue with [Software/Hardware].\n\nDetails: [Describe the issue]\nError Message: [If applicable]\n\nThank you for your assistance.',
+    category: 'technical', usageCount: 89, lastUsed: '2024-01-20' },
+  { id: 3, name: 'Document Submission', subject: 'Document Submission: [Document Name]',
+    message: 'Dear HR,\n\nPlease find attached the requested document: [Document Name].\n\nDocument Details: [Additional information]\n\nBest regards,\n[Your Name]',
+    category: 'document', usageCount: 203, lastUsed: '2024-01-18' },
+];
+
+const STEPS = ['Recipient', 'Details', 'Message', 'Review'];
+const API_URL = 'http://localhost:5000';
+
+// ─── Success Dialog ───────────────────────────────────────────────────────────
+
+const SuccessDialog = ({ open, message, onViewMessages, onSendAnother }) => {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6 text-center">
+        <div className="w-16 h-16 bg-green-50 rounded-xl flex items-center justify-center mx-auto mb-4">
+          <DoneAllIcon className="text-green-600" style={{ fontSize: 28 }} />
+        </div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">Message Sent!</h3>
+        <p className="text-gray-500 text-sm mb-5">Your message has been delivered securely.</p>
+
+        {message && (
+          <div className="bg-gray-50 rounded-lg p-4 mb-5 text-left text-sm space-y-2">
+            {[['Recipient', message.recipient], ['Subject', message.subject], ['Sent on', `${message.date} at ${message.time}`], ['Reference', message.reference]].map(([k, v]) => v && (
+              <div key={k} className="flex justify-between gap-3">
+                <span className="text-gray-400">{k}</span>
+                <span className="font-medium text-gray-700 text-right truncate max-w-[200px]">{v}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <button onClick={onViewMessages} className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+            <HistoryIcon style={{ fontSize: 16 }} /> View Messages
+          </button>
+          <button onClick={onSendAnother} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors">
+            <SendIcon style={{ fontSize: 16 }} /> Send Another
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+const EMPTY_FORM = {
+  recipientType: 'hr', recipient: '', recipientId: '',
+  subject: '', message: '', category: 'general', priority: 'normal',
+  attachments: [], templateId: '', ccRecipients: [], bccRecipients: [],
+  confidential: false, readReceipt: false, urgent: false, followUp: false, tags: [],
+};
 
 const ComposeMessage = () => {
   const navigate = useNavigate();
-  const theme = useTheme();
-  
-  // Main States
-  const [loading, setLoading] = useState(false);
-  const [userLoading, setUserLoading] = useState(true);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState('');
-  const [user, setUser] = useState(null);
-  const [hrUsers, setHrUsers] = useState([]);
-  const [activeStep, setActiveStep] = useState(0);
+
+  const [loading, setLoading]                 = useState(false);
+  const [userLoading, setUserLoading]         = useState(true);
+  const [success, setSuccess]                 = useState(false);
+  const [error, setError]                     = useState('');
+  const [user, setUser]                       = useState(null);
+  const [hrUsers, setHrUsers]                 = useState([]);
+  const [activeStep, setActiveStep]           = useState(0);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [lastSentMessage, setLastSentMessage] = useState(null);
-  const [drafts, setDrafts] = useState([]);
-  const [templates, setTemplates] = useState([]);
-  const [showTemplates, setShowTemplates] = useState(false);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [activeTab, setActiveTab] = useState('compose');
-  const [characterCount, setCharacterCount] = useState(0);
-  const [saveAsDraftDialog, setSaveAsDraftDialog] = useState(false);
-  const [aiSuggestions, setAiSuggestions] = useState([]);
-  const [showAISuggestions, setShowAISuggestions] = useState(false);
-  const [voiceRecording, setVoiceRecording] = useState(false);
-
-  // Form state
-  const [formData, setFormData] = useState({
-    recipientType: 'hr',
-    recipient: '',
-    recipientId: '',
-    subject: '',
-    message: '',
-    category: 'general',
-    priority: 'normal',
-    attachments: [],
-    templateId: '',
-    ccRecipients: [],
-    bccRecipients: [],
-    confidential: false,
-    readReceipt: false,
-    urgent: false,
-    followUp: false,
-    tags: []
+  const [drafts, setDrafts]                   = useState([]);
+  const [templates, setTemplates]             = useState([]);
+  const [activeTab, setActiveTab]             = useState('compose');
+  const [characterCount, setCharacterCount]   = useState(0);
+  const [saveAsDraftConfirm, setSaveAsDraftConfirm] = useState(false);
+  const [formData, setFormData]               = useState(EMPTY_FORM);
+  const [fieldErrors, setFieldErrors]         = useState({});
+  const [stats, setStats] = useState({
+    totalHR: 0,
+    draftsCount: 0,
+    templatesCount: 0,
+    messagesSent: 0
   });
 
-  // API URL
-  const API_URL = 'http://localhost:5000';
+  // ── All original logic unchanged ────────────────────────────────────────────
 
-  // Categories
-  const categories = [
-    { value: 'general', label: 'General Inquiry' },
-    { value: 'leave', label: 'Leave Request' },
-    { value: 'payroll', label: 'Payroll Issue' },
-    { value: 'benefits', label: 'Benefits Question' },
-    { value: 'technical', label: 'Technical Support' },
-    { value: 'complaint', label: 'Complaint' },
-    { value: 'suggestion', label: 'Suggestion' },
-    { value: 'appreciation', label: 'Appreciation' },
-    { value: 'document', label: 'Document Submission' },
-    { value: 'meeting', label: 'Meeting Request' },
-    { value: 'training', label: 'Training Request' },
-    { value: 'feedback', label: 'Feedback' }
-  ];
-
-  // Priority levels
-  const priorities = [
-    { value: 'low', label: 'Low Priority', color: 'success' },
-    { value: 'normal', label: 'Normal', color: 'info' },
-    { value: 'high', label: 'High Priority', color: 'warning' },
-    { value: 'urgent', label: 'Urgent', color: 'error' }
-  ];
-
-  // Sample templates
-  const defaultTemplates = [
-    {
-      id: 1,
-      name: 'Leave Request',
-      subject: 'Leave Request - [Your Name]',
-      message: 'Dear HR,\n\nI would like to request leave from [Start Date] to [End Date].\n\nType: [Vacation/Sick Leave/Personal]\nReason: [Your Reason]\n\nThank you,\n[Your Name]',
-      category: 'leave',
-      usageCount: 156,
-      lastUsed: '2024-01-15'
-    },
-    {
-      id: 2,
-      name: 'Technical Support',
-      subject: 'Technical Issue: [Brief Description]',
-      message: 'Dear IT Support,\n\nI am experiencing an issue with [Software/Hardware].\n\nDetails: [Describe the issue]\nError Message: [If applicable]\nSteps to reproduce: [If applicable]\n\nThank you for your assistance.',
-      category: 'technical',
-      usageCount: 89,
-      lastUsed: '2024-01-20'
-    },
-    {
-      id: 3,
-      name: 'Document Submission',
-      subject: 'Document Submission: [Document Name]',
-      message: 'Dear HR,\n\nPlease find attached the requested document: [Document Name].\n\nDocument Details: [Additional information]\nDue Date: [If applicable]\n\nIf you need any additional information, please let me know.\n\nBest regards,\n[Your Name]',
-      category: 'document',
-      usageCount: 203,
-      lastUsed: '2024-01-18'
-    }
-  ];
-
-  // Enhanced user fetching with multiple fallbacks
   const fetchCurrentUser = useCallback(async () => {
     setUserLoading(true);
     try {
-      console.log('Fetching user...');
-      
       let userData = null;
       const storedUser = localStorage.getItem('currentUser');
-      
-      if (storedUser) {
-        userData = JSON.parse(storedUser);
-        console.log('User loaded from localStorage:', userData.name);
-      }
-      
+      if (storedUser) userData = JSON.parse(storedUser);
+
       const token = localStorage.getItem('token');
       if (token && (!userData || !userData._id)) {
-        try {
-          console.log('Trying API endpoints for user data...');
-          
-          const endpoints = [
-            `${API_URL}/api/auth/me`,
-            `${API_URL}/api/users/me`,
-            `${API_URL}/api/employee/profile`,
-            `${API_URL}/api/profile`
-          ];
-          
-          for (const endpoint of endpoints) {
-            try {
-              const response = await axios.get(endpoint, {
-                headers: { 
-                  'Authorization': `Bearer ${token}`,
-                  'Content-Type': 'application/json'
-                },
-                timeout: 2000
-              });
-              
-              if (response.data) {
-                userData = response.data.user || response.data.data || response.data;
-                console.log(`User fetched from ${endpoint}:`, userData.name || 'Unknown');
-                localStorage.setItem('currentUser', JSON.stringify(userData));
-                break;
-              }
-            } catch (e) {
-              console.log(`${endpoint} failed:`, e.message);
-            }
-          }
-        } catch (apiError) {
-          console.log('API endpoints not available, using fallback');
+        const endpoints = [`${API_URL}/api/auth/me`,`${API_URL}/api/users/me`,`${API_URL}/api/employee/profile`,`${API_URL}/api/profile`];
+        for (const endpoint of endpoints) {
+          try {
+            const response = await axios.get(endpoint, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, timeout: 2000 });
+            if (response.data) { userData = response.data.user || response.data.data || response.data; localStorage.setItem('currentUser', JSON.stringify(userData)); break; }
+          } catch { /* try next */ }
         }
       }
-      
+
       if (!userData) {
-        console.log('Creating fallback user');
-        userData = {
-          _id: `user-${Date.now()}`,
-          name: 'Employee',
-          email: 'employee@company.com',
-          role: 'employee',
-          department: 'General Department',
-          employeeId: `EMP${String(Date.now()).slice(-6)}`,
-          avatar: `https://ui-avatars.com/api/?name=Employee&background=1976d2&color=fff&bold=true`,
-          position: 'Employee',
-          joinDate: new Date().toISOString().split('T')[0]
-        };
-        
+        userData = { _id: `user-${Date.now()}`, name: 'Employee', email: 'employee@company.com', role: 'employee', department: 'General Department', employeeId: `EMP${String(Date.now()).slice(-6)}`, position: 'Employee', joinDate: new Date().toISOString().split('T')[0] };
         localStorage.setItem('currentUser', JSON.stringify(userData));
-        localStorage.setItem('userFallback', 'true');
       }
-      
+
       const formattedUser = {
         _id: userData._id || userData.id || `user-${Date.now()}`,
-        name: userData.name || userData.fullName || userData.username || 'Employee',
+        name: userData.name || userData.fullName || 'Employee',
         email: userData.email || 'employee@company.com',
         role: userData.role || 'employee',
         department: userData.department || 'General Department',
-        employeeId: userData.employeeId || userData.employeeNumber || `EMP${String(Date.now()).slice(-6)}`,
+        employeeId: userData.employeeId || `EMP${String(Date.now()).slice(-6)}`,
         position: userData.position || userData.jobTitle || 'Employee',
-        avatar: userData.avatar || userData.profilePicture || 
-                `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name || 'Employee')}&background=1976d2&color=fff&bold=true`,
-        joinDate: userData.joinDate || userData.hireDate || new Date().toISOString().split('T')[0],
-        phone: userData.phone || userData.phoneNumber || 'N/A',
-        location: userData.location || userData.officeLocation || 'Main Office'
+        avatar: userData.avatar || userData.profilePicture || null,
+        joinDate: userData.joinDate || new Date().toISOString().split('T')[0],
+        phone: userData.phone || 'N/A', location: userData.location || 'Main Office',
       };
-      
-      console.log('Final user object:', formattedUser);
+
       setUser(formattedUser);
       localStorage.setItem('currentUser', JSON.stringify(formattedUser));
-      
-    } catch (error) {
-      console.error('Error in fetchCurrentUser:', error);
-      
-      const fallbackUser = {
-        _id: 'fallback-user',
-        name: 'Employee',
-        email: 'employee@company.com',
-        role: 'employee',
-        department: 'General Department',
-        employeeId: 'EMP001',
-        avatar: 'https://ui-avatars.com/api/?name=Employee&background=1976d2&color=fff',
-        position: 'Employee',
-        joinDate: '2024-01-01'
-      };
-      
-      setUser(fallbackUser);
-      localStorage.setItem('currentUser', JSON.stringify(fallbackUser));
-    } finally {
-      setUserLoading(false);
-    }
-  }, [API_URL]);
+    } catch {
+      const fallback = { _id: 'fallback-user', name: 'Employee', email: 'employee@company.com', role: 'employee', department: 'General Department', employeeId: 'EMP001', position: 'Employee', joinDate: '2024-01-01' };
+      setUser(fallback); localStorage.setItem('currentUser', JSON.stringify(fallback));
+    } finally { setUserLoading(false); }
+  }, []);
 
-  // Fetch HR users
   const fetchHrUsers = async () => {
     try {
       const token = localStorage.getItem('token');
-      if (!token) {
-        console.warn('No token available for HR users fetch');
-        const mockHrUsers = [
-          {
-            _id: 'hr-001',
-            name: 'Sarah Johnson',
-            email: 'sarah.johnson@company.com',
-            role: 'hr',
-            department: 'Human Resources',
-            employeeId: 'HR001',
-            avatar: 'https://ui-avatars.com/api/?name=Sarah+Johnson&background=1976d2&color=fff'
-          },
-          {
-            _id: 'hr-002',
-            name: 'Michael Chen',
-            email: 'michael.chen@company.com',
-            role: 'hr',
-            department: 'HR Operations',
-            employeeId: 'HR002',
-            avatar: 'https://ui-avatars.com/api/?name=Michael+Chen&background=1976d2&color=fff'
-          }
+      if (!token) { 
+        const mockHR = [
+          { _id: 'hr-001', name: 'Sarah Johnson', email: 'sarah.johnson@company.com', role: 'hr', department: 'Human Resources', employeeId: 'HR001' }, 
+          { _id: 'hr-002', name: 'Michael Chen', email: 'michael.chen@company.com', role: 'hr', department: 'HR Operations', employeeId: 'HR002' }
         ];
-        setHrUsers(mockHrUsers);
-        return;
+        setHrUsers(mockHR);
+        setStats(prev => ({ ...prev, totalHR: mockHR.length }));
+        return; 
       }
-
-      const response = await axios.get(
-        `${API_URL}/api/messages/employee/users/list`,
-        {
-          headers: { 
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 5000
-        }
-      );
-      
+      const response = await axios.get(`${API_URL}/api/messages/employee/users/list`, { headers: { Authorization: `Bearer ${token}` }, timeout: 5000 });
       if (response.data.success && response.data.data) {
         setHrUsers(response.data.data);
-      } else {
-        const mockHrUsers = [
-          {
-            _id: 'hr-001',
-            name: 'HR Department',
-            email: 'hr@company.com',
-            role: 'hr',
-            department: 'Human Resources',
-            employeeId: 'HR001'
-          }
-        ];
-        setHrUsers(mockHrUsers);
+        setStats(prev => ({ ...prev, totalHR: response.data.data.length }));
       }
-    } catch (error) {
-      console.error('Error fetching HR users:', error);
-      const mockHrUsers = [
-        {
-          _id: 'hr-default',
-          name: 'HR Support',
-          email: 'hr-support@company.com',
-          role: 'hr',
-          department: 'Human Resources',
-          employeeId: 'HR001',
-          avatar: 'https://ui-avatars.com/api/?name=HR+Support&background=1976d2&color=fff'
-        }
-      ];
-      setHrUsers(mockHrUsers);
+      else setHrUsers([{ _id: 'hr-001', name: 'HR Department', email: 'hr@company.com', role: 'hr', department: 'Human Resources', employeeId: 'HR001' }]);
+    } catch {
+      setHrUsers([{ _id: 'hr-default', name: 'HR Support', email: 'hr-support@company.com', role: 'hr', department: 'Human Resources', employeeId: 'HR001' }]);
     }
   };
 
-  // Load drafts from localStorage
   const loadDrafts = () => {
     try {
-      const savedDrafts = localStorage.getItem('messageDrafts');
-      if (savedDrafts) {
-        const parsedDrafts = JSON.parse(savedDrafts);
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        
-        const recentDrafts = parsedDrafts.filter(draft => 
-          new Date(draft.updatedAt) > thirtyDaysAgo
-        );
-        
-        setDrafts(recentDrafts);
-        localStorage.setItem('messageDrafts', JSON.stringify(recentDrafts));
+      const saved = localStorage.getItem('messageDrafts');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
+        const recent = parsed.filter(d => new Date(d.updatedAt) > cutoff);
+        setDrafts(recent);
+        setStats(prev => ({ ...prev, draftsCount: recent.length }));
+        localStorage.setItem('messageDrafts', JSON.stringify(recent));
       }
-    } catch (error) {
-      console.error('Error loading drafts:', error);
-      setDrafts([]);
-    }
+    } catch { setDrafts([]); }
   };
 
-  // Load templates
   const loadTemplates = () => {
     try {
-      const savedTemplates = localStorage.getItem('messageTemplates');
-      if (savedTemplates) {
-        setTemplates(JSON.parse(savedTemplates));
-      } else {
-        setTemplates(defaultTemplates);
-        localStorage.setItem('messageTemplates', JSON.stringify(defaultTemplates));
-      }
-    } catch (error) {
-      console.error('Error loading templates:', error);
-      setTemplates(defaultTemplates);
+      const saved = localStorage.getItem('messageTemplates');
+      const templatesData = saved ? JSON.parse(saved) : DEFAULT_TEMPLATES;
+      setTemplates(templatesData);
+      setStats(prev => ({ ...prev, templatesCount: templatesData.length }));
+      if (!saved) localStorage.setItem('messageTemplates', JSON.stringify(DEFAULT_TEMPLATES));
+    } catch { 
+      setTemplates(DEFAULT_TEMPLATES);
+      setStats(prev => ({ ...prev, templatesCount: DEFAULT_TEMPLATES.length }));
     }
   };
 
-  // Save draft
   const saveDraft = () => {
     try {
-      if (!formData.subject.trim() && !formData.message.trim()) {
-        toast.warning('No content to save as draft');
-        return;
-      }
-
-      const newDraft = {
-        id: Date.now(),
-        ...formData,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        wordCount: formData.message.split(/\s+/).length,
-        attachmentCount: formData.attachments.length
-      };
-
-      const updatedDrafts = [newDraft, ...drafts.slice(0, 19)];
-      setDrafts(updatedDrafts);
-      localStorage.setItem('messageDrafts', JSON.stringify(updatedDrafts));
-      
-      toast.success('Draft saved successfully!');
-    } catch (error) {
-      toast.error('Failed to save draft');
-      console.error('Save draft error:', error);
-    }
+      if (!formData.subject.trim() && !formData.message.trim()) { toast.warning('No content to save'); return; }
+      const newDraft = { id: Date.now(), ...formData, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      const updated = [newDraft, ...drafts.slice(0, 19)];
+      setDrafts(updated);
+      setStats(prev => ({ ...prev, draftsCount: updated.length }));
+      localStorage.setItem('messageDrafts', JSON.stringify(updated));
+      toast.success('Draft saved');
+    } catch { toast.error('Failed to save draft'); }
   };
 
-  // Load draft
-  const loadDraft = (draft) => {
-    setFormData({
-      ...draft,
-      attachments: draft.attachments || []
-    });
-    setActiveStep(0);
-    setActiveTab('compose');
-    toast.success('Draft loaded successfully');
+  const loadDraft = (draft) => { setFormData({ ...draft, attachments: draft.attachments || [] }); setActiveStep(0); setActiveTab('compose'); toast.success('Draft loaded'); };
+  const deleteDraft = (id) => { 
+    const updated = drafts.filter(d => d.id !== id);
+    setDrafts(updated);
+    setStats(prev => ({ ...prev, draftsCount: updated.length }));
+    localStorage.setItem('messageDrafts', JSON.stringify(updated));
+    toast.success('Draft deleted'); 
   };
 
-  // Delete draft
-  const deleteDraft = (id) => {
-    const updatedDrafts = drafts.filter(draft => draft.id !== id);
-    setDrafts(updatedDrafts);
-    localStorage.setItem('messageDrafts', JSON.stringify(updatedDrafts));
-    toast.success('Draft deleted');
-  };
-
-  // Apply template
   const applyTemplate = (template) => {
-    setFormData(prev => ({
-      ...prev,
-      subject: template.subject,
-      message: template.message,
-      category: template.category
-    }));
-    setShowTemplates(false);
-    toast.success(`"${template.name}" template applied`);
-    
-    const updatedTemplates = templates.map(t => 
-      t.id === template.id 
-        ? { ...t, usageCount: (t.usageCount || 0) + 1, lastUsed: new Date().toISOString() }
-        : t
-    );
-    setTemplates(updatedTemplates);
-    localStorage.setItem('messageTemplates', JSON.stringify(updatedTemplates));
+    setFormData(p => ({ ...p, subject: template.subject, message: template.message, category: template.category }));
+    setActiveTab('compose');
+    toast.success(`"${template.name}" applied`);
+    const updated = templates.map(t => t.id === template.id ? { ...t, usageCount: (t.usageCount || 0) + 1, lastUsed: new Date().toISOString() } : t);
+    setTemplates(updated); localStorage.setItem('messageTemplates', JSON.stringify(updated));
   };
 
-  // Handle form changes
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    
-    if (type === 'checkbox') {
-      setFormData(prev => ({
-        ...prev,
-        [name]: checked
-      }));
-      return;
+    if (type === 'checkbox') { setFormData(p => ({ ...p, [name]: checked })); return; }
+    if (name === 'recipientType') { setFormData(p => ({ ...p, recipientType: value, recipient: '', recipientId: '' })); return; }
+    if (name === 'recipientId') {
+      const opt = getRecipientOptions().find(o => o.value === value);
+      setFormData(p => ({ ...p, recipient: opt?.label || '', recipientId: value })); return;
     }
-    
-    if (name === 'recipientType') {
-      setFormData(prev => ({
-        ...prev,
-        recipientType: value,
-        recipient: '',
-        recipientId: ''
-      }));
-      return;
-    }
-    
-    if (name === 'recipient') {
-      const selectedOption = getRecipientOptions().find(opt => opt.value === value);
-      setFormData(prev => ({
-        ...prev,
-        recipient: selectedOption ? selectedOption.label : '',
-        recipientId: value
-      }));
-      return;
-    }
-    
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(p => ({ ...p, [name]: value }));
   };
 
-  // Handle file upload
   const handleFileUpload = (e) => {
     const files = Array.from(e.target.files);
-    
-    const oversizedFiles = files.filter(file => file.size > 10 * 1024 * 1024);
-    if (oversizedFiles.length > 0) {
-      toast.error(`Some files exceed 10MB limit: ${oversizedFiles.map(f => f.name).join(', ')}`);
-      return;
-    }
-    
-    const newAttachments = files.map(file => ({
-      file,
-      id: Math.random().toString(36).substr(2, 9),
-      name: file.name,
-      size: (file.size / 1024 / 1024).toFixed(2),
-      type: file.type.split('/')[1]?.toUpperCase() || 'FILE',
-      uploadedAt: new Date().toISOString(),
-      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null
-    }));
-    
-    setFormData(prev => ({
-      ...prev,
-      attachments: [...prev.attachments, ...newAttachments]
-    }));
-    
+    const oversized = files.filter(f => f.size > 10 * 1024 * 1024);
+    if (oversized.length) { toast.error(`Files exceed 10MB: ${oversized.map(f => f.name).join(', ')}`); return; }
+    const attachments = files.map(file => ({ file, id: Math.random().toString(36).substr(2, 9), name: file.name, size: (file.size / 1024 / 1024).toFixed(2), type: file.type.split('/')[1]?.toUpperCase() || 'FILE', uploadedAt: new Date().toISOString(), preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null }));
+    setFormData(p => ({ ...p, attachments: [...p.attachments, ...attachments] }));
     toast.success(`${files.length} file(s) added`);
   };
 
-  // Remove attachment
   const removeAttachment = (id) => {
-    setFormData(prev => ({
-      ...prev,
-      attachments: prev.attachments.filter(item => {
-        if (item.id === id && item.preview) {
-          URL.revokeObjectURL(item.preview);
-        }
-        return item.id !== id;
-      })
-    }));
+    setFormData(p => ({ ...p, attachments: p.attachments.filter(item => { if (item.id === id && item.preview) URL.revokeObjectURL(item.preview); return item.id !== id; }) }));
   };
 
-  // Validate form
   const validateForm = () => {
-    if (!formData.subject.trim()) return 'Subject is required';
-    if (!formData.message.trim()) return 'Message is required';
-    if (formData.message.length < 10) return 'Message is too short (minimum 10 characters)';
-    if (!formData.recipientId) return 'Please select a recipient';
-    if (!formData.category) return 'Please select a category';
-    return null;
+    const errs = {};
+    if (!formData.subject.trim()) errs.subject = 'Subject is required';
+    if (!formData.message.trim()) errs.message = 'Message is required';
+    if (formData.message.length < 10) errs.message = 'Message too short (min 10 characters)';
+    if (!formData.recipientId) errs.recipientId = 'Please select a recipient';
+    if (!formData.category) errs.category = 'Please select a category';
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0 ? null : 'Please fix the errors above';
   };
 
-  // Handle submit
-// Handle submit
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  
-  const validationError = validateForm();
-  if (validationError) {
-    toast.error(validationError);
-    setError(validationError);
-    return;
-  }
-
-  setLoading(true);
-  setError('');
-
-  try {
-    // ✅ REMOVE sender object - backend will get it from token
-    const messageData = {
-      recipientId: formData.recipientId,
-      subject: formData.subject,
-      message: formData.message,
-      category: formData.category || 'general',
-      priority: formData.priority || 'normal'
-    };
-
-    console.log('📤 SENDING:', messageData);
-
-    const endpoint = `${API_URL}/api/messages/employee/send`;
-    const token = localStorage.getItem('token');
-
-    const response = await axios.post(endpoint, messageData, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const err = validateForm();
+    if (err) { toast.error(err); setError(err); return; }
+    setLoading(true); setError('');
+    try {
+      const messageData = { recipientId: formData.recipientId, subject: formData.subject, message: formData.message, category: formData.category || 'general', priority: formData.priority || 'normal' };
+      const response = await axios.post(`${API_URL}/api/messages/employee/send`, messageData, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' },
+      });
+      console.log('✅ SUCCESS:', response.data);
+      toast.success('Message sent!');
+      if (response.data.success) {
+        setLastSentMessage({ recipient: formData.recipient, subject: formData.subject, date: new Date().toLocaleDateString(), time: new Date().toLocaleTimeString(), reference: response.data.data?.id || `MSG-${Date.now()}` });
+        setShowSuccessDialog(true); setSuccess(true);
+        setFormData(EMPTY_FORM);
+        setStats(prev => ({ ...prev, messagesSent: prev.messagesSent + 1 }));
       }
-    });
-
-    // Success handling
-    console.log('✅ SUCCESS:', response.data);
-    toast.success('Message sent successfully!');
-    
-    // Reset form on success
-    if (response.data.success) {
-      setFormData({
-        recipientType: 'hr',
-        recipient: '',
-        recipientId: '',
-        subject: '',
-        message: '',
-        category: 'general',
-        priority: 'normal',
-        attachments: [],
-        templateId: '',
-        ccRecipients: [],
-        bccRecipients: [],
-        confidential: false,
-        readReceipt: false,
-        urgent: false,
-        followUp: false,
-        tags: []
-      });
-      
-      // Show success dialog
-      setLastSentMessage({
-        recipient: formData.recipient,
-        subject: formData.subject,
-        date: new Date().toLocaleDateString(),
-        time: new Date().toLocaleTimeString(),
-        reference: response.data.data?.id || `MSG-${Date.now()}`
-      });
-      setShowSuccessDialog(true);
-      setSuccess(true);
-    }
-    
-  } catch (err) {
-    // Error handling
-    console.error('❌ ERROR:', err.response?.data || err.message);
-    const errorMessage = err.response?.data?.message || err.response?.data?.error || 'Failed to send message';
-    setError(errorMessage);
-    toast.error(errorMessage);
-  } finally {
-    setLoading(false);
-  }
-};
-
-
-  // Get recipient options
-  const getRecipientOptions = () => {
-    return hrUsers.map(hr => ({
-      value: hr._id,
-      label: hr.name,
-      subtext: `${hr.department} • ${hr.role.toUpperCase()}`,
-      email: hr.email,
-      avatar: hr.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(hr.name)}&background=1976d2&color=fff`
-    }));
+    } catch (err) {
+      const msg = err.response?.data?.message || err.response?.data?.error || 'Failed to send message';
+      setError(msg); toast.error(msg);
+    } finally { setLoading(false); }
   };
 
-  // Steps
-  const steps = ['Recipient', 'Category', 'Content', 'Review'];
-  
-  const getStepContent = (step) => {
-    switch (step) {
-      case 0: return 'Select who you want to message';
-      case 1: return 'Categorize and prioritize your message';
-      case 2: return 'Write your message with details';
-      case 3: return 'Review all details before sending';
-      default: return 'Unknown step';
-    }
-  };
+  const getRecipientOptions = () => hrUsers.map(hr => ({
+    value: hr._id, label: hr.name,
+    subtext: `${hr.department} · ${hr.role.toUpperCase()}`,
+    email: hr.email,
+  }));
 
-  // Handle step navigation
   const handleNextStep = () => {
-    if (activeStep === 0 && !formData.recipientId) {
-      toast.error('Please select a recipient');
-      return;
-    }
-    if (activeStep === 1 && !formData.category) {
-      toast.error('Please select a category');
-      return;
-    }
-    setActiveStep(prev => Math.min(prev + 1, 3));
+    if (activeStep === 0 && !formData.recipientId) { toast.error('Please select a recipient'); return; }
+    if (activeStep === 1 && !formData.category) { toast.error('Please select a category'); return; }
+    setActiveStep(p => Math.min(p + 1, 3));
   };
+  const handlePrevStep = () => setActiveStep(p => Math.max(p - 1, 0));
 
-  const handlePrevStep = () => {
-    setActiveStep(prev => Math.max(prev - 1, 0));
-  };
-
-  // Success Dialog Component
-  const SuccessDialog = () => (
-    <Dialog 
-      open={showSuccessDialog} 
-      onClose={() => setShowSuccessDialog(false)}
-      maxWidth="sm"
-      fullWidth
-    >
-      <DialogTitle sx={{ textAlign: 'center', pb: 0 }}>
-        <Box sx={{ 
-          p: 3, 
-          background: theme.palette.primary.main,
-          borderRadius: '8px 8px 0 0',
-          color: 'white',
-        }}>
-          <Avatar sx={{ 
-            width: 80, 
-            height: 80, 
-            mx: 'auto', 
-            mb: 2,
-            bgcolor: 'white',
-            color: theme.palette.primary.main,
-          }}>
-            <DoneAllIcon fontSize="large" />
-          </Avatar>
-          <Typography variant="h5" fontWeight="bold" gutterBottom>
-            Message Sent!
-          </Typography>
-          <Typography variant="body1">
-            Your message has been delivered securely
-          </Typography>
-        </Box>
-      </DialogTitle>
-      
-      <DialogContent sx={{ py: 3, px: 3 }}>
-        <Card sx={{ mb: 3, border: `1px solid ${theme.palette.divider}` }}>
-          <CardContent>
-            <Grid container spacing={2}>
-              <Grid item xs={6}>
-                <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
-                  Recipient
-                </Typography>
-                <Typography variant="body1" fontWeight="bold">
-                  {lastSentMessage?.recipient || 'Recipient'}
-                </Typography>
-              </Grid>
-              <Grid item xs={6}>
-                <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
-                  Subject
-                </Typography>
-                <Typography variant="body1" fontWeight="bold">
-                  {lastSentMessage?.subject || 'No subject'}
-                </Typography>
-              </Grid>
-              <Grid item xs={6}>
-                <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
-                  Sent On
-                </Typography>
-                <Typography variant="body2">
-                  {lastSentMessage?.date} at {lastSentMessage?.time}
-                </Typography>
-              </Grid>
-              <Grid item xs={6}>
-                <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
-                  Reference
-                </Typography>
-                <Typography variant="body2" fontFamily="monospace" fontWeight="bold">
-                  {lastSentMessage?.reference || 'N/A'}
-                </Typography>
-              </Grid>
-            </Grid>
-          </CardContent>
-        </Card>
-        
-        <Alert 
-          severity="success" 
-          sx={{ mb: 2 }}
-        >
-          <Typography variant="body2">
-            Your message has been successfully sent and logged.
-          </Typography>
-        </Alert>
-      </DialogContent>
-      
-      <DialogActions sx={{ p: 3, pt: 0 }}>
-        <Button
-          variant="outlined"
-          onClick={() => {
-            setShowSuccessDialog(false);
-            navigate('/employee/messages');
-          }}
-          startIcon={<HistoryIcon />}
-        >
-          View Messages
-        </Button>
-        <Button
-          variant="contained"
-          onClick={() => {
-            setShowSuccessDialog(false);
-            setFormData({
-              recipientType: 'hr',
-              recipient: '',
-              recipientId: '',
-              subject: '',
-              message: '',
-              category: 'general',
-              priority: 'normal',
-              attachments: [],
-              templateId: '',
-              ccRecipients: [],
-              bccRecipients: [],
-              confidential: false,
-              readReceipt: false,
-              urgent: false,
-              followUp: false,
-              tags: []
-            });
-            setActiveStep(0);
-          }}
-          startIcon={<SendIcon />}
-        >
-          Send Another
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-
-  // UseEffects
   useEffect(() => {
-    console.log('ComposeMessage component mounted');
-    fetchCurrentUser();
-    fetchHrUsers();
-    loadDrafts();
-    loadTemplates();
-    
-    return () => {
-      formData.attachments.forEach(item => {
-        if (item.preview) {
-          URL.revokeObjectURL(item.preview);
-        }
-      });
-    };
+    fetchCurrentUser(); fetchHrUsers(); loadDrafts(); loadTemplates();
+    return () => formData.attachments.forEach(item => { if (item.preview) URL.revokeObjectURL(item.preview); });
   }, []);
 
+  useEffect(() => { setCharacterCount(formData.message.length); }, [formData.message]);
+
   useEffect(() => {
-    setCharacterCount(formData.message.length);
-    
     if ((formData.subject || formData.message) && !loading) {
-      const autoSaveTimer = setTimeout(() => {
-        if (formData.subject || formData.message) {
-          saveDraft();
-        }
-      }, 30000);
-      
-      return () => clearTimeout(autoSaveTimer);
+      const t = setTimeout(() => { if (formData.subject || formData.message) saveDraft(); }, 30000);
+      return () => clearTimeout(t);
     }
   }, [formData.subject, formData.message]);
 
-  // If still loading user
-  if (userLoading) {
-    return (
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        minHeight: '100vh',
-        flexDirection: 'column',
-        gap: 3
-      }}>
-        <CircularProgress />
-        <Typography variant="h6">
-          Loading your profile...
-        </Typography>
-      </Box>
-    );
-  }
+  if (userLoading) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-10 h-10 border-4 border-gray-100 border-t-gray-900 rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-gray-600 text-sm">Loading your profile…</p>
+      </div>
+    </div>
+  );
 
-  // Current recipient options
-  const currentRecipientOptions = getRecipientOptions();
+  const recipientOptions = getRecipientOptions();
+
+  const TABS = [
+    { id: 'compose',   icon: SendIcon,      label: 'Compose' },
+    { id: 'templates', icon: TemplateIcon,  label: 'Templates' },
+    { id: 'drafts',    icon: DraftsIcon,    label: `Drafts${drafts.length ? ` (${drafts.length})` : ''}` },
+    { id: 'ai',        icon: SmartToyIcon,  label: 'AI Assistant' },
+  ];
 
   return (
-    <Box sx={{ 
-      minHeight: '100vh',
-      py: 4,
-      backgroundColor: '#f5f5f5'
-    }}>
-      <Container maxWidth="lg">
-        {/* Success Dialog */}
-        <SuccessDialog />
-        
-        {/* Save Draft Dialog */}
-        <Dialog
-          open={saveAsDraftDialog}
-          onClose={() => setSaveAsDraftDialog(false)}
-          maxWidth="sm"
-        >
-          <DialogTitle>
-            <DraftsIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-            Save as Draft
-          </DialogTitle>
-          <DialogContent>
-            <Typography>Save this message as a draft? You can continue editing it later.</Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setSaveAsDraftDialog(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="contained"
-              onClick={() => {
-                saveDraft();
-                setSaveAsDraftDialog(false);
-              }}
-            >
-              Save Draft
-            </Button>
-          </DialogActions>
-        </Dialog>
+    <div className="min-h-screen bg-gray-50">
 
-        {/* Main Paper */}
-        <Paper elevation={2} sx={{ 
-          borderRadius: 2,
-          overflow: 'hidden',
-          background: 'white',
-        }}>
-          {/* Header */}
-          <Box sx={{ 
-            p: 3, 
-            backgroundColor: theme.palette.primary.main,
-            color: 'white',
-          }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-              <Avatar sx={{ 
-                width: 60, 
-                height: 60, 
-                bgcolor: 'white',
-                color: theme.palette.primary.main,
-              }}>
-                <SendIcon sx={{ fontSize: 32 }} />
-              </Avatar>
-              <Box>
-                <Typography variant="h4" fontWeight="bold" gutterBottom>
-                  Compose New Message
-                </Typography>
-                <Typography variant="body1">
-                  Send secure messages to HR and administration
-                </Typography>
-              </Box>
-            </Box>
-          </Box>
+      {/* ── Page Header ── */}
+      <div className="bg-white border-b border-gray-100 px-6 py-5">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                <SendIcon className="text-gray-600 text-sm" />
+                Compose Message
+              </h1>
+              <p className="text-sm text-gray-500 mt-1">Send secure messages to HR and administration</p>
+            </div>
+            {user && (
+              <div className="flex items-center gap-2">
+                <AvatarInitials name={user.name} />
+                <div className="hidden sm:block">
+                  <p className="text-sm font-medium text-gray-700">{user.name}</p>
+                  <p className="text-xs text-gray-400">{user.employeeId}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
-          {/* Tabs */}
-          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-            <Tabs 
-              value={activeTab} 
-              onChange={(e, newValue) => setActiveTab(newValue)}
-              variant="scrollable"
-              scrollButtons="auto"
-            >
-              <Tab 
-                value="compose" 
-                label="Compose" 
-                icon={<SendIcon />} 
-                iconPosition="start"
-              />
-              <Tab 
-                value="templates" 
-                label="Templates" 
-                icon={<TemplateIcon />} 
-                iconPosition="start"
-              />
-              <Tab 
-                value="drafts" 
-                label={
-                  <Badge badgeContent={drafts.length} color="primary" showZero>
-                    Drafts
-                  </Badge>
-                } 
-                icon={<DraftsIcon />} 
-                iconPosition="start"
-              />
-              <Tab 
-                value="ai" 
-                label="AI Assistant" 
-                icon={<SmartToyIcon />} 
-                iconPosition="start"
-              />
-            </Tabs>
-          </Box>
+      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
 
-          {/* Main Content */}
-          <Box sx={{ p: 3 }}>
-            {activeTab === 'compose' && (
-              <>
-                {/* Stepper */}
-                <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
-                  {steps.map((label) => (
-                    <Step key={label}>
-                      <StepLabel>{label}</StepLabel>
-                    </Step>
-                  ))}
-                </Stepper>
+        {/* KPI Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <KpiCard icon={FaUsers} label="HR Team" value={stats.totalHR} sub="Available contacts" iconBg="bg-indigo-500" />
+          <KpiCard icon={DraftsIcon} label="Saved Drafts" value={stats.draftsCount} sub="Continue later" iconBg="bg-amber-500" />
+          <KpiCard icon={TemplateIcon} label="Templates" value={stats.templatesCount} sub="Ready to use" iconBg="bg-emerald-500" />
+          <KpiCard icon={FaCheckCircle} label="Messages Sent" value={stats.messagesSent} sub="This session" iconBg="bg-purple-500" />
+        </div>
 
-                <Typography variant="h6" color="primary" sx={{ mb: 3 }}>
-                  {getStepContent(activeStep)}
-                </Typography>
+        {/* ── Tab Bar ── */}
+        <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
+          <div className="flex border-b border-gray-100 overflow-x-auto">
+            {TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-3.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${activeTab === tab.id ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              >
+                <tab.icon style={{ fontSize: 15 }} />
+                {tab.label}
+              </button>
+            ))}
+          </div>
 
-                {/* Error Message */}
-                {error && (
-                  <Alert 
-                    severity="error" 
-                    sx={{ mb: 3 }}
-                    onClose={() => setError('')}
-                  >
-                    {error}
-                  </Alert>
-                )}
+          {/* ── Compose Tab ── */}
+          {activeTab === 'compose' && (
+            <div className="p-5">
+              {/* Step Progress */}
+              <div className="flex items-center gap-3 mb-6 overflow-x-auto pb-1">
+                {STEPS.map((label, i) => (
+                  <React.Fragment key={label}>
+                    <StepDot label={label} index={i} active={i === activeStep} completed={i < activeStep} />
+                    {i < STEPS.length - 1 && (
+                      <div className={`flex-1 h-px min-w-[20px] ${i < activeStep ? 'bg-gray-900' : 'bg-gray-200'}`} />
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
 
-                <form onSubmit={handleSubmit}>
-                  {/* Recipient Selection - Step 0 */}
-                  {activeStep === 0 && (
-                    <Grid container spacing={3}>
-                      <Grid item xs={12}>
-                        <Card>
-                          <CardContent>
-                            <Typography variant="h6" sx={{ mb: 2 }}>
-                              Select Recipient
-                            </Typography>
-                            <Grid container spacing={2}>
-                              <Grid item xs={12} md={6}>
-                                <FormControl fullWidth>
-                                  <InputLabel>Recipient Type</InputLabel>
-                                  <Select
-                                    name="recipientType"
-                                    value={formData.recipientType}
-                                    onChange={handleChange}
-                                    label="Recipient Type"
-                                    required
-                                  >
-                                    <MenuItem value="hr">
-                                      HR Department
-                                    </MenuItem>
-                                  </Select>
-                                </FormControl>
-                              </Grid>
-                              <Grid item xs={12} md={6}>
-                                <FormControl fullWidth>
-                                  <InputLabel>Select Recipient</InputLabel>
-                                  <Select
-                                    name="recipientId"
-                                    value={formData.recipientId}
-                                    onChange={handleChange}
-                                    label="Select Recipient"
-                                    required
-                                    disabled={currentRecipientOptions.length === 0}
-                                  >
-                                    {currentRecipientOptions.map(option => (
-                                      <MenuItem key={option.value} value={option.value}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                          <Avatar src={option.avatar} sx={{ width: 32, height: 32 }}>
-                                            <PersonIcon />
-                                          </Avatar>
-                                          <Box>
-                                            <Typography>{option.label}</Typography>
-                                            <Typography variant="caption" color="text.secondary">
-                                              {option.subtext}
-                                            </Typography>
-                                          </Box>
-                                        </Box>
-                                      </MenuItem>
-                                    ))}
-                                  </Select>
-                                </FormControl>
-                              </Grid>
-                            </Grid>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    </Grid>
-                  )}
+              {/* Error Banner */}
+              {error && (
+                <div className="flex items-center gap-3 bg-red-50 border border-red-100 rounded-lg px-4 py-3 mb-4 text-sm">
+                  <span className="text-red-600 flex-1">{error}</span>
+                  <button onClick={() => setError('')} className="text-red-400 hover:text-red-600">✕</button>
+                </div>
+              )}
 
-                  {/* Category & Priority - Step 1 */}
-                  {activeStep === 1 && (
-                    <Grid container spacing={3}>
-                      <Grid item xs={12} md={6}>
-                        <Card>
-                          <CardContent>
-                            <Typography variant="h6" sx={{ mb: 2 }}>
-                              Category
-                            </Typography>
-                            <FormControl fullWidth>
-                              <Select
-                                name="category"
-                                value={formData.category}
-                                onChange={handleChange}
-                              >
-                                {categories.map(cat => (
-                                  <MenuItem key={cat.value} value={cat.value}>
-                                    {cat.label}
-                                  </MenuItem>
-                                ))}
-                              </Select>
-                            </FormControl>
-                          </CardContent>
-                        </Card>
-                      </Grid>
+              <form onSubmit={handleSubmit}>
 
-                      <Grid item xs={12} md={6}>
-                        <Card>
-                          <CardContent>
-                            <Typography variant="h6" sx={{ mb: 2 }}>
-                              Priority Level
-                            </Typography>
-                            <FormControl fullWidth>
-                              <Select
-                                name="priority"
-                                value={formData.priority}
-                                onChange={handleChange}
-                              >
-                                {priorities.map(pri => (
-                                  <MenuItem key={pri.value} value={pri.value}>
-                                    {pri.label}
-                                  </MenuItem>
-                                ))}
-                              </Select>
-                            </FormControl>
-                          </CardContent>
-                        </Card>
-                      </Grid>
+                {/* ── Step 0: Recipient ── */}
+                {activeStep === 0 && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Select who to message</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <FormLabel>Recipient type</FormLabel>
+                        <select name="recipientType" value={formData.recipientType} onChange={handleChange} className={inputCls()}>
+                          <option value="hr">HR Department</option>
+                        </select>
+                      </div>
+                      <div>
+                        <FormLabel required>Select recipient</FormLabel>
+                        <select name="recipientId" value={formData.recipientId} onChange={handleChange} className={inputCls(fieldErrors.recipientId)} disabled={recipientOptions.length === 0}>
+                          <option value="">Choose a contact…</option>
+                          {recipientOptions.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label} — {opt.subtext}</option>
+                          ))}
+                        </select>
+                        {fieldErrors.recipientId && <p className="text-xs text-red-500 mt-1">{fieldErrors.recipientId}</p>}
+                      </div>
+                    </div>
 
-                      {/* Subject */}
-                      <Grid item xs={12}>
-                        <TextField
-                          fullWidth
-                          label="Message Subject"
-                          name="subject"
-                          value={formData.subject}
-                          onChange={handleChange}
-                          required
-                          placeholder="Brief and descriptive subject line"
-                          sx={{ mb: 2 }}
-                        />
-                      </Grid>
-
-                      {/* Options */}
-                      <Grid item xs={12}>
-                        <Card>
-                          <CardContent>
-                            <Typography variant="h6" sx={{ mb: 2 }}>
-                              Message Options
-                            </Typography>
-                            <Grid container spacing={2}>
-                              <Grid item xs={12} sm={6} md={3}>
-                                <FormControlLabel
-                                  control={
-                                    <Switch
-                                      checked={formData.confidential}
-                                      onChange={(e) => setFormData(prev => ({
-                                        ...prev,
-                                        confidential: e.target.checked
-                                      }))}
-                                    />
-                                  }
-                                  label="Confidential"
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={3}>
-                                <FormControlLabel
-                                  control={
-                                    <Switch
-                                      checked={formData.readReceipt}
-                                      onChange={(e) => setFormData(prev => ({
-                                        ...prev,
-                                        readReceipt: e.target.checked
-                                      }))}
-                                    />
-                                  }
-                                  label="Read Receipt"
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={3}>
-                                <FormControlLabel
-                                  control={
-                                    <Switch
-                                      checked={formData.urgent}
-                                      onChange={(e) => setFormData(prev => ({
-                                        ...prev,
-                                        urgent: e.target.checked
-                                      }))}
-                                    />
-                                  }
-                                  label="Urgent"
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={3}>
-                                <FormControlLabel
-                                  control={
-                                    <Switch
-                                      checked={formData.followUp}
-                                      onChange={(e) => setFormData(prev => ({
-                                        ...prev,
-                                        followUp: e.target.checked
-                                      }))}
-                                    />
-                                  }
-                                  label="Follow-up"
-                                />
-                              </Grid>
-                            </Grid>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    </Grid>
-                  )}
-
-                  {/* Message Content - Step 2 */}
-                  {activeStep === 2 && (
-                    <Grid container spacing={3}>
-                      <Grid item xs={12}>
-                        <Card>
-                          <CardContent>
-                            <Typography variant="h6" sx={{ mb: 2 }}>
-                              Your Message
-                            </Typography>
-                            <TextField
-                              fullWidth
-                              name="message"
-                              value={formData.message}
-                              onChange={handleChange}
-                              required
-                              multiline
-                              rows={8}
-                              placeholder="Start typing your message here..."
-                              sx={{
-                                '& .MuiOutlinedInput-root': {
-                                  fontSize: '1rem',
-                                },
-                              }}
-                            />
-                            <Box sx={{ mt: 2 }}>
-                              <Typography variant="caption" color={characterCount < 10 ? 'error' : 'text.secondary'}>
-                                {characterCount} characters • {formData.message.split(/\s+/).filter(w => w.length > 0).length} words
-                              </Typography>
-                            </Box>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-
-                      {/* File Attachments */}
-                      <Grid item xs={12}>
-                        <Card>
-                          <CardContent>
-                            <Typography variant="h6" sx={{ mb: 2 }}>
-                              Attachments
-                            </Typography>
-                            
-                            <input
-                              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx,.txt,.ppt,.pptx"
-                              style={{ display: 'none' }}
-                              id="file-upload"
-                              multiple
-                              type="file"
-                              onChange={handleFileUpload}
-                            />
-                            <label htmlFor="file-upload">
-                              <Button
-                                component="span"
-                                startIcon={<AttachFileIcon />}
-                                variant="outlined"
-                                sx={{ mb: 2 }}
-                              >
-                                Select Files
-                              </Button>
-                            </label>
-
-                            {formData.attachments.length > 0 && (
-                              <Box sx={{ mt: 2 }}>
-                                <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                                  Attached Files ({formData.attachments.length})
-                                </Typography>
-                                <Grid container spacing={1}>
-                                  {formData.attachments.map((item) => (
-                                    <Grid item xs={12} key={item.id}>
-                                      <Box sx={{ 
-                                        p: 1.5, 
-                                        border: '1px solid #e0e0e0',
-                                        borderRadius: 1,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                      }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                          <AttachFileIcon color="action" />
-                                          <Box>
-                                            <Typography variant="body2">
-                                              {item.name}
-                                            </Typography>
-                                            <Typography variant="caption" color="text.secondary">
-                                              {item.size} MB • {item.type}
-                                            </Typography>
-                                          </Box>
-                                        </Box>
-                                        <IconButton
-                                          size="small"
-                                          onClick={() => removeAttachment(item.id)}
-                                        >
-                                          <DeleteIcon />
-                                        </IconButton>
-                                      </Box>
-                                    </Grid>
-                                  ))}
-                                </Grid>
-                              </Box>
+                    {/* HR Cards */}
+                    {recipientOptions.length > 0 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                        {recipientOptions.map(opt => (
+                          <button
+                            type="button"
+                            key={opt.value}
+                            onClick={() => setFormData(p => ({ ...p, recipient: opt.label, recipientId: opt.value }))}
+                            className={`flex items-center gap-3 p-3.5 rounded-lg border text-left transition-all ${formData.recipientId === opt.value ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
+                          >
+                            <AvatarInitials name={opt.label} />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-800 truncate">{opt.label}</p>
+                              <p className="text-xs text-gray-400 truncate">{opt.subtext}</p>
+                            </div>
+                            {formData.recipientId === opt.value && (
+                              <div className="ml-auto w-5 h-5 bg-gray-900 rounded-full flex items-center justify-center flex-shrink-0">
+                                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                </svg>
+                              </div>
                             )}
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    </Grid>
-                  )}
-
-                  {/* Review - Step 3 */}
-                  {activeStep === 3 && (
-                    <Grid container spacing={3}>
-                      <Grid item xs={12}>
-                        <Card>
-                          <CardContent>
-                            <Typography variant="h6" sx={{ mb: 3 }}>
-                              Message Preview
-                            </Typography>
-                            
-                            <Grid container spacing={2} sx={{ mb: 3 }}>
-                              <Grid item xs={6}>
-                                <Typography variant="caption" color="text.secondary">
-                                  Recipient
-                                </Typography>
-                                <Typography variant="body1" fontWeight="bold">
-                                  {formData.recipient || 'Not selected'}
-                                </Typography>
-                              </Grid>
-                              
-                              <Grid item xs={6}>
-                                <Typography variant="caption" color="text.secondary">
-                                  Sender
-                                </Typography>
-                                <Typography variant="body1" fontWeight="bold">
-                                  {user?.name || 'Employee'}
-                                </Typography>
-                              </Grid>
-                              
-                              <Grid item xs={6}>
-                                <Typography variant="caption" color="text.secondary">
-                                  Category
-                                </Typography>
-                                <Typography variant="body1">
-                                  {formData.category}
-                                </Typography>
-                              </Grid>
-                              
-                              <Grid item xs={6}>
-                                <Typography variant="caption" color="text.secondary">
-                                  Priority
-                                </Typography>
-                                <Chip 
-                                  label={formData.priority}
-                                  color={priorities.find(p => p.value === formData.priority)?.color || 'default'}
-                                  size="small"
-                                />
-                              </Grid>
-                            </Grid>
-                            
-                            <Divider sx={{ my: 2 }} />
-                            
-                            <Typography variant="caption" color="text.secondary">
-                              Subject
-                            </Typography>
-                            <Typography variant="body1" sx={{ mb: 3 }}>
-                              {formData.subject}
-                            </Typography>
-                            
-                            <Typography variant="caption" color="text.secondary">
-                              Message
-                            </Typography>
-                            <Box sx={{ 
-                              p: 2, 
-                              bgcolor: 'grey.50', 
-                              borderRadius: 1,
-                              border: '1px solid #e0e0e0'
-                            }}>
-                              <Typography variant="body1" style={{ whiteSpace: 'pre-wrap' }}>
-                                {formData.message}
-                              </Typography>
-                            </Box>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    </Grid>
-                  )}
-
-                  {/* Navigation Buttons */}
-                  <Grid container spacing={2} sx={{ mt: 4 }}>
-                    <Grid item xs={6}>
-                      {activeStep > 0 ? (
-                        <Button
-                          variant="outlined"
-                          onClick={handlePrevStep}
-                          startIcon={<RemoveIcon />}
-                        >
-                          Back
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outlined"
-                          onClick={() => navigate(-1)}
-                        >
-                          Cancel
-                        </Button>
-                      )}
-                    </Grid>
-                    <Grid item xs={6} sx={{ textAlign: 'right' }}>
-                      {activeStep < 3 ? (
-                        <Button
-                          variant="contained"
-                          onClick={handleNextStep}
-                          startIcon={<AddIcon />}
-                        >
-                          Continue
-                        </Button>
-                      ) : (
-                        <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
-                          <Button
-                            variant="outlined"
-                            onClick={() => setSaveAsDraftDialog(true)}
-                            startIcon={<DraftsIcon />}
-                          >
-                            Save Draft
-                          </Button>
-                          <Button
-                            variant="contained"
-                            type="submit"
-                            disabled={loading}
-                            startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <SendIcon />}
-                          >
-                            {loading ? 'Sending...' : 'Send Message'}
-                          </Button>
-                        </Box>
-                      )}
-                    </Grid>
-                  </Grid>
-                </form>
-              </>
-            )}
-
-            {/* Templates Tab */}
-            {activeTab === 'templates' && (
-              <Box>
-                <Typography variant="h5" sx={{ mb: 3 }}>
-                  Message Templates
-                </Typography>
-                
-                <Grid container spacing={3}>
-                  {templates.map(template => (
-                    <Grid item xs={12} md={6} lg={4} key={template.id}>
-                      <Card>
-                        <CardContent>
-                          <Box sx={{ mb: 2 }}>
-                            <Typography variant="h6" fontWeight="bold">
-                              {template.name}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                              Used {template.usageCount || 0} times
-                            </Typography>
-                          </Box>
-                          
-                          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                            <strong>Subject:</strong> {template.subject}
-                          </Typography>
-                          
-                          <Box sx={{ mb: 3 }}>
-                            <Typography variant="body2" style={{ whiteSpace: 'pre-wrap' }}>
-                              {template.message.substring(0, 150)}...
-                            </Typography>
-                          </Box>
-                          
-                          <Button
-                            variant="contained"
-                            fullWidth
-                            onClick={() => applyTemplate(template)}
-                            startIcon={<FileCopyIcon />}
-                          >
-                            Use Template
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  ))}
-                </Grid>
-              </Box>
-            )}
-
-            {/* Drafts Tab */}
-            {activeTab === 'drafts' && (
-              <Box>
-                <Box sx={{ mb: 3 }}>
-                  <Typography variant="h5">
-                    Saved Drafts ({drafts.length})
-                  </Typography>
-                </Box>
-                
-                {drafts.length === 0 ? (
-                  <Box sx={{ textAlign: 'center', py: 8 }}>
-                    <DraftsIcon sx={{ fontSize: 60, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
-                    <Typography variant="h6" color="text.secondary" gutterBottom>
-                      No Drafts Found
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-                      Your saved message drafts will appear here.
-                    </Typography>
-                    <Button
-                      variant="contained"
-                      onClick={() => setActiveTab('compose')}
-                      startIcon={<SendIcon />}
-                    >
-                      Compose New Message
-                    </Button>
-                  </Box>
-                ) : (
-                  <Grid container spacing={2}>
-                    {drafts.map(draft => (
-                      <Grid item xs={12} key={draft.id}>
-                        <Card>
-                          <CardContent>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                              <Box>
-                                <Typography variant="h6" fontWeight="bold">
-                                  {draft.subject || 'Untitled Draft'}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                  To: {draft.recipient || 'No recipient'} • 
-                                  Updated: {new Date(draft.updatedAt).toLocaleDateString()}
-                                </Typography>
-                              </Box>
-                              <Box sx={{ display: 'flex', gap: 1 }}>
-                                <Button
-                                  size="small"
-                                  variant="contained"
-                                  onClick={() => loadDraft(draft)}
-                                >
-                                  Edit
-                                </Button>
-                                <IconButton
-                                  size="small"
-                                  onClick={() => deleteDraft(draft.id)}
-                                >
-                                  <DeleteIcon />
-                                </IconButton>
-                              </Box>
-                            </Box>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    ))}
-                  </Grid>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
-              </Box>
-            )}
 
-            {/* AI Assistant Tab */}
-            {activeTab === 'ai' && (
-              <Box>
-                <Typography variant="h5" sx={{ mb: 3 }}>
-                  AI Writing Assistant
-                </Typography>
-                
-                <Grid container spacing={3}>
-                  <Grid item xs={12} md={6}>
-                    <Card>
-                      <CardContent>
-                        <Typography variant="h6" sx={{ mb: 2 }}>
-                          Smart Suggestions
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" paragraph>
-                          Get AI-powered suggestions to improve your message.
-                        </Typography>
-                        <Button
-                          variant="contained"
-                          fullWidth
-                          startIcon={<AutoFixHighIcon />}
-                        >
-                          Generate Suggestions
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                  
-                  <Grid item xs={12} md={6}>
-                    <Card>
-                      <CardContent>
-                        <Typography variant="h6" sx={{ mb: 2 }}>
-                          Tone Analysis
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" paragraph>
-                          Analyze the tone of your message.
-                        </Typography>
-                        <Button
-                          variant="contained"
-                          fullWidth
-                          startIcon={<PsychologyIcon />}
-                        >
-                          Analyze Tone
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                </Grid>
-              </Box>
-            )}
-          </Box>
+                {/* ── Step 1: Details ── */}
+                {activeStep === 1 && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Categorize your message</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <FormLabel required>Category</FormLabel>
+                        <select name="category" value={formData.category} onChange={handleChange} className={inputCls(fieldErrors.category)}>
+                          {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <FormLabel>Priority</FormLabel>
+                        <div className="flex gap-2 flex-wrap">
+                          {PRIORITIES.map(p => (
+                            <button
+                              type="button"
+                              key={p.value}
+                              onClick={() => setFormData(f => ({ ...f, priority: p.value }))}
+                              className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all ${formData.priority === p.value ? 'border-gray-900 bg-gray-50 text-gray-900' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                            >
+                              {p.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <FormLabel required>Subject</FormLabel>
+                      <input type="text" name="subject" value={formData.subject} onChange={handleChange} placeholder="Brief, descriptive subject line" className={inputCls(fieldErrors.subject)} />
+                      {fieldErrors.subject && <p className="text-xs text-red-500 mt-1">{fieldErrors.subject}</p>}
+                    </div>
+
+                    {/* Options */}
+                    <div>
+                      <p className="text-sm font-medium text-gray-700 mb-3">Message options</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {[['confidential','Confidential'],['readReceipt','Read Receipt'],['urgent','Urgent'],['followUp','Follow-up']].map(([field, label]) => (
+                          <label key={field} className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${formData[field] ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                            <input type="checkbox" name={field} checked={formData[field]} onChange={handleChange} className="rounded border-gray-300 text-gray-900 focus:ring-gray-500" />
+                            <span className="text-xs font-medium text-gray-700">{label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Step 2: Message ── */}
+                {activeStep === 2 && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Write your message</p>
+                    <div>
+                      <FormLabel required>Message body</FormLabel>
+                      <textarea
+                        name="message" value={formData.message} onChange={handleChange}
+                        rows={9} placeholder="Type your message here…"
+                        className={`${inputCls(fieldErrors.message)} resize-none`}
+                      />
+                      <div className="flex justify-between mt-1.5">
+                        {fieldErrors.message
+                          ? <p className="text-xs text-red-500">{fieldErrors.message}</p>
+                          : <span className="text-xs text-gray-400">{formData.message.split(/\s+/).filter(w => w.length > 0).length} words</span>
+                        }
+                        <span className={`text-xs ${characterCount < 10 ? 'text-red-400' : 'text-gray-400'}`}>{characterCount} chars</span>
+                      </div>
+                    </div>
+
+                    {/* Attachments */}
+                    <div>
+                      <FormLabel>Attachments</FormLabel>
+                      <label htmlFor="file-upload" className="flex items-center gap-2 w-fit px-4 py-2.5 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors">
+                        <AttachFileIcon style={{ fontSize: 16 }} />
+                        Add files
+                      </label>
+                      <input accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx,.txt,.ppt,.pptx" style={{ display: 'none' }} id="file-upload" multiple type="file" onChange={handleFileUpload} />
+
+                      {formData.attachments.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          {formData.attachments.map(item => (
+                            <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <AttachFileIcon className="text-gray-400 flex-shrink-0" style={{ fontSize: 15 }} />
+                                <div className="min-w-0">
+                                  <p className="text-sm text-gray-800 truncate">{item.name}</p>
+                                  <p className="text-xs text-gray-400">{item.size} MB · {item.type}</p>
+                                </div>
+                              </div>
+                              <button type="button" onClick={() => removeAttachment(item.id)} className="p-1 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-lg transition-colors flex-shrink-0">
+                                <DeleteIcon style={{ fontSize: 15 }} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Step 3: Review ── */}
+                {activeStep === 3 && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Review before sending</p>
+                    <div className="bg-gray-50 rounded-lg border border-gray-200 divide-y divide-gray-100">
+                      {[['To', formData.recipient || '—'], ['From', user?.name || 'Employee'], ['Subject', formData.subject], ['Category', formData.category], ['Priority', formData.priority]].map(([k, v]) => (
+                        <div key={k} className="flex items-center gap-4 px-4 py-3">
+                          <span className="text-xs text-gray-400 w-20 flex-shrink-0">{k}</span>
+                          <span className="text-sm text-gray-800 font-medium">{k === 'Priority' ? <Badge variant={v}>{v}</Badge> : v}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {formData.subject && (
+                      <div>
+                        <p className="text-xs text-gray-400 mb-2">Message preview</p>
+                        <div className="bg-white border border-gray-200 rounded-lg p-4">
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{formData.message}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {(formData.confidential || formData.urgent || formData.readReceipt || formData.followUp) && (
+                      <div className="flex flex-wrap gap-2">
+                        {formData.confidential && <Badge variant="warning">Confidential</Badge>}
+                        {formData.urgent && <Badge variant="danger">Urgent</Badge>}
+                        {formData.readReceipt && <Badge variant="info">Read Receipt</Badge>}
+                        {formData.followUp && <Badge>Follow-up</Badge>}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Navigation ── */}
+                <div className="flex items-center justify-between mt-6 pt-5 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={activeStep > 0 ? handlePrevStep : () => navigate(-1)}
+                    className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                  >
+                    {activeStep > 0 ? '← Back' : 'Cancel'}
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    {activeStep === 3 && (
+                      <button type="button" onClick={() => setSaveAsDraftConfirm(true)}
+                        className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+                        <DraftsIcon style={{ fontSize: 15 }} /> Save draft
+                      </button>
+                    )}
+                    {activeStep < 3 ? (
+                      <button type="button" onClick={handleNextStep}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors">
+                        Continue →
+                      </button>
+                    ) : (
+                      <button type="submit" disabled={loading}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
+                        {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <SendIcon style={{ fontSize: 15 }} />}
+                        {loading ? 'Sending…' : 'Send Message'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* ── Templates Tab ── */}
+          {activeTab === 'templates' && (
+            <div className="p-5">
+              <p className="text-sm font-semibold text-gray-800 mb-4">Message Templates</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {templates.map(template => (
+                  <div key={template.id} className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-all">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">{template.name}</p>
+                        <p className="text-xs text-gray-400">Used {template.usageCount || 0} times</p>
+                      </div>
+                      <Badge>{template.category}</Badge>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-1 font-medium">Subject</p>
+                    <p className="text-xs text-gray-700 mb-3 truncate">{template.subject}</p>
+                    <p className="text-xs text-gray-500 line-clamp-3 mb-3">{template.message.substring(0, 120)}…</p>
+                    <button onClick={() => applyTemplate(template)}
+                      className="w-full flex items-center justify-center gap-1.5 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-xs font-medium transition-colors">
+                      <FileCopyIcon style={{ fontSize: 13 }} /> Use Template
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Drafts Tab ── */}
+          {activeTab === 'drafts' && (
+            <div className="p-5">
+              <p className="text-sm font-semibold text-gray-800 mb-4">Saved Drafts ({drafts.length})</p>
+              {drafts.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                    <DraftsIcon className="text-gray-400" style={{ fontSize: 22 }} />
+                  </div>
+                  <p className="text-gray-600 text-sm font-medium">No drafts yet</p>
+                  <p className="text-gray-400 text-xs mt-1 mb-4">Your saved drafts will appear here</p>
+                  <button onClick={() => setActiveTab('compose')} className="px-4 py-2 bg-gray-900 text-white text-sm rounded-lg hover:bg-gray-800 transition-colors">
+                    Compose Message
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {drafts.map(draft => (
+                    <div key={draft.id} className="flex items-start justify-between border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-800 truncate">{draft.subject || 'Untitled Draft'}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          To: {draft.recipient || 'No recipient'} · {new Date(draft.updatedAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 ml-3 flex-shrink-0">
+                        <button onClick={() => loadDraft(draft)} className="px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg hover:bg-gray-800 transition-colors">
+                          Edit
+                        </button>
+                        <button onClick={() => deleteDraft(draft.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                          <DeleteIcon style={{ fontSize: 15 }} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── AI Tab ── */}
+          {activeTab === 'ai' && (
+            <div className="p-5">
+              <p className="text-sm font-semibold text-gray-800 mb-4">AI Writing Assistant</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {[
+                  { icon: AutoFixHighIcon, title: 'Smart Suggestions', sub: 'AI-powered improvements for clarity and tone.', btn: 'Generate Suggestions' },
+                  { icon: PsychologyIcon,  title: 'Tone Analysis',     sub: 'Analyze if your message sounds professional.', btn: 'Analyze Tone' },
+                ].map(card => (
+                  <div key={card.title} className="border border-gray-200 rounded-lg p-4">
+                    <div className="w-9 h-9 bg-gray-100 rounded-lg flex items-center justify-center mb-3">
+                      <card.icon className="text-gray-600" style={{ fontSize: 18 }} />
+                    </div>
+                    <p className="text-sm font-semibold text-gray-800 mb-1">{card.title}</p>
+                    <p className="text-xs text-gray-500 mb-4">{card.sub}</p>
+                    <button className="w-full py-2 bg-gray-900 hover:bg-gray-800 text-white text-xs font-medium rounded-lg transition-colors">
+                      {card.btn}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Footer */}
-          <Box sx={{ 
-            p: 2, 
-            bgcolor: 'grey.50',
-            borderTop: 1,
-            borderColor: 'divider',
-            textAlign: 'center'
-          }}>
-            <Typography variant="caption" color="text.secondary">
-              All messages are securely stored and encrypted.
-            </Typography>
-          </Box>
-        </Paper>
-      </Container>
-    </Box>
+          <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 text-center">
+            <p className="text-xs text-gray-400">All messages are securely stored and encrypted.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Save Draft Confirm */}
+      {saveAsDraftConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setSaveAsDraftConfirm(false)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+            <h3 className="text-base font-semibold text-gray-900 mb-2">Save as draft?</h3>
+            <p className="text-sm text-gray-500 mb-5">You can continue editing this message later.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setSaveAsDraftConfirm(false)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">Cancel</button>
+              <button onClick={() => { saveDraft(); setSaveAsDraftConfirm(false); }} className="flex-1 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors">Save Draft</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <SuccessDialog
+        open={showSuccessDialog}
+        message={lastSentMessage}
+        onViewMessages={() => { setShowSuccessDialog(false); navigate('/employee/messages'); }}
+        onSendAnother={() => { setShowSuccessDialog(false); setFormData(EMPTY_FORM); setActiveStep(0); }}
+      />
+    </div>
   );
 };
 

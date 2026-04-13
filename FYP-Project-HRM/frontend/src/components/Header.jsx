@@ -89,7 +89,7 @@ const Header = () => {
       return [
         { path: '/employee/profile', label: 'My Profile', icon: <FaUserTie className="text-sm" /> },
         { path: '/employee/settings', label: 'Settings', icon: <FaCog className="text-sm" /> },
-        { path: '#', label: 'Chatbot', icon: <FaRobot className="text-sm" />, isChatbot: true },
+        // { path: '#', label: 'Chatbot', icon: <FaRobot className="text-sm" />, isChatbot: true },
       ];
     }
     
@@ -101,7 +101,6 @@ const Header = () => {
     { path: '/employee/career-coach', label: 'Career Coach', icon: <FaBrain className="text-sm" /> },
     { path: '/employee/learning-hub', label: 'Learning Hub', icon: <FaBook className="text-sm" /> },
     { path: '/employee/wellness', label: 'Wellness', icon: <FaHeartbeat className="text-sm" /> },
-    { path: '/employee/productivity', label: 'Productivity', icon: <FaChartLine className="text-sm" /> },
   ] : [];
 
   /* ---------- PUBLIC LINKS ---------- */

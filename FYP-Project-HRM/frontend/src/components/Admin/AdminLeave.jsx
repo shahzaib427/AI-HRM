@@ -46,7 +46,6 @@ const getUserRole = () => {
     const token = localStorage.getItem('token');
     if (!token) return 'employee';
     
-    // Check if token is properly formatted
     const parts = token.split('.');
     if (parts.length !== 3) {
       console.error('Invalid token format');
@@ -61,6 +60,34 @@ const getUserRole = () => {
   }
 };
 
+// Badge Component
+const Badge = ({ children, variant = 'default' }) => {
+  const v = {
+    default: 'bg-slate-100 text-slate-600',
+    success: 'bg-green-50 text-green-700',
+    warning: 'bg-amber-50 text-amber-700',
+    danger: 'bg-red-50 text-red-700',
+    info: 'bg-indigo-50 text-indigo-700'
+  };
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${v[variant]}`}>{children}</span>;
+};
+
+// KPI Card Component with colored icons
+const KpiCard = ({ label, value, icon, iconBg, sub }) => (
+  <div className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-all duration-200">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-xs text-slate-500 font-medium mb-2">{label}</p>
+        <p className="text-2xl font-semibold text-slate-900">{value}</p>
+        {sub && <p className="text-xs text-slate-400 mt-1">{sub}</p>}
+      </div>
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${iconBg}`}>
+        <span className="text-white text-lg">{icon}</span>
+      </div>
+    </div>
+  </div>
+);
+
 const AdminLeave = () => {
   // State management
   const [leaves, setLeaves] = useState([]);
@@ -73,7 +100,6 @@ const AdminLeave = () => {
   const [showEdit, setShowEdit] = useState(false);
   const [selectedLeave, setSelectedLeave] = useState(null);
   const [editingLeave, setEditingLeave] = useState(null);
-  const [darkMode, setDarkMode] = useState(false);
   const [stats, setStats] = useState({
     pending: 0,
     approved: 0,
@@ -113,7 +139,6 @@ const AdminLeave = () => {
       const role = getUserRole();
       let response;
 
-      // Choose API endpoint based on role
       if (role === 'admin' || role === 'hr') {
         response = await api.get('/all');
       } else if (role === 'manager') {
@@ -199,7 +224,7 @@ const AdminLeave = () => {
 
       if (response.data.success) {
         alert('Leave approved successfully!');
-        fetchLeaves(); // Refresh data
+        fetchLeaves();
       }
     } catch (error) {
       console.error('Approve error:', error);
@@ -281,7 +306,6 @@ const AdminLeave = () => {
 
   // Handle edit click
   const handleEditClick = (leave) => {
-    // Only allow editing pending leaves
     if (leave.status !== 'pending') {
       alert('Only pending leaves can be edited.');
       return;
@@ -322,82 +346,28 @@ const AdminLeave = () => {
     }
   };
 
-  // Animated Counter Component
-  const AnimatedCounter = ({ value, duration = 2000, suffix = '' }) => {
-    const [count, setCount] = useState(0);
-
-    useEffect(() => {
-      let start = 0;
-      const increment = value / (duration / 20);
-      const timer = setInterval(() => {
-        start += increment;
-        if (start >= value) {
-          setCount(value);
-          clearInterval(timer);
-        } else {
-          setCount(Math.floor(start));
-        }
-      }, 20);
-      
-      return () => clearInterval(timer);
-    }, [value, duration]);
-
-    return (
-      <span className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-        {count}{suffix}
-      </span>
-    );
-  };
-
-  // Stat Card Component
-  const StatCard = ({ title, value, change, icon, color, suffix = '' }) => (
-    <div className={`rounded-2xl shadow-2xl border p-6 transition-all duration-300 hover:shadow-3xl transform hover:-translate-y-1 group ${
-      darkMode ? 'bg-gradient-to-br from-gray-800 to-gray-900 border-gray-700' : 'bg-white border-gray-100'
-    }`}>
-      <div className="flex items-center justify-between">
-        <div>
-          <p className={`text-sm font-medium mb-2 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>{title}</p>
-          <div className="flex items-baseline space-x-1">
-            <AnimatedCounter value={value} suffix={suffix} />
-          </div>
-          {change && (
-            <p className={`text-sm mt-2 flex items-center ${change.startsWith('+') ? 'text-green-500' : 'text-rose-500'}`}>
-              <span className={`mr-1 ${change.startsWith('+') ? 'animate-bounce' : ''}`}>
-                {change.startsWith('+') ? '↗' : '↘'}
-              </span>
-              {change}
-            </p>
-          )}
-        </div>
-        <div className={`p-3 rounded-xl ${color} text-white transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-6 shadow-lg`}>
-          <span className="text-2xl">{icon}</span>
-        </div>
-      </div>
-    </div>
-  );
-
   // Get status styling
-  const getStatusColor = (status) => {
+  const getStatusBadge = (status) => {
     switch(status) {
-      case 'approved': return darkMode ? 'bg-green-900/30 text-green-400 border border-green-700' : 'bg-green-100 text-green-800';
-      case 'pending': return darkMode ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-700' : 'bg-yellow-100 text-yellow-800';
-      case 'rejected': return darkMode ? 'bg-red-900/30 text-red-400 border border-red-700' : 'bg-red-100 text-red-800';
-      case 'cancelled': return darkMode ? 'bg-gray-900/30 text-gray-400 border border-gray-700' : 'bg-gray-100 text-gray-800';
-      default: return darkMode ? 'bg-gray-900/30 text-gray-400 border border-gray-700' : 'bg-gray-100 text-gray-800';
+      case 'approved': return <Badge variant="success">Approved</Badge>;
+      case 'pending': return <Badge variant="warning">Pending</Badge>;
+      case 'rejected': return <Badge variant="danger">Rejected</Badge>;
+      case 'cancelled': return <Badge variant="default">Cancelled</Badge>;
+      default: return <Badge>{status}</Badge>;
     }
   };
 
-  // Get leave type styling
-  const getLeaveTypeColor = (type) => {
-    const colors = {
-      'annual': darkMode ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-100 text-blue-800',
-      'sick': darkMode ? 'bg-green-900/30 text-green-400' : 'bg-green-100 text-green-800',
-      'casual': darkMode ? 'bg-purple-900/30 text-purple-400' : 'bg-purple-100 text-purple-800',
-      'earned': darkMode ? 'bg-amber-900/30 text-amber-400' : 'bg-amber-100 text-amber-800',
-      'maternity': darkMode ? 'bg-pink-900/30 text-pink-400' : 'bg-pink-100 text-pink-800',
-      'paternity': darkMode ? 'bg-teal-900/30 text-teal-400' : 'bg-teal-100 text-teal-800'
+  // Get leave type badge
+  const getLeaveTypeBadge = (type) => {
+    const types = {
+      'annual': <Badge variant="info">Annual</Badge>,
+      'sick': <Badge variant="success">Sick</Badge>,
+      'casual': <Badge variant="default">Casual</Badge>,
+      'earned': <Badge variant="info">Earned</Badge>,
+      'maternity': <Badge variant="default">Maternity</Badge>,
+      'paternity': <Badge variant="default">Paternity</Badge>
     };
-    return colors[type] || (darkMode ? 'bg-gray-900/30 text-gray-400' : 'bg-gray-100 text-gray-800');
+    return types[type] || <Badge>{type}</Badge>;
   };
 
   // Format leave type for display
@@ -415,10 +385,10 @@ const AdminLeave = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading leave requests...</p>
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-slate-600 font-medium">Loading leave requests...</p>
         </div>
       </div>
     );
@@ -426,21 +396,21 @@ const AdminLeave = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-50 mb-4">
             <span className="text-2xl">⚠️</span>
           </div>
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">Error</h3>
-          <p className="text-gray-600 dark:text-gray-400 mb-4">{error}</p>
+          <h3 className="text-lg font-medium text-slate-800 mb-2">Error</h3>
+          <p className="text-slate-500 mb-4">{error}</p>
           <button
             onClick={fetchLeaves}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
           >
             Retry
           </button>
           {userRole === 'employee' && (
-            <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-4 text-sm text-slate-400">
               This page is only accessible to Admin, HR, and Manager roles.
             </p>
           )}
@@ -450,122 +420,90 @@ const AdminLeave = () => {
   }
 
   return (
-    <div className={`min-h-screen py-8 transition-all duration-500 ${
-      darkMode 
-        ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' 
-        : 'bg-gradient-to-br from-blue-50 via-white to-indigo-50/30'
-    }`}>
-      
-      {/* Animated Background */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className={`absolute -top-40 -right-40 w-80 h-80 rounded-full blur-3xl animate-pulse ${
-          darkMode ? 'bg-amber-500/10' : 'bg-amber-200/20'
-        }`}></div>
-        <div className={`absolute -bottom-40 -left-40 w-80 h-80 rounded-full blur-3xl animate-pulse delay-1000 ${
-          darkMode ? 'bg-yellow-500/10' : 'bg-yellow-200/20'
-        }`}></div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        {/* Header */}
-        <div className="mb-8 animate-fade-in-up">
-          <div className="flex items-center justify-between">
+    <div className="min-h-screen bg-slate-50">
+      {/* Header */}
+      <div className="bg-white border-b border-slate-200 px-6 py-5">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <h1 className={`text-4xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+              <h1 className="text-xl font-semibold text-slate-800 flex items-center gap-2">
+                <span className="text-indigo-500 text-xl">📋</span>
                 Leave Management Dashboard
               </h1>
-              <p className={`mt-2 text-lg ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              <p className="text-sm text-slate-500 mt-1">
                 {userRole === 'admin' && 'Administrator View - All Leaves'}
                 {userRole === 'hr' && 'HR View - All Leaves'}
                 {userRole === 'manager' && 'Manager View - Team Leaves'}
               </p>
             </div>
-            <div className="flex items-center space-x-4">
-              {/* Refresh Button */}
-              <button 
-                onClick={fetchLeaves}
-                className="px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2 shadow-lg"
-              >
-                <span className="text-lg">🔄</span> Refresh
-              </button>
-
-              {/* Theme Toggle */}
-              <button
-                onClick={() => setDarkMode(!darkMode)}
-                className={`p-3 rounded-xl transition-all duration-300 transform hover:scale-110 hover:rotate-12 ${
-                  darkMode 
-                    ? 'bg-gray-700 text-yellow-400 hover:bg-gray-600 shadow-lg' 
-                    : 'bg-white text-gray-600 hover:bg-gray-100 shadow-lg border border-gray-200'
-                }`}
-              >
-                <span className="text-xl">{darkMode ? '🌙' : '☀️'}</span>
-              </button>
-            </div>
+            <button 
+              onClick={fetchLeaves}
+              className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+            >
+              <span className="text-sm">🔄</span> Refresh
+            </button>
           </div>
         </div>
+      </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-          <StatCard
-            title="Total Leaves"
-            value={stats.total}
-            icon="📅"
-            color="bg-gradient-to-br from-blue-500 to-cyan-500"
+      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+        {/* Stats Grid with Colored Icons */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <KpiCard 
+            label="Total Leaves" 
+            value={stats.total} 
+            icon="📋" 
+            iconBg="bg-indigo-500"
+            sub="All time"
           />
-          <StatCard
-            title="Pending"
-            value={stats.pending}
-            icon="⏳"
-            color="bg-gradient-to-br from-yellow-500 to-amber-500"
+          <KpiCard 
+            label="Pending" 
+            value={stats.pending} 
+            icon="⏳" 
+            iconBg="bg-amber-500"
+            sub="Awaiting approval"
           />
-          <StatCard
-            title="Approved"
-            value={stats.approved}
-            icon="✅"
-            color="bg-gradient-to-br from-green-500 to-emerald-500"
+          <KpiCard 
+            label="Approved" 
+            value={stats.approved} 
+            icon="✅" 
+            iconBg="bg-emerald-500"
+            sub="Confirmed"
           />
-          <StatCard
-            title="Rejected"
-            value={stats.rejected}
-            icon="❌"
-            color="bg-gradient-to-br from-red-500 to-rose-500"
+          <KpiCard 
+            label="Rejected" 
+            value={stats.rejected} 
+            icon="❌" 
+            iconBg="bg-red-500"
+            sub="Declined"
           />
-          <StatCard
-            title="This Month"
-            value={stats.thisMonth}
-            icon="📊"
-            color="bg-gradient-to-br from-purple-500 to-pink-500"
+          <KpiCard 
+            label="This Month" 
+            value={stats.thisMonth} 
+            icon="📊" 
+            iconBg="bg-purple-500"
+            sub="Current period"
           />
         </div>
 
         {/* Filters */}
-        <div className={`rounded-2xl shadow-2xl border p-6 mb-6 ${
-          darkMode ? 'bg-gradient-to-br from-gray-800 to-gray-900 border-gray-700' : 'bg-white border-gray-100'
-        }`}>
+        <div className="bg-white rounded-lg border border-slate-200 p-5">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="relative flex-1">
-              <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">🔍</span>
+              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-sm">🔍</span>
               <input
                 type="text"
                 placeholder="Search by employee name or ID..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className={`w-full pl-12 pr-4 py-3 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 ${
-                  darkMode 
-                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
-                    : 'bg-white border-gray-300 text-gray-900'
-                }`}
+                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
               />
             </div>
             <div className="flex gap-3">
               <select 
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className={`rounded-lg px-4 py-3 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 min-w-[150px] ${
-                  darkMode 
-                    ? 'bg-gray-700 border-gray-600 text-white' 
-                    : 'bg-white border-gray-300 text-gray-900'
-                }`}
+                className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors min-w-[130px]"
               >
                 {statusOptions.map(status => (
                   <option key={status} value={status}>
@@ -576,11 +514,7 @@ const AdminLeave = () => {
               <select 
                 value={leaveTypeFilter}
                 onChange={(e) => setLeaveTypeFilter(e.target.value)}
-                className={`rounded-lg px-4 py-3 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 min-w-[180px] ${
-                  darkMode 
-                    ? 'bg-gray-700 border-gray-600 text-white' 
-                    : 'bg-white border-gray-300 text-gray-900'
-                }`}
+                className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors min-w-[150px]"
               >
                 {leaveTypes.map(type => (
                   <option key={type} value={type}>
@@ -593,27 +527,28 @@ const AdminLeave = () => {
         </div>
 
         {/* Leave Requests Table */}
-        <div className={`rounded-2xl shadow-2xl border overflow-hidden mb-6 ${
-          darkMode ? 'bg-gradient-to-br from-gray-800 to-gray-900 border-gray-700' : 'bg-white border-gray-100'
-        }`}>
-          <div className="px-4 sm:px-6 py-4 border-b">
-            <h2 className={`text-xl font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-              Leave Requests ({filteredLeaves.length})
-            </h2>
-            <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-              Review and manage leave applications
-            </p>
+        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
+                  <span className="text-indigo-500 text-sm">📋</span>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">Leave Requests</p>
+                  <p className="text-xs text-slate-500">{filteredLeaves.length} requests</p>
+                </div>
+              </div>
+            </div>
           </div>
           
           {filteredLeaves.length === 0 ? (
-            <div className="p-8 text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-700 mb-4">
+            <div className="py-16 text-center">
+              <div className="w-14 h-14 bg-slate-100 rounded-xl flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl">📝</span>
               </div>
-              <h3 className={`text-lg font-medium ${darkMode ? 'text-gray-200' : 'text-gray-900'} mb-2`}>
-                No leave requests found
-              </h3>
-              <p className={`text-gray-600 dark:text-gray-400 mb-4`}>
+              <h3 className="text-gray-700 font-medium mb-2">No leave requests found</h3>
+              <p className="text-slate-400 text-sm mb-4">
                 {searchTerm || statusFilter !== 'All' || leaveTypeFilter !== 'All' 
                   ? 'Try changing your search filters'
                   : 'No leave requests to display at the moment'}
@@ -624,140 +559,116 @@ const AdminLeave = () => {
                   setStatusFilter('All');
                   setLeaveTypeFilter('All');
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors"
               >
                 Clear Filters
               </button>
             </div>
           ) : (
-            <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-              <table className="min-w-full divide-y">
-                <thead className={`sticky top-0 z-10 ${darkMode ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-50 border-b border-slate-100">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Employee</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Leave Type</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Duration</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Dates</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Actions</th>
+                    <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Employee</th>
+                    <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Leave Type</th>
+                    <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Duration</th>
+                    <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Dates</th>
+                    <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
+                    <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
-                <tbody className={`divide-y ${darkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
+                <tbody className="divide-y divide-slate-100">
                   {filteredLeaves.map((leave) => (
-                    <tr key={leave._id} className={`hover:${darkMode ? 'bg-gray-700/30' : 'bg-gray-50'} transition-colors`}>
-                      <td className="px-4 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs sm:text-sm mr-2 sm:mr-3 shadow-md">
+                    <tr key={leave._id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
                             {leave.employee?.name?.charAt(0) || 'E'}
                           </div>
-                          <div className="min-w-0">
-                            <div className={`font-medium text-sm sm:text-base truncate ${darkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                          <div>
+                            <div className="font-medium text-sm text-slate-800">
                               {leave.employee?.name || 'Employee'}
                             </div>
-                            <div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'} truncate`}>
-                              {leave.employee?.employeeId || 'N/A'}
-                            </div>
-                            <div className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'} truncate`}>
-                              {leave.employee?.department || 'Department'}
+                            <div className="text-xs text-slate-500">
+                              {leave.employee?.employeeId || 'N/A'} • {leave.employee?.department || 'N/A'}
                             </div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getLeaveTypeColor(leave.type)}`}>
-                          {formatLeaveType(leave.type)}
-                        </span>
+                      <td className="px-5 py-4">
+                        {getLeaveTypeBadge(leave.type)}
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap">
-                        <div className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                          {leave.days} day(s)
-                        </div>
-                        <div className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-600'}`}>
+                      <td className="px-5 py-4">
+                        <div className="text-sm text-slate-800">{leave.days} day(s)</div>
+                        <div className="text-xs text-slate-400">
                           Applied: {formatDate(leave.appliedAt || leave.createdAt)}
                         </div>
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap">
-                        <div className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                      <td className="px-5 py-4">
+                        <div className="text-sm text-slate-800">
                           {formatDate(leave.startDate)}<br/>
-                          to {formatDate(leave.endDate)}
+                          <span className="text-xs text-slate-400">to</span> {formatDate(leave.endDate)}
                         </div>
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(leave.status)}`}>
-                          {leave.status.charAt(0).toUpperCase() + leave.status.slice(1)}
-                        </span>
+                      <td className="px-5 py-4">
+                        {getStatusBadge(leave.status)}
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex space-x-1 sm:space-x-2">
+                      <td className="px-5 py-4">
+                        <div className="flex gap-1">
                           <button 
                             onClick={() => handleViewDetails(leave)}
-                            className={`p-1 sm:p-2 rounded transition-colors ${
-                              darkMode ? 'text-blue-400 hover:bg-blue-900/30' : 'text-blue-600 hover:bg-blue-50'
-                            }`}
+                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                             title="View Details"
                           >
-                            <span className="text-sm sm:text-base">👁️</span>
+                            <span className="text-sm">👁️</span>
                           </button>
                           
                           {leave.status === 'pending' && (
                             <>
                               <button 
                                 onClick={() => handleEditClick(leave)}
-                                className={`p-1 sm:p-2 rounded transition-colors ${
-                                  darkMode ? 'text-yellow-400 hover:bg-yellow-900/30' : 'text-yellow-600 hover:bg-yellow-50'
-                                }`}
+                                className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
                                 title="Edit"
                               >
-                                <span className="text-sm sm:text-base">✏️</span>
+                                <span className="text-sm">✏️</span>
                               </button>
                               
                               <button 
                                 onClick={() => handleApprove(leave._id)}
                                 disabled={processingId === leave._id}
-                                className={`p-1 sm:p-2 rounded transition-colors ${
-                                  processingId === leave._id
-                                    ? 'opacity-50 cursor-not-allowed'
-                                    : darkMode ? 'text-green-400 hover:bg-green-900/30' : 'text-green-600 hover:bg-green-50'
-                                }`}
+                                className="p-1.5 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
                                 title="Approve"
                               >
                                 {processingId === leave._id ? (
                                   <div className="h-4 w-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin"></div>
                                 ) : (
-                                  <span className="text-sm sm:text-base">✅</span>
+                                  <span className="text-sm">✅</span>
                                 )}
                               </button>
                               
                               <button 
                                 onClick={() => handleReject(leave._id)}
                                 disabled={processingId === leave._id}
-                                className={`p-1 sm:p-2 rounded transition-colors ${
-                                  processingId === leave._id
-                                    ? 'opacity-50 cursor-not-allowed'
-                                    : darkMode ? 'text-red-400 hover:bg-red-900/30' : 'text-red-600 hover:bg-red-50'
-                                }`}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
                                 title="Reject"
                               >
                                 {processingId === leave._id ? (
                                   <div className="h-4 w-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div>
                                 ) : (
-                                  <span className="text-sm sm:text-base">❌</span>
+                                  <span className="text-sm">❌</span>
                                 )}
                               </button>
                             </>
                           )}
                           
-                          {(leave.status === 'pending' || leave.status === 'approved') && (
-                            <button 
-                              onClick={() => confirmDelete(leave)}
-                              className={`p-1 sm:p-2 rounded transition-colors ${
-                                darkMode ? 'text-gray-400 hover:bg-gray-900/30' : 'text-gray-600 hover:bg-gray-50'
-                              }`}
-                              title="Cancel"
-                            >
-                              <span className="text-sm sm:text-base">🗑️</span>
-                            </button>
-                          )}
+                          {/* Delete Button - Always visible for all statuses */}
+                          <button 
+                            onClick={() => confirmDelete(leave)}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title={leave.status === 'pending' ? "Cancel Leave" : "Delete Record"}
+                          >
+                            <span className="text-sm">🗑️</span>
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -771,76 +682,71 @@ const AdminLeave = () => {
 
       {/* Leave Details Modal */}
       {showDetails && selectedLeave && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className={`rounded-2xl shadow-3xl max-w-2xl w-full ${
-            darkMode ? 'bg-gradient-to-br from-gray-800 to-gray-900' : 'bg-white'
-          }`}>
-            <div className="p-6 border-b">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-slate-100">
               <div className="flex justify-between items-center">
-                <h3 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                  <span className="text-indigo-500">📋</span>
                   Leave Request Details
                 </h3>
                 <button 
                   onClick={() => setShowDetails(false)}
-                  className={`p-2 rounded-lg ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                  className="text-slate-400 hover:text-slate-600 text-2xl transition-colors"
                 >
-                  ✕
+                  ×
                 </button>
               </div>
             </div>
 
             <div className="p-6">
               {/* Employee Info */}
-              <div className="flex items-center gap-4 mb-6 pb-6 border-b">
-                <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl shadow-lg">
+              <div className="flex items-center gap-4 mb-6 pb-6 border-b border-slate-100">
+                <div className="h-14 w-14 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
                   {selectedLeave.employee?.name?.charAt(0) || 'E'}
                 </div>
                 <div>
-                  <h3 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                  <h3 className="text-base font-semibold text-slate-800">
                     {selectedLeave.employee?.name || 'Employee'}
                   </h3>
-                  <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                    {selectedLeave.employee?.employeeId || 'N/A'} • {selectedLeave.employee?.department || 'Department'}
+                  <p className="text-sm text-slate-500">
+                    {selectedLeave.employee?.employeeId || 'N/A'} • {selectedLeave.employee?.department || 'N/A'}
                   </p>
-                  <span className={`mt-2 inline-block px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(selectedLeave.status)}`}>
-                    {selectedLeave.status.charAt(0).toUpperCase() + selectedLeave.status.slice(1)}
-                  </span>
+                  <div className="mt-2">
+                    {getStatusBadge(selectedLeave.status)}
+                  </div>
                 </div>
               </div>
 
               {/* Leave Details */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <h4 className={`font-semibold mb-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                    Leave Information
-                  </h4>
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3">Leave Information</h4>
                   <div className="space-y-3">
                     <div className="flex justify-between">
-                      <span className={darkMode ? 'text-gray-400' : 'text-gray-600'}>Leave Type:</span>
-                      <span className={`px-2 py-1 rounded text-xs ${getLeaveTypeColor(selectedLeave.type)}`}>
-                        {formatLeaveType(selectedLeave.type)}
-                      </span>
+                      <span className="text-sm text-slate-500">Leave Type:</span>
+                      <span>{getLeaveTypeBadge(selectedLeave.type)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className={darkMode ? 'text-gray-400' : 'text-gray-600'}>Duration:</span>
-                      <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>{selectedLeave.days} day(s)</span>
+                      <span className="text-sm text-slate-500">Duration:</span>
+                      <span className="text-sm font-medium text-slate-700">{selectedLeave.days} day(s)</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className={darkMode ? 'text-gray-400' : 'text-gray-600'}>Start Date:</span>
-                      <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>{formatDate(selectedLeave.startDate)}</span>
+                      <span className="text-sm text-slate-500">Start Date:</span>
+                      <span className="text-sm text-slate-700">{formatDate(selectedLeave.startDate)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className={darkMode ? 'text-gray-400' : 'text-gray-600'}>End Date:</span>
-                      <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>{formatDate(selectedLeave.endDate)}</span>
+                      <span className="text-sm text-slate-500">End Date:</span>
+                      <span className="text-sm text-slate-700">{formatDate(selectedLeave.endDate)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className={darkMode ? 'text-gray-400' : 'text-gray-600'}>Applied On:</span>
-                      <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>{formatDate(selectedLeave.appliedAt || selectedLeave.createdAt)}</span>
+                      <span className="text-sm text-slate-500">Applied On:</span>
+                      <span className="text-sm text-slate-700">{formatDate(selectedLeave.appliedAt || selectedLeave.createdAt)}</span>
                     </div>
                     {selectedLeave.approvedBy && (
                       <div className="flex justify-between">
-                        <span className={darkMode ? 'text-gray-400' : 'text-gray-600'}>Approved By:</span>
-                        <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>
+                        <span className="text-sm text-slate-500">Approved By:</span>
+                        <span className="text-sm font-medium text-slate-700">
                           {selectedLeave.approvedBy?.name || 'N/A'}
                         </span>
                       </div>
@@ -849,23 +755,17 @@ const AdminLeave = () => {
                 </div>
 
                 <div>
-                  <h4 className={`font-semibold mb-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                    Reason
-                  </h4>
-                  <div className={`p-4 rounded-lg border ${
-                    darkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'
-                  }`}>
-                    <p className={darkMode ? 'text-gray-300' : 'text-gray-700'}>
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3">Reason</h4>
+                  <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
+                    <p className="text-sm text-slate-600">
                       {selectedLeave.reason || 'No reason provided'}
                     </p>
                   </div>
                   
                   {selectedLeave.contactNumber && (
                     <div className="mt-4">
-                      <h4 className={`font-semibold mb-2 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-                        Contact Number
-                      </h4>
-                      <p className={darkMode ? 'text-blue-300' : 'text-blue-700'}>
+                      <h4 className="text-sm font-semibold text-slate-700 mb-2">Contact Number</h4>
+                      <p className="text-sm text-indigo-600">
                         {selectedLeave.contactNumber}
                       </p>
                     </div>
@@ -873,13 +773,9 @@ const AdminLeave = () => {
                   
                   {selectedLeave.rejectionReason && (
                     <div className="mt-4">
-                      <h4 className={`font-semibold mb-2 ${darkMode ? 'text-red-400' : 'text-red-600'}`}>
-                        Rejection Reason
-                      </h4>
-                      <div className={`p-3 rounded-lg border ${
-                        darkMode ? 'bg-red-900/20 border-red-700' : 'bg-red-50 border-red-200'
-                      }`}>
-                        <p className={darkMode ? 'text-red-300' : 'text-red-700'}>
+                      <h4 className="text-sm font-semibold text-red-600 mb-2">Rejection Reason</h4>
+                      <div className="p-3 bg-red-50 rounded-lg border border-red-100">
+                        <p className="text-sm text-red-600">
                           {selectedLeave.rejectionReason}
                         </p>
                       </div>
@@ -887,13 +783,13 @@ const AdminLeave = () => {
                   )}
                   
                   {selectedLeave.status === 'pending' && (
-                    <div className="mt-6 flex space-x-3">
+                    <div className="mt-6 flex gap-3">
                       <button 
                         onClick={() => {
                           handleApprove(selectedLeave._id);
                           setShowDetails(false);
                         }}
-                        className="flex-1 bg-green-600 text-white py-2.5 rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2"
+                        className="flex-1 bg-green-600 text-white py-2.5 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
                       >
                         <span>✅</span> Approve
                       </button>
@@ -902,12 +798,25 @@ const AdminLeave = () => {
                           handleReject(selectedLeave._id);
                           setShowDetails(false);
                         }}
-                        className="flex-1 bg-red-600 text-white py-2.5 rounded-lg hover:bg-red-700 transition flex items-center justify-center gap-2"
+                        className="flex-1 bg-red-600 text-white py-2.5 rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
                       >
                         <span>❌</span> Reject
                       </button>
                     </div>
                   )}
+                  
+                  {/* Delete button in details modal */}
+                  <div className="mt-4">
+                    <button 
+                      onClick={() => {
+                        setShowDetails(false);
+                        confirmDelete(selectedLeave);
+                      }}
+                      className="w-full bg-red-50 text-red-600 py-2.5 rounded-lg hover:bg-red-100 transition-colors flex items-center justify-center gap-2 text-sm font-medium border border-red-200"
+                    >
+                      <span>🗑️</span> {selectedLeave.status === 'pending' ? 'Cancel Leave' : 'Delete Record'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -917,13 +826,12 @@ const AdminLeave = () => {
 
       {/* Edit Leave Modal */}
       {showEdit && editingLeave && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className={`rounded-2xl shadow-3xl max-w-2xl w-full ${
-            darkMode ? 'bg-gradient-to-br from-gray-800 to-gray-900' : 'bg-white'
-          }`}>
-            <div className="p-6 border-b">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-slate-100">
               <div className="flex justify-between items-center">
-                <h3 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                  <span className="text-indigo-500">✏️</span>
                   Edit Leave Request
                 </h3>
                 <button 
@@ -931,18 +839,18 @@ const AdminLeave = () => {
                     setShowEdit(false);
                     setEditingLeave(null);
                   }}
-                  className={`p-2 rounded-lg ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                  className="text-slate-400 hover:text-slate-600 text-2xl transition-colors"
                 >
-                  ✕
+                  ×
                 </button>
               </div>
             </div>
 
             <div className="p-6">
               <form onSubmit={handleEditSubmit}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
                   <div>
-                    <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
                       Start Date
                     </label>
                     <input
@@ -952,16 +860,12 @@ const AdminLeave = () => {
                       onChange={handleEditChange}
                       min={formatDateForInput(new Date())}
                       required
-                      className={`w-full px-4 py-2.5 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                        darkMode 
-                          ? 'bg-gray-700 border-gray-600 text-white' 
-                          : 'bg-white border-gray-300 text-gray-900'
-                      }`}
+                      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
                     />
                   </div>
                   
                   <div>
-                    <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
                       End Date
                     </label>
                     <input
@@ -971,16 +875,12 @@ const AdminLeave = () => {
                       onChange={handleEditChange}
                       min={editForm.startDate || formatDateForInput(new Date())}
                       required
-                      className={`w-full px-4 py-2.5 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                        darkMode 
-                          ? 'bg-gray-700 border-gray-600 text-white' 
-                          : 'bg-white border-gray-300 text-gray-900'
-                      }`}
+                      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
                     />
                   </div>
                   
                   <div className="md:col-span-2">
-                    <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
                       Reason
                     </label>
                     <textarea
@@ -989,16 +889,12 @@ const AdminLeave = () => {
                       onChange={handleEditChange}
                       rows="4"
                       required
-                      className={`w-full px-4 py-2.5 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                        darkMode 
-                          ? 'bg-gray-700 border-gray-600 text-white' 
-                          : 'bg-white border-gray-300 text-gray-900'
-                      }`}
+                      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors resize-none"
                     />
                   </div>
                   
                   <div className="md:col-span-2">
-                    <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
                       Contact Number (Optional)
                     </label>
                     <input
@@ -1006,32 +902,26 @@ const AdminLeave = () => {
                       name="contactNumber"
                       value={editForm.contactNumber}
                       onChange={handleEditChange}
-                      className={`w-full px-4 py-2.5 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                        darkMode 
-                          ? 'bg-gray-700 border-gray-600 text-white' 
-                          : 'bg-white border-gray-300 text-gray-900'
-                      }`}
+                      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
                     />
                   </div>
                 </div>
                 
-                <div className="flex justify-end space-x-3">
+                <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
                   <button
                     type="button"
                     onClick={() => {
                       setShowEdit(false);
                       setEditingLeave(null);
                     }}
-                    className={`px-6 py-2.5 rounded-lg ${
-                      darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                    }`}
+                    className="px-4 py-2 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={processingId === editingLeave._id}
-                    className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
                   >
                     {processingId === editingLeave._id ? (
                       <>
@@ -1051,46 +941,46 @@ const AdminLeave = () => {
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && leaveToDelete && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className={`rounded-2xl shadow-3xl max-w-md w-full ${
-            darkMode ? 'bg-gradient-to-br from-gray-800 to-gray-900' : 'bg-white'
-          }`}>
-            <div className="p-6">
-              <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 mx-auto mb-4">
-                <span className="text-2xl">⚠️</span>
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="px-6 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <span className="text-xl text-red-500">⚠️</span>
+                <h3 className="text-lg font-semibold text-slate-800">
+                  {leaveToDelete.status === 'pending' ? 'Cancel Leave Request' : 'Delete Record'}
+                </h3>
               </div>
-              <h3 className={`text-lg font-bold text-center mb-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                Cancel Leave Request
-              </h3>
-              <p className={`text-center mb-6 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                Are you sure you want to cancel this leave request? This action cannot be undone.
+            </div>
+            
+            <div className="p-6">
+              <p className="text-sm text-slate-600 mb-4">
+                Are you sure you want to {leaveToDelete.status === 'pending' ? 'cancel' : 'delete'} this leave request? This action cannot be undone.
               </p>
-              <div className={`p-4 rounded-lg mb-6 ${
-                darkMode ? 'bg-gray-700/50' : 'bg-gray-50'
-              }`}>
-                <p className={`font-medium ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+              <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 mb-5">
+                <p className="text-sm font-medium text-slate-800">
                   {leaveToDelete.employee?.name || 'Employee'} - {formatLeaveType(leaveToDelete.type)}
                 </p>
-                <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                <p className="text-xs text-slate-500 mt-1">
                   {formatDate(leaveToDelete.startDate)} to {formatDate(leaveToDelete.endDate)}
                 </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Status: <span className="capitalize">{leaveToDelete.status}</span>
+                </p>
               </div>
-              <div className="flex justify-center space-x-3">
+              <div className="flex gap-3">
                 <button
                   onClick={() => {
                     setDeleteConfirm(false);
                     setLeaveToDelete(null);
                   }}
-                  className={`px-6 py-2.5 rounded-lg ${
-                    darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                  }`}
+                  className="flex-1 px-4 py-2 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => handleDelete(leaveToDelete._id)}
                   disabled={processingId === leaveToDelete._id}
-                  className="px-6 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="flex-1 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {processingId === leaveToDelete._id ? (
                     <>
@@ -1098,7 +988,7 @@ const AdminLeave = () => {
                       Processing...
                     </>
                   ) : (
-                    'Yes, Cancel Leave'
+                    leaveToDelete.status === 'pending' ? 'Yes, Cancel Leave' : 'Yes, Delete Record'
                   )}
                 </button>
               </div>
@@ -1106,20 +996,6 @@ const AdminLeave = () => {
           </div>
         </div>
       )}
-
-      <style jsx>{`
-        @keyframes fadeInUp {
-          from { opacity: 0; transform: translateY(30px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        .animate-fade-in-up { animation: fadeInUp 0.8s ease-out forwards; }
-        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
-        .shadow-3xl { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
-      `}</style>
     </div>
   );
 };

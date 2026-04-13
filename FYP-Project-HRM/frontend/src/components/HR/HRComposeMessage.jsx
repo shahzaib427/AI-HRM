@@ -1,767 +1,1105 @@
-// HRComposeMessage.jsx - Enhanced with "Send to All" feature
-import React, { useState, useEffect } from 'react';
-import {
-  Box, Paper, Typography, TextField, Button, Grid,
-  FormControl, InputLabel, Select, MenuItem, Chip,
-  FormControlLabel, Checkbox, IconButton, InputAdornment,
-  CircularProgress, Alert, Snackbar, Avatar,
-  Card, CardContent, Autocomplete, RadioGroup,
-  Radio, FormLabel, ToggleButton, ToggleButtonGroup,
-  List, ListItem, ListItemText, ListItemAvatar,
-  Divider, Collapse
-} from '@mui/material';
-import {
-  Send as SendIcon,
-  Clear as ClearIcon,
-  Person as PersonIcon,
-  PriorityHigh as PriorityIcon,
-  Category as CategoryIcon,
-  Lock as LockIcon,
-  People as PeopleIcon,
-  Group as GroupIcon,
-  PersonAdd as PersonAddIcon,
-  ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon,
-  Warning as WarningIcon,
-  Info as InfoIcon
-} from '@mui/icons-material';
+import React, { useState, useEffect, useCallback } from 'react';
+import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import axiosInstance from '../../utils/axiosInstance';
+import {
+  Send as SendIcon, AttachFile as AttachFileIcon, Delete as DeleteIcon,
+  Person as PersonIcon, DoneAll as DoneAllIcon, History as HistoryIcon,
+  Drafts as DraftsIcon, SmartToy as SmartToyIcon, AutoFixHigh as AutoFixHighIcon,
+  Psychology as PsychologyIcon, FileCopy as FileCopyIcon,
+  DriveFileRenameOutline as TemplateIcon, Close as CloseIcon,
+} from '@mui/icons-material';
+import { CircularProgress } from '@mui/material';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { FaEnvelope, FaUsers, FaClock, FaCheckCircle, FaUserPlus, FaChartLine, FaBuilding, FaGlobe } from 'react-icons/fa';
 
-const HRComposeMessage = ({ onSuccess }) => {
+// ─── UI Primitives ────────────────────────────────────────────────────────────
+
+const Badge = ({ children, variant = 'default' }) => {
+  const v = {
+    default: 'bg-gray-100 text-gray-600',
+    success: 'bg-green-50 text-green-700',
+    warning: 'bg-yellow-50 text-yellow-700',
+    danger:  'bg-red-50 text-red-700',
+    info:    'bg-gray-100 text-gray-700',
+    low:     'bg-green-50 text-green-700',
+    normal:  'bg-gray-100 text-gray-700',
+    high:    'bg-yellow-50 text-yellow-700',
+    urgent:  'bg-red-50 text-red-700',
+  };
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${v[variant] || v.default}`}>{children}</span>;
+};
+
+const AvatarInitials = ({ name = 'U' }) => {
+  return <div className={`w-9 h-9 bg-gray-100 text-gray-700 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0`}>{name.charAt(0).toUpperCase()}</div>;
+};
+
+// KPI Card Component
+const KpiCard = ({ icon: Icon, label, value, sub, iconBg }) => (
+  <div className="bg-white rounded-xl border border-gray-100 p-5 hover:shadow-md transition-all duration-200">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-xs text-gray-500 font-medium mb-2">{label}</p>
+        <p className="text-2xl font-semibold text-gray-900">{value}</p>
+        {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+      </div>
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${iconBg}`}>
+        <Icon className="w-5 h-5 text-white" />
+      </div>
+    </div>
+  </div>
+);
+
+const StepDot = ({ label, index, active, completed }) => (
+  <div className="flex items-center gap-2">
+    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${completed ? 'bg-gray-900 text-white' : active ? 'bg-gray-100 text-gray-900 ring-2 ring-gray-900' : 'bg-gray-100 text-gray-400'}`}>
+      {completed ? (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+        </svg>
+      ) : index + 1}
+    </div>
+    <span className={`text-sm hidden sm:block ${active ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>{label}</span>
+  </div>
+);
+
+const FormLabel = ({ children, required }) => (
+  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+    {children}{required && <span className="text-red-400 ml-0.5">*</span>}
+  </label>
+);
+
+const inputCls = (err) => `w-full text-sm border ${err ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-gray-200 focus:border-gray-400'} rounded-lg px-3.5 py-2.5 focus:outline-none focus:ring-2 bg-white text-gray-800 placeholder-gray-400 transition-colors`;
+
+// ─── Static data ──────────────────────────────────────────────────────────────
+
+const CATEGORIES = [
+  { value: 'general', label: 'General Inquiry' },
+  { value: 'leave', label: 'Leave Request' },
+  { value: 'payroll', label: 'Payroll Issue' },
+  { value: 'benefits', label: 'Benefits Question' },
+  { value: 'technical', label: 'Technical Support' },
+  { value: 'complaint', label: 'Complaint' },
+  { value: 'suggestion', label: 'Suggestion' },
+  { value: 'appreciation', label: 'Appreciation' },
+  { value: 'document', label: 'Document Submission' },
+  { value: 'meeting', label: 'Meeting Request' },
+  { value: 'training', label: 'Training Request' },
+  { value: 'feedback', label: 'Feedback' },
+  { value: 'announcement', label: 'Announcement' },
+  { value: 'policy', label: 'Policy Update' },
+];
+
+const PRIORITIES = [
+  { value: 'low',    label: 'Low',    variant: 'low' },
+  { value: 'normal', label: 'Normal', variant: 'normal' },
+  { value: 'high',   label: 'High',   variant: 'high' },
+  { value: 'urgent', label: 'Urgent', variant: 'urgent' },
+];
+
+const RECIPIENT_TYPES = [
+  { value: 'individual', label: 'Individual', icon: '👤', description: 'Send to a single employee' },
+  { value: 'multiple', label: 'Multiple', icon: '👥', description: 'Send to multiple employees' },
+  { value: 'department', label: 'Department', icon: '🏢', description: 'Send to entire department' },
+  { value: 'all', label: 'All Employees', icon: '🌍', description: 'Send to all employees' },
+];
+
+const STEPS = ['Recipient', 'Details', 'Message', 'Review'];
+const API_URL = 'http://localhost:5000';
+
+// ─── Success Dialog ───────────────────────────────────────────────────────────
+
+const SuccessDialog = ({ open, message, onViewMessages, onSendAnother }) => {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6 text-center">
+        <div className="w-16 h-16 bg-green-50 rounded-xl flex items-center justify-center mx-auto mb-4">
+          <DoneAllIcon className="text-green-600" style={{ fontSize: 28 }} />
+        </div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">Message Sent!</h3>
+        <p className="text-gray-500 text-sm mb-5">Your message has been delivered securely.</p>
+
+        {message && (
+          <div className="bg-gray-50 rounded-lg p-4 mb-5 text-left text-sm space-y-2">
+            {[['Recipient', message.recipient], ['Subject', message.subject], ['Sent on', `${message.date} at ${message.time}`], ['Reference', message.reference]].map(([k, v]) => v && (
+              <div key={k} className="flex justify-between gap-3">
+                <span className="text-gray-400">{k}</span>
+                <span className="font-medium text-gray-700 text-right truncate max-w-[200px]">{v}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <button onClick={onViewMessages} className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+            <HistoryIcon style={{ fontSize: 16 }} /> View Messages
+          </button>
+          <button onClick={onSendAnother} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors">
+            <SendIcon style={{ fontSize: 16 }} /> Send Another
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+const EMPTY_FORM = {
+  recipientType: 'individual',
+  recipient: '',
+  recipientId: '',
+  subject: '',
+  message: '',
+  category: 'general',
+  priority: 'normal',
+  attachments: [],
+  confidential: false,
+  readReceipt: false,
+  urgent: false,
+  followUp: false,
+};
+
+const HRComposeMessage = () => {
   const navigate = useNavigate();
-  
-  // Form state
-  const [subject, setSubject] = useState('');
-  const [message, setMessage] = useState('');
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [selectedUsers, setSelectedUsers] = useState([]); // For multiple selection
-  const [recipientType, setRecipientType] = useState('individual'); // individual, multiple, all, department
-  const [priority, setPriority] = useState('normal');
-  const [category, setCategory] = useState('general');
-  const [confidential, setConfidential] = useState(false);
-  const [selectedDepartment, setSelectedDepartment] = useState('');
-  
-  // UI state
+
   const [loading, setLoading] = useState(false);
-  const [users, setUsers] = useState([]);
+  const [userLoading, setUserLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [user, setUser] = useState(null);
+  const [allUsers, setAllUsers] = useState([]);
   const [departments, setDepartments] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(true);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: '',
-    severity: 'success'
+  const [activeStep, setActiveStep] = useState(0);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [lastSentMessage, setLastSentMessage] = useState(null);
+  const [drafts, setDrafts] = useState([]);
+  const [templates, setTemplates] = useState([]);
+  const [activeTab, setActiveTab] = useState('compose');
+  const [characterCount, setCharacterCount] = useState(0);
+  const [saveAsDraftConfirm, setSaveAsDraftConfirm] = useState(false);
+  const [formData, setFormData] = useState(EMPTY_FORM);
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [selectedDepartment, setSelectedDepartment] = useState('');
+  const [stats, setStats] = useState({
+    totalEmployees: 0,
+    departmentsCount: 0,
+    draftsCount: 0,
+    templatesCount: 0,
+    messagesSent: 0
   });
 
-  // HR categories
-  const hrCategories = {
-    'general': { label: 'General', icon: '📧', color: '#9E9E9E' },
-    'announcement': { label: 'Announcement', icon: '📢', color: '#2196F3' },
-    'policy': { label: 'Policy Update', icon: '📋', color: '#795548' },
-    'training': { label: 'Training', icon: '🎓', color: '#3F51B5' },
-    'benefits': { label: 'Benefits', icon: '🏥', color: '#2196F3' },
-    'compliance': { label: 'Compliance', icon: '⚖️', color: '#607D8B' },
-    'appreciation': { label: 'Appreciation', icon: '⭐', color: '#FFD700' },
-    'warning': { label: 'Warning', icon: '⚠️', color: '#F44336' },
-    'survey': { label: 'Survey', icon: '📊', color: '#4CAF50' },
-    'leave': { label: 'Leave Request', icon: '🏖️', color: '#4CAF50' },
-    'payroll': { label: 'Payroll Query', icon: '💰', color: '#FF9800' }
-  };
+  // Fetch current user
+  const fetchCurrentUser = useCallback(async () => {
+    setUserLoading(true);
+    try {
+      let userData = null;
+      const storedUser = localStorage.getItem('currentUser');
+      if (storedUser) userData = JSON.parse(storedUser);
 
-  // Priority options
-  const priorities = [
-    { value: 'low', label: 'Low', color: 'success' },
-    { value: 'normal', label: 'Normal', color: 'info' },
-    { value: 'high', label: 'High', color: 'warning' },
-    { value: 'urgent', label: 'Urgent', color: 'error' }
-  ];
-
-  // Fetch users for recipient selection
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        setLoadingUsers(true);
-        const response = await axiosInstance.get('/messages/employee/users/list');
-        
-        if (response.data.success) {
-          const allUsers = response.data.data || [];
-          console.log('👥 Loaded users:', allUsers.length);
-          setUsers(allUsers);
-          
-          // Extract unique departments
-          const deptSet = new Set();
-          allUsers.forEach(user => {
-            if (user.department) deptSet.add(user.department);
-          });
-          setDepartments(Array.from(deptSet).sort());
+      const token = localStorage.getItem('token');
+      if (token && (!userData || !userData._id)) {
+        const endpoints = [`${API_URL}/api/auth/me`, `${API_URL}/api/users/me`, `${API_URL}/api/employee/profile`, `${API_URL}/api/profile`];
+        for (const endpoint of endpoints) {
+          try {
+            const response = await axios.get(endpoint, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, timeout: 2000 });
+            if (response.data) { userData = response.data.user || response.data.data || response.data; localStorage.setItem('currentUser', JSON.stringify(userData)); break; }
+          } catch { /* try next */ }
         }
-      } catch (error) {
-        console.error('❌ Error fetching users:', error);
-        setSnackbar({
-          open: true,
-          message: 'Failed to load users',
-          severity: 'error'
-        });
-      } finally {
-        setLoadingUsers(false);
       }
-    };
 
-    fetchUsers();
+      if (!userData) {
+        userData = {
+          _id: `user-${Date.now()}`,
+          name: 'HR User',
+          email: 'hr@company.com',
+          role: 'hr',
+          department: 'Human Resources',
+          employeeId: `HR${String(Date.now()).slice(-6)}`,
+          position: 'HR Manager',
+          joinDate: new Date().toISOString().split('T')[0]
+        };
+        localStorage.setItem('currentUser', JSON.stringify(userData));
+      }
+
+      const formattedUser = {
+        _id: userData._id || userData.id || `user-${Date.now()}`,
+        name: userData.name || userData.fullName || 'HR User',
+        email: userData.email || 'hr@company.com',
+        role: userData.role || 'hr',
+        department: userData.department || 'Human Resources',
+        employeeId: userData.employeeId || `HR${String(Date.now()).slice(-6)}`,
+        position: userData.position || userData.jobTitle || 'HR Manager',
+        avatar: userData.avatar || userData.profilePicture || null,
+        joinDate: userData.joinDate || new Date().toISOString().split('T')[0],
+        phone: userData.phone || 'N/A',
+        location: userData.location || 'Head Office',
+      };
+
+      setUser(formattedUser);
+      localStorage.setItem('currentUser', JSON.stringify(formattedUser));
+    } catch {
+      const fallback = {
+        _id: 'fallback-user',
+        name: 'HR User',
+        email: 'hr@company.com',
+        role: 'hr',
+        department: 'Human Resources',
+        employeeId: 'HR001',
+        position: 'HR Manager',
+        joinDate: '2024-01-01'
+      };
+      setUser(fallback);
+      localStorage.setItem('currentUser', JSON.stringify(fallback));
+    } finally {
+      setUserLoading(false);
+    }
   }, []);
 
-  // Handle form submission
-  const handleSubmit = async (event) => {
-    event.preventDefault();
+  // Fetch all users
+  const fetchAllUsers = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        const mockUsers = [
+          { _id: 'emp-001', name: 'John Doe', email: 'john.doe@company.com', role: 'employee', department: 'IT', employeeId: 'EMP001' },
+          { _id: 'emp-002', name: 'Jane Smith', email: 'jane.smith@company.com', role: 'employee', department: 'HR', employeeId: 'EMP002' },
+          { _id: 'emp-003', name: 'Mike Johnson', email: 'mike.johnson@company.com', role: 'employee', department: 'Finance', employeeId: 'EMP003' },
+          { _id: 'emp-004', name: 'Sarah Williams', email: 'sarah.williams@company.com', role: 'employee', department: 'Marketing', employeeId: 'EMP004' },
+        ];
+        setAllUsers(mockUsers);
+        setStats(prev => ({ ...prev, totalEmployees: mockUsers.length }));
+        
+        const deptSet = new Set(mockUsers.map(u => u.department).filter(Boolean));
+        setDepartments(Array.from(deptSet));
+        setStats(prev => ({ ...prev, departmentsCount: deptSet.size }));
+        return;
+      }
+      const response = await axios.get(`${API_URL}/api/messages/employee/users/list`, { headers: { Authorization: `Bearer ${token}` }, timeout: 5000 });
+      if (response.data.success && response.data.data) {
+        setAllUsers(response.data.data);
+        setStats(prev => ({ ...prev, totalEmployees: response.data.data.length }));
+        
+        const deptSet = new Set(response.data.data.map(u => u.department).filter(Boolean));
+        setDepartments(Array.from(deptSet));
+        setStats(prev => ({ ...prev, departmentsCount: deptSet.size }));
+      } else {
+        setAllUsers([]);
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      setAllUsers([]);
+    }
+  };
+
+  const loadDrafts = () => {
+    try {
+      const saved = localStorage.getItem('hrMessageDrafts');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
+        const recent = parsed.filter(d => new Date(d.updatedAt) > cutoff);
+        setDrafts(recent);
+        setStats(prev => ({ ...prev, draftsCount: recent.length }));
+        localStorage.setItem('hrMessageDrafts', JSON.stringify(recent));
+      }
+    } catch { setDrafts([]); }
+  };
+
+  const loadTemplates = () => {
+    try {
+      const saved = localStorage.getItem('hrMessageTemplates');
+      const templatesData = saved ? JSON.parse(saved) : [];
+      setTemplates(templatesData);
+      setStats(prev => ({ ...prev, templatesCount: templatesData.length }));
+    } catch { 
+      setTemplates([]);
+    }
+  };
+
+  const saveDraft = () => {
+    try {
+      if (!formData.subject.trim() && !formData.message.trim()) { toast.warning('No content to save'); return; }
+      const newDraft = { id: Date.now(), ...formData, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), recipientType: formData.recipientType, selectedUsers, selectedDepartment };
+      const updated = [newDraft, ...drafts.slice(0, 19)];
+      setDrafts(updated);
+      setStats(prev => ({ ...prev, draftsCount: updated.length }));
+      localStorage.setItem('hrMessageDrafts', JSON.stringify(updated));
+      toast.success('Draft saved');
+    } catch { toast.error('Failed to save draft'); }
+  };
+
+  const loadDraft = (draft) => {
+    setFormData({ ...draft, attachments: draft.attachments || [] });
+    if (draft.selectedUsers) setSelectedUsers(draft.selectedUsers);
+    if (draft.selectedDepartment) setSelectedDepartment(draft.selectedDepartment);
+    setActiveStep(0);
+    setActiveTab('compose');
+    toast.success('Draft loaded');
+  };
+
+  const deleteDraft = (id) => {
+    const updated = drafts.filter(d => d.id !== id);
+    setDrafts(updated);
+    setStats(prev => ({ ...prev, draftsCount: updated.length }));
+    localStorage.setItem('hrMessageDrafts', JSON.stringify(updated));
+    toast.success('Draft deleted');
+  };
+
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    if (type === 'checkbox') {
+      setFormData(prev => ({ ...prev, [name]: checked }));
+      return;
+    }
+    if (name === 'recipientType') {
+      setFormData(prev => ({ ...prev, recipientType: value, recipient: '', recipientId: '' }));
+      setSelectedUsers([]);
+      setSelectedDepartment('');
+      return;
+    }
+    if (name === 'recipientId') {
+      const opt = allUsers.find(u => u._id === value);
+      setFormData(prev => ({ ...prev, recipient: opt?.name || '', recipientId: value }));
+      return;
+    }
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleMultipleUserSelect = (userId) => {
+    setSelectedUsers(prev => {
+      if (prev.includes(userId)) {
+        return prev.filter(id => id !== userId);
+      } else {
+        return [...prev, userId];
+      }
+    });
+  };
+
+  const handleFileUpload = (e) => {
+    const files = Array.from(e.target.files);
+    const oversized = files.filter(f => f.size > 10 * 1024 * 1024);
+    if (oversized.length) { toast.error(`Files exceed 10MB: ${oversized.map(f => f.name).join(', ')}`); return; }
+    const attachments = files.map(file => ({ file, id: Math.random().toString(36).substr(2, 9), name: file.name, size: (file.size / 1024 / 1024).toFixed(2), type: file.type.split('/')[1]?.toUpperCase() || 'FILE', uploadedAt: new Date().toISOString(), preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null }));
+    setFormData(prev => ({ ...prev, attachments: [...prev.attachments, ...attachments] }));
+    toast.success(`${files.length} file(s) added`);
+  };
+
+  const removeAttachment = (id) => {
+    setFormData(prev => ({ ...prev, attachments: prev.attachments.filter(item => { if (item.id === id && item.preview) URL.revokeObjectURL(item.preview); return item.id !== id; }) }));
+  };
+
+  const validateForm = () => {
+    const errs = {};
+    if (!formData.subject.trim()) errs.subject = 'Subject is required';
+    if (!formData.message.trim()) errs.message = 'Message is required';
+    if (formData.message.length < 10) errs.message = 'Message too short (min 10 characters)';
+    
+    if (formData.recipientType === 'individual' && !formData.recipientId) {
+      errs.recipientId = 'Please select a recipient';
+    }
+    if (formData.recipientType === 'multiple' && selectedUsers.length === 0) {
+      errs.recipientId = 'Please select at least one recipient';
+    }
+    if (formData.recipientType === 'department' && !selectedDepartment) {
+      errs.department = 'Please select a department';
+    }
+    if (!formData.category) errs.category = 'Please select a category';
+    
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0 ? null : 'Please fix the errors above';
+  };
+
+  const getRecipientCount = () => {
+    switch (formData.recipientType) {
+      case 'individual': return 1;
+      case 'multiple': return selectedUsers.length;
+      case 'department': return allUsers.filter(u => u.department === selectedDepartment).length;
+      case 'all': return allUsers.filter(u => u.role !== 'admin' && u.role !== 'hr').length;
+      default: return 0;
+    }
+  };
+
+  const getRecipientDisplay = () => {
+    switch (formData.recipientType) {
+      case 'individual':
+        return allUsers.find(u => u._id === formData.recipientId)?.name || 'Not selected';
+      case 'multiple':
+        return `${selectedUsers.length} recipient${selectedUsers.length !== 1 ? 's' : ''}`;
+      case 'department':
+        return selectedDepartment ? `${selectedDepartment} Department` : 'Not selected';
+      case 'all':
+        return 'All Employees';
+      default:
+        return 'Not selected';
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const err = validateForm();
+    if (err) {
+      toast.error(err);
+      setError(err);
+      return;
+    }
+    setLoading(true);
+    setError('');
     
     try {
-      setLoading(true);
+      let recipientIds = [];
       
-      // Validate form
-      if (!subject.trim()) {
-        throw new Error('Subject is required');
-      }
-      
-      if (!message.trim()) {
-        throw new Error('Message content is required');
-      }
-      
-      // Validate based on recipient type
-      let recipientData = {};
-      
-      switch (recipientType) {
+      switch (formData.recipientType) {
         case 'individual':
-          if (!selectedUser) throw new Error('Please select a recipient');
-          recipientData = {
-            recipientId: selectedUser._id,
-            recipientType: 'individual',
-            recipientName: selectedUser.name
-          };
+          recipientIds = [formData.recipientId];
           break;
-          
         case 'multiple':
-          if (selectedUsers.length === 0) throw new Error('Please select at least one recipient');
-          recipientData = {
-            recipientIds: selectedUsers.map(user => user._id),
-            recipientType: 'multiple',
-            recipientCount: selectedUsers.length
-          };
+          recipientIds = selectedUsers;
           break;
-          
         case 'department':
-          if (!selectedDepartment) throw new Error('Please select a department');
-          const deptUsers = users.filter(user => user.department === selectedDepartment);
-          recipientData = {
-            department: selectedDepartment,
-            recipientIds: deptUsers.map(user => user._id),
-            recipientType: 'department',
-            recipientCount: deptUsers.length
-          };
+          recipientIds = allUsers.filter(u => u.department === selectedDepartment).map(u => u._id);
           break;
-          
         case 'all':
-          // Filter out HR/Admin if needed, or send to all
-          const allEmployees = users.filter(user => !['hr', 'admin'].includes(user.role));
-          recipientData = {
-            recipientIds: allEmployees.map(user => user._id),
-            recipientType: 'all',
-            recipientCount: allEmployees.length,
-            broadcast: true
-          };
+          recipientIds = allUsers.filter(u => u.role !== 'admin' && u.role !== 'hr').map(u => u._id);
           break;
-          
         default:
-          throw new Error('Invalid recipient type');
+          recipientIds = [formData.recipientId];
       }
       
-      // Construct the form data
-      const formData = {
-        subject: subject.trim(),
-        message: message.trim(),
-        priority: priority,
-        category: category,
-        confidential: confidential,
-        ...recipientData
+      const messageData = {
+        recipientIds: recipientIds,
+        recipientType: formData.recipientType,
+        subject: formData.subject,
+        message: formData.message,
+        category: formData.category || 'general',
+        priority: formData.priority || 'normal',
+        confidential: formData.confidential || false
       };
       
-      console.log('📤 Sending message data:', formData);
-      
-      // Make the API call - NOTE: You'll need to update your backend to handle multiple recipients
-      const response = await axiosInstance.post('/messages/send', formData);
-      
-      console.log('✅ Message sent successfully:', response.data);
-      
-      // Show success message
-      setSnackbar({
-        open: true,
-        message: `Message sent to ${getRecipientCountText(recipientData)} successfully!`,
-        severity: 'success'
+      const response = await axios.post(`${API_URL}/api/messages/send`, messageData, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' },
       });
       
-      // Reset form
-      resetForm();
-      
-      // Call success callback if provided
-      if (onSuccess) {
-        onSuccess();
-      } else {
-        // Navigate back after a delay
-        setTimeout(() => {
-          navigate('/hr/messages');
-        }, 1500);
+      toast.success('Message sent!');
+      if (response.data.success) {
+        setLastSentMessage({
+          recipient: getRecipientDisplay(),
+          subject: formData.subject,
+          date: new Date().toLocaleDateString(),
+          time: new Date().toLocaleTimeString(),
+          reference: response.data.data?.id || `MSG-${Date.now()}`
+        });
+        setShowSuccessDialog(true);
+        setFormData(EMPTY_FORM);
+        setSelectedUsers([]);
+        setSelectedDepartment('');
+        setStats(prev => ({ ...prev, messagesSent: prev.messagesSent + 1 }));
       }
-      
-    } catch (error) {
-      console.error('❌ Send message error:', error);
-      
-      setSnackbar({
-        open: true,
-        message: error.response?.data?.message || error.message || 'Failed to send message',
-        severity: 'error'
-      });
+    } catch (err) {
+      const msg = err.response?.data?.message || err.response?.data?.error || 'Failed to send message';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
   };
 
-  // Helper function to get recipient count text
-  const getRecipientCountText = (recipientData) => {
-    switch (recipientData.recipientType) {
-      case 'individual':
-        return '1 recipient';
-      case 'multiple':
-        return `${recipientData.recipientCount} recipients`;
-      case 'department':
-        return `${recipientData.recipientCount} people in ${recipientData.department}`;
-      case 'all':
-        return `all ${recipientData.recipientCount} employees`;
-      default:
-        return 'recipients';
+  const handleNextStep = () => {
+    if (activeStep === 0 && formData.recipientType === 'individual' && !formData.recipientId) {
+      toast.error('Please select a recipient');
+      return;
     }
-  };
-
-  // Reset form
-  const resetForm = () => {
-    setSubject('');
-    setMessage('');
-    setSelectedUser(null);
-    setSelectedUsers([]);
-    setRecipientType('individual');
-    setPriority('normal');
-    setCategory('general');
-    setConfidential(false);
-    setSelectedDepartment('');
-  };
-
-  // Handle snackbar close
-  const handleCloseSnackbar = () => {
-    setSnackbar(prev => ({ ...prev, open: false }));
-  };
-
-  // Handle user selection for multiple mode
-  const handleMultipleUserSelect = (event, value) => {
-    setSelectedUsers(value);
-  };
-
-  // Handle recipient type change
-  const handleRecipientTypeChange = (event) => {
-    const newType = event.target.value;
-    setRecipientType(newType);
-    
-    // Clear selections when changing type
-    if (newType !== 'multiple') setSelectedUsers([]);
-    if (newType !== 'individual') setSelectedUser(null);
-    if (newType !== 'department') setSelectedDepartment('');
-  };
-
-  // Get recipient summary text
-  const getRecipientSummary = () => {
-    switch (recipientType) {
-      case 'individual':
-        return selectedUser ? `${selectedUser.name} (${selectedUser.employeeId})` : 'No recipient selected';
-      case 'multiple':
-        return selectedUsers.length > 0 
-          ? `${selectedUsers.length} selected` 
-          : 'No recipients selected';
-      case 'department':
-        return selectedDepartment 
-          ? `${selectedDepartment} department` 
-          : 'No department selected';
-      case 'all':
-        const employeeCount = users.filter(u => !['hr', 'admin'].includes(u.role)).length;
-        return `All ${employeeCount} employees`;
-      default:
-        return 'Select recipients';
+    if (activeStep === 0 && formData.recipientType === 'multiple' && selectedUsers.length === 0) {
+      toast.error('Please select at least one recipient');
+      return;
     }
-  };
-
-  // Render recipient selection based on type
-  const renderRecipientSelector = () => {
-    switch (recipientType) {
-      case 'individual':
-        return (
-          <Autocomplete
-            options={users}
-            getOptionLabel={(option) => 
-              `${option.name} (${option.employeeId || 'ID'}) - ${option.department || 'No Dept'}`
-            }
-            value={selectedUser}
-            onChange={(event, value) => setSelectedUser(value)}
-            loading={loadingUsers}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Select Recipient *"
-                required
-                placeholder="Search by name, employee ID, or department"
-                InputProps={{
-                  ...params.InputProps,
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <PersonIcon color="action" />
-                    </InputAdornment>
-                  ),
-                  endAdornment: (
-                    <>
-                      {loadingUsers ? <CircularProgress color="inherit" size={20} /> : null}
-                      {params.InputProps.endAdornment}
-                    </>
-                  )
-                }}
-              />
-            )}
-            renderOption={(props, option) => (
-              <Box component="li" {...props}>
-                <ListItemAvatar>
-                  <Avatar 
-                    sx={{ 
-                      bgcolor: option.role === 'hr' ? '#1976d2' : 
-                              option.role === 'admin' ? '#d32f2f' : '#4caf50'
-                    }}
-                  >
-                    {option.name?.charAt(0) || 'U'}
-                  </Avatar>
-                </ListItemAvatar>
-                <ListItemText 
-                  primary={
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      {option.name}
-                      {option.role === 'hr' && (
-                        <Chip label="HR" size="small" sx={{ ml: 1 }} />
-                      )}
-                      {option.role === 'admin' && (
-                        <Chip label="Admin" size="small" color="error" sx={{ ml: 1 }} />
-                      )}
-                    </Box>
-                  }
-                  secondary={`${option.employeeId} • ${option.department || 'No Department'}`}
-                />
-              </Box>
-            )}
-          />
-        );
-
-      case 'multiple':
-        return (
-          <Autocomplete
-            multiple
-            options={users}
-            getOptionLabel={(option) => 
-              `${option.name} (${option.employeeId || 'ID'})`
-            }
-            value={selectedUsers}
-            onChange={handleMultipleUserSelect}
-            loading={loadingUsers}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Select Recipients *"
-                placeholder="Search and select multiple recipients"
-                InputProps={{
-                  ...params.InputProps,
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <PeopleIcon color="action" />
-                    </InputAdornment>
-                  ),
-                  endAdornment: (
-                    <>
-                      {loadingUsers ? <CircularProgress color="inherit" size={20} /> : null}
-                      {params.InputProps.endAdornment}
-                    </>
-                  )
-                }}
-              />
-            )}
-            renderOption={(props, option) => (
-              <Box component="li" {...props}>
-                <ListItemAvatar>
-                  <Avatar 
-                    sx={{ 
-                      bgcolor: option.role === 'hr' ? '#1976d2' : 
-                              option.role === 'admin' ? '#d32f2f' : '#4caf50'
-                    }}
-                  >
-                    {option.name?.charAt(0) || 'U'}
-                  </Avatar>
-                </ListItemAvatar>
-                <ListItemText 
-                  primary={option.name}
-                  secondary={`${option.employeeId} • ${option.department || 'No Department'}`}
-                />
-              </Box>
-            )}
-            renderTags={(value, getTagProps) =>
-              value.map((option, index) => (
-                <Chip
-                  avatar={<Avatar>{option.name?.charAt(0)}</Avatar>}
-                  label={option.name}
-                  size="small"
-                  {...getTagProps({ index })}
-                  key={option._id}
-                />
-              ))
-            }
-          />
-        );
-
-      case 'department':
-        return (
-          <FormControl fullWidth>
-            <InputLabel>Select Department *</InputLabel>
-            <Select
-              value={selectedDepartment}
-              onChange={(e) => setSelectedDepartment(e.target.value)}
-              label="Select Department *"
-              startAdornment={
-                <InputAdornment position="start">
-                  <GroupIcon color="action" />
-                </InputAdornment>
-              }
-            >
-              <MenuItem value="">
-                <em>Select a department</em>
-              </MenuItem>
-              {departments.map((dept) => {
-                const deptCount = users.filter(u => u.department === dept).length;
-                return (
-                  <MenuItem key={dept} value={dept}>
-                    {dept} ({deptCount} {deptCount === 1 ? 'person' : 'people'})
-                  </MenuItem>
-                );
-              })}
-            </Select>
-          </FormControl>
-        );
-
-      case 'all':
-        const employeeCount = users.filter(u => !['hr', 'admin'].includes(u.role)).length;
-        return (
-          <Box sx={{ p: 2, bgcolor: '#e3f2fd', borderRadius: 1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-              <PeopleIcon sx={{ mr: 1, color: 'primary.main' }} />
-              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                Send to All Employees
-              </Typography>
-            </Box>
-            <Typography variant="body2" color="text.secondary">
-              This message will be sent to all {employeeCount} employees in the system.
-              HR and Admin personnel will not receive this broadcast.
-            </Typography>
-            <Alert severity="warning" sx={{ mt: 2 }}>
-              <WarningIcon fontSize="small" />
-              <Typography variant="body2">
-                Use this option carefully. This will send to {employeeCount} recipients.
-              </Typography>
-            </Alert>
-          </Box>
-        );
-
-      default:
-        return null;
+    if (activeStep === 0 && formData.recipientType === 'department' && !selectedDepartment) {
+      toast.error('Please select a department');
+      return;
     }
+    if (activeStep === 1 && !formData.category) {
+      toast.error('Please select a category');
+      return;
+    }
+    setActiveStep(prev => Math.min(prev + 1, 3));
   };
+
+  const handlePrevStep = () => setActiveStep(prev => Math.max(prev - 1, 0));
+
+  useEffect(() => {
+    fetchCurrentUser();
+    fetchAllUsers();
+    loadDrafts();
+    loadTemplates();
+    return () => formData.attachments.forEach(item => { if (item.preview) URL.revokeObjectURL(item.preview); });
+  }, []);
+
+  useEffect(() => { setCharacterCount(formData.message.length); }, [formData.message]);
+
+  useEffect(() => {
+    if ((formData.subject || formData.message) && !loading) {
+      const timer = setTimeout(() => { if (formData.subject || formData.message) saveDraft(); }, 30000);
+      return () => clearTimeout(timer);
+    }
+  }, [formData.subject, formData.message]);
+
+  if (userLoading) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-10 h-10 border-4 border-gray-100 border-t-gray-900 rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-gray-600 text-sm">Loading your profile…</p>
+      </div>
+    </div>
+  );
+
+  const TABS = [
+    { id: 'compose',   icon: SendIcon,      label: 'Compose' },
+    { id: 'templates', icon: TemplateIcon,  label: 'Templates' },
+    { id: 'drafts',    icon: DraftsIcon,    label: `Drafts${drafts.length ? ` (${drafts.length})` : ''}` },
+    { id: 'ai',        icon: SmartToyIcon,  label: 'AI Assistant' },
+  ];
 
   return (
-    <Box sx={{ p: 3, maxWidth: 1200, margin: '0 auto' }}>
-      <Paper sx={{ p: 4, borderRadius: 2 }}>
-        {/* Header */}
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 4, pb: 2, borderBottom: 1, borderColor: 'divider' }}>
-          <SendIcon sx={{ mr: 2, color: 'primary.main' }} />
-          <Typography variant="h5" sx={{ fontWeight: 600 }}>
-            Compose HR Message
-          </Typography>
-        </Box>
+    <div className="min-h-screen bg-gray-50">
 
-        <form onSubmit={handleSubmit}>
-          {/* Recipient Type Selection */}
-          <Grid container spacing={3}>
-            <Grid item xs={12}>
-              <FormControl component="fieldset">
-                <FormLabel component="legend">Select Recipient Type</FormLabel>
-                <RadioGroup
-                  row
-                  value={recipientType}
-                  onChange={handleRecipientTypeChange}
-                  sx={{ mt: 1 }}
-                >
-                  <FormControlLabel 
-                    value="individual" 
-                    control={<Radio />} 
-                    label={
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <PersonIcon sx={{ mr: 1, fontSize: 20 }} />
-                        Individual
-                      </Box>
-                    } 
-                  />
-                  <FormControlLabel 
-                    value="multiple" 
-                    control={<Radio />} 
-                    label={
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <PeopleIcon sx={{ mr: 1, fontSize: 20 }} />
-                        Multiple
-                      </Box>
-                    } 
-                  />
-                  <FormControlLabel 
-                    value="department" 
-                    control={<Radio />} 
-                    label={
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <GroupIcon sx={{ mr: 1, fontSize: 20 }} />
-                        Department
-                      </Box>
-                    } 
-                  />
-                  <FormControlLabel 
-                    value="all" 
-                    control={<Radio />} 
-                    label={
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <PeopleIcon sx={{ mr: 1, fontSize: 20 }} />
-                        All Employees
-                      </Box>
-                    } 
-                  />
-                </RadioGroup>
-              </FormControl>
-              
-              {/* Recipient Summary */}
-              <Box sx={{ mt: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                  📬 Recipients: {getRecipientSummary()}
-                </Typography>
-              </Box>
-            </Grid>
+      {/* Page Header */}
+      <div className="bg-white border-b border-gray-100 px-6 py-5">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                <SendIcon className="text-gray-600 text-sm" />
+                HR Compose Message
+              </h1>
+              <p className="text-sm text-gray-500 mt-1">Send secure messages to employees</p>
+            </div>
+            {user && (
+              <div className="flex items-center gap-2">
+                <AvatarInitials name={user.name} />
+                <div className="hidden sm:block">
+                  <p className="text-sm font-medium text-gray-700">{user.name}</p>
+                  <p className="text-xs text-gray-400">{user.employeeId}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
-            {/* Recipient Selector */}
-            <Grid item xs={12}>
-              {renderRecipientSelector()}
-            </Grid>
+      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
 
-            {/* Subject */}
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Subject *"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                required
-                placeholder="Enter message subject"
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <CategoryIcon color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-            </Grid>
+        {/* KPI Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <KpiCard icon={FaUsers} label="Total Employees" value={stats.totalEmployees} sub="Available recipients" iconBg="bg-indigo-500" />
+          <KpiCard icon={FaBuilding} label="Departments" value={stats.departmentsCount} sub="Company divisions" iconBg="bg-emerald-500" />
+          <KpiCard icon={DraftsIcon} label="Saved Drafts" value={stats.draftsCount} sub="Continue later" iconBg="bg-amber-500" />
+          <KpiCard icon={FaCheckCircle} label="Messages Sent" value={stats.messagesSent} sub="This session" iconBg="bg-purple-500" />
+        </div>
 
-            {/* Category and Priority */}
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Category</InputLabel>
-                <Select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  label="Category"
-                  startAdornment={
-                    <InputAdornment position="start">
-                      <span style={{ marginRight: 8 }}>
-                        {hrCategories[category]?.icon || '📧'}
-                      </span>
-                    </InputAdornment>
-                  }
-                >
-                  {Object.entries(hrCategories).map(([key, value]) => (
-                    <MenuItem key={key} value={key}>
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <span style={{ marginRight: 8 }}>{value.icon}</span>
-                        {value.label}
-                      </Box>
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Priority</InputLabel>
-                <Select
-                  value={priority}
-                  onChange={(e) => setPriority(e.target.value)}
-                  label="Priority"
-                  startAdornment={
-                    <InputAdornment position="start">
-                      <PriorityIcon 
-                        color={ 
-                          priority === 'urgent' ? 'error' : 
-                          priority === 'high' ? 'warning' : 
-                          priority === 'normal' ? 'info' : 'success'
-                        } 
-                      />
-                    </InputAdornment>
-                  }
-                >
-                  {priorities.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      <Chip 
-                        label={option.label} 
-                        size="small" 
-                        color={option.color}
-                        variant="outlined"
-                        sx={{ mr: 1 }}
-                      />
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-
-            {/* Message Content */}
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Message *"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                required
-                multiline
-                rows={8}
-                placeholder="Type your message here..."
-                sx={{ 
-                  '& .MuiOutlinedInput-root': {
-                    alignItems: 'flex-start'
-                  }
-                }}
-              />
-            </Grid>
-
-            {/* Advanced Options */}
-            <Grid item xs={12}>
-              <Button
-                startIcon={showAdvanced ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                onClick={() => setShowAdvanced(!showAdvanced)}
-                size="small"
-                sx={{ mb: 1 }}
+        {/* Tab Bar */}
+        <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
+          <div className="flex border-b border-gray-100 overflow-x-auto">
+            {TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-3.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${activeTab === tab.id ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
               >
-                Advanced Options
-              </Button>
-              
-              <Collapse in={showAdvanced}>
-                <Box sx={{ p: 2, bgcolor: '#f9f9f9', borderRadius: 1 }}>
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={confidential}
-                        onChange={(e) => setConfidential(e.target.checked)}
-                        icon={<LockIcon color="disabled" />}
-                        checkedIcon={<LockIcon color="primary" />}
+                <tab.icon style={{ fontSize: 15 }} />
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Compose Tab */}
+          {activeTab === 'compose' && (
+            <div className="p-5">
+              {/* Step Progress */}
+              <div className="flex items-center gap-3 mb-6 overflow-x-auto pb-1">
+                {STEPS.map((label, i) => (
+                  <React.Fragment key={label}>
+                    <StepDot label={label} index={i} active={i === activeStep} completed={i < activeStep} />
+                    {i < STEPS.length - 1 && (
+                      <div className={`flex-1 h-px min-w-[20px] ${i < activeStep ? 'bg-gray-900' : 'bg-gray-200'}`} />
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+
+              {/* Error Banner */}
+              {error && (
+                <div className="flex items-center gap-3 bg-red-50 border border-red-100 rounded-lg px-4 py-3 mb-4 text-sm">
+                  <span className="text-red-600 flex-1">{error}</span>
+                  <button onClick={() => setError('')} className="text-red-400 hover:text-red-600">✕</button>
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit}>
+
+                {/* Step 0: Recipient */}
+                {activeStep === 0 && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Select who to message</p>
+                    
+                    {/* Recipient Type Selection */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {RECIPIENT_TYPES.map(option => (
+                        <button
+                          type="button"
+                          key={option.value}
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, recipientType: option.value, recipient: '', recipientId: '' }));
+                            setSelectedUsers([]);
+                            setSelectedDepartment('');
+                          }}
+                          className={`p-3 rounded-lg border text-center transition-all ${
+                            formData.recipientType === option.value
+                              ? 'border-gray-900 bg-gray-50 text-gray-900'
+                              : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-600'
+                          }`}
+                        >
+                          <div className="text-2xl mb-1">{option.icon}</div>
+                          <p className="text-xs font-medium">{option.label}</p>
+                          <p className="text-[10px] text-gray-400 mt-1">{option.description}</p>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Individual Selection */}
+                    {formData.recipientType === 'individual' && (
+                      <div className="mt-4">
+                        <FormLabel required>Select Employee</FormLabel>
+                        <select
+                          name="recipientId"
+                          value={formData.recipientId}
+                          onChange={handleChange}
+                          className={inputCls(fieldErrors.recipientId)}
+                        >
+                          <option value="">Choose an employee…</option>
+                          {allUsers.map(user => (
+                            <option key={user._id} value={user._id}>
+                              {user.name} - {user.department || 'N/A'} ({user.employeeId})
+                            </option>
+                          ))}
+                        </select>
+                        {fieldErrors.recipientId && <p className="text-xs text-red-500 mt-1">{fieldErrors.recipientId}</p>}
+                      </div>
+                    )}
+
+                    {/* Multiple Selection */}
+                    {formData.recipientType === 'multiple' && (
+                      <div className="mt-4">
+                        <FormLabel required>Select Employees</FormLabel>
+                        <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto">
+                          {allUsers.map(user => (
+                            <label
+                              key={user._id}
+                              className={`flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0 ${
+                                selectedUsers.includes(user._id) ? 'bg-indigo-50' : ''
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedUsers.includes(user._id)}
+                                onChange={() => handleMultipleUserSelect(user._id)}
+                                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                              />
+                              <AvatarInitials name={user.name} />
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-gray-800">{user.name}</p>
+                                <p className="text-xs text-gray-500">{user.department || 'N/A'} • {user.employeeId}</p>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                        {fieldErrors.recipientId && <p className="text-xs text-red-500 mt-1">{fieldErrors.recipientId}</p>}
+                        <p className="text-xs text-gray-400 mt-2">Selected: {selectedUsers.length} employee(s)</p>
+                      </div>
+                    )}
+
+                    {/* Department Selection */}
+                    {formData.recipientType === 'department' && (
+                      <div className="mt-4">
+                        <FormLabel required>Select Department</FormLabel>
+                        <select
+                          value={selectedDepartment}
+                          onChange={(e) => setSelectedDepartment(e.target.value)}
+                          className={inputCls(fieldErrors.department)}
+                        >
+                          <option value="">Choose a department…</option>
+                          {departments.map(dept => {
+                            const count = allUsers.filter(u => u.department === dept).length;
+                            return (
+                              <option key={dept} value={dept}>
+                                {dept} ({count} {count === 1 ? 'employee' : 'employees'})
+                              </option>
+                            );
+                          })}
+                        </select>
+                        {fieldErrors.department && <p className="text-xs text-red-500 mt-1">{fieldErrors.department}</p>}
+                      </div>
+                    )}
+
+                    {/* All Employees Info */}
+                    {formData.recipientType === 'all' && (
+                      <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                        <div className="flex items-start gap-3">
+                          <WarningIcon className="text-amber-500" />
+                          <div>
+                            <p className="text-sm font-medium text-amber-800">Send to All Employees</p>
+                            <p className="text-xs text-amber-700 mt-1">
+                              This message will be sent to all {allUsers.filter(u => u.role !== 'admin' && u.role !== 'hr').length} employees.
+                              Use this option carefully for company-wide announcements.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Recipient Summary */}
+                    {getRecipientCount() > 0 && formData.recipientType !== 'individual' && (
+                      <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <p className="text-xs text-gray-500">Recipient Summary</p>
+                        <p className="text-sm font-medium text-gray-800 mt-1">
+                          {getRecipientCount()} {getRecipientCount() === 1 ? 'recipient' : 'recipients'} will receive this message
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Step 1: Details */}
+                {activeStep === 1 && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Categorize your message</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <FormLabel required>Category</FormLabel>
+                        <select
+                          name="category"
+                          value={formData.category}
+                          onChange={handleChange}
+                          className={inputCls(fieldErrors.category)}
+                        >
+                          {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <FormLabel>Priority</FormLabel>
+                        <div className="flex gap-2 flex-wrap">
+                          {PRIORITIES.map(p => (
+                            <button
+                              type="button"
+                              key={p.value}
+                              onClick={() => setFormData(prev => ({ ...prev, priority: p.value }))}
+                              className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all ${
+                                formData.priority === p.value
+                                  ? 'border-gray-900 bg-gray-50 text-gray-900'
+                                  : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                              }`}
+                            >
+                              {p.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <FormLabel required>Subject</FormLabel>
+                      <input
+                        type="text"
+                        name="subject"
+                        value={formData.subject}
+                        onChange={handleChange}
+                        placeholder="Brief, descriptive subject line"
+                        className={inputCls(fieldErrors.subject)}
                       />
-                    }
-                    label={
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <Typography variant="body2">Mark as Confidential</Typography>
-                        <Chip 
-                          label="HR Eyes Only" 
-                          size="small" 
-                          color="warning" 
-                          variant="outlined"
-                          sx={{ ml: 1 }}
-                        />
-                      </Box>
-                    }
-                  />
-                </Box>
-              </Collapse>
-            </Grid>
+                      {fieldErrors.subject && <p className="text-xs text-red-500 mt-1">{fieldErrors.subject}</p>}
+                    </div>
 
-            {/* Action Buttons */}
-            <Grid item xs={12}>
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, pt: 2 }}>
-                <Button
-                  variant="outlined"
-                  startIcon={<ClearIcon />}
-                  onClick={resetForm}
-                  disabled={loading}
-                >
-                  Clear
-                </Button>
-                <Button
-                  variant="contained"
-                  type="submit"
-                  startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <SendIcon />}
-                  disabled={loading}
-                  sx={{
-                    background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
-                    boxShadow: '0 3px 5px 2px rgba(33, 203, 243, .3)',
-                    minWidth: 120
-                  }}
-                >
-                  {loading ? 'Sending...' : 'Send Message'}
-                </Button>
-              </Box>
-            </Grid>
-          </Grid>
-        </form>
+                    {/* Options */}
+                    <div>
+                      <p className="text-sm font-medium text-gray-700 mb-3">Message options</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {[['confidential','Confidential'],['readReceipt','Read Receipt'],['urgent','Urgent'],['followUp','Follow-up']].map(([field, label]) => (
+                          <label key={field} className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${formData[field] ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                            <input type="checkbox" name={field} checked={formData[field]} onChange={handleChange} className="rounded border-gray-300 text-gray-900 focus:ring-gray-500" />
+                            <span className="text-xs font-medium text-gray-700">{label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
-        {/* Tips Card */}
-        <Card sx={{ mt: 4, bgcolor: '#f5f5f5' }}>
-          <CardContent>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              💡 Tips for effective HR communication:
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
-              • <strong>Individual:</strong> For personalized messages, feedback, or sensitive matters<br />
-              • <strong>Multiple:</strong> For team announcements or project updates<br />
-              • <strong>Department:</strong> For department-wide communications<br />
-              • <strong>All Employees:</strong> For company-wide announcements, policy changes, or celebrations<br />
-              • Use appropriate categories for better tracking and filtering<br />
-              • Mark urgent messages with high priority<br />
-              • Keep confidential information marked as such<br />
-              • Proofread before sending broadcast messages
-            </Typography>
-          </CardContent>
-        </Card>
-      </Paper>
+                {/* Step 2: Message */}
+                {activeStep === 2 && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Write your message</p>
+                    <div>
+                      <FormLabel required>Message body</FormLabel>
+                      <textarea
+                        name="message"
+                        value={formData.message}
+                        onChange={handleChange}
+                        rows={9}
+                        placeholder="Type your message here…"
+                        className={`${inputCls(fieldErrors.message)} resize-none`}
+                      />
+                      <div className="flex justify-between mt-1.5">
+                        {fieldErrors.message
+                          ? <p className="text-xs text-red-500">{fieldErrors.message}</p>
+                          : <span className="text-xs text-gray-400">{formData.message.split(/\s+/).filter(w => w.length > 0).length} words</span>
+                        }
+                        <span className={`text-xs ${characterCount < 10 ? 'text-red-400' : 'text-gray-400'}`}>{characterCount} chars</span>
+                      </div>
+                    </div>
 
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      >
-        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-    </Box>
+                    {/* Attachments */}
+                    <div>
+                      <FormLabel>Attachments</FormLabel>
+                      <label htmlFor="file-upload" className="flex items-center gap-2 w-fit px-4 py-2.5 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors">
+                        <AttachFileIcon style={{ fontSize: 16 }} />
+                        Add files
+                      </label>
+                      <input accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx,.txt,.ppt,.pptx" style={{ display: 'none' }} id="file-upload" multiple type="file" onChange={handleFileUpload} />
+
+                      {formData.attachments.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          {formData.attachments.map(item => (
+                            <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <AttachFileIcon className="text-gray-400 flex-shrink-0" style={{ fontSize: 15 }} />
+                                <div className="min-w-0">
+                                  <p className="text-sm text-gray-800 truncate">{item.name}</p>
+                                  <p className="text-xs text-gray-400">{item.size} MB · {item.type}</p>
+                                </div>
+                              </div>
+                              <button type="button" onClick={() => removeAttachment(item.id)} className="p-1 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-lg transition-colors flex-shrink-0">
+                                <DeleteIcon style={{ fontSize: 15 }} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 3: Review */}
+                {activeStep === 3 && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Review before sending</p>
+                    <div className="bg-gray-50 rounded-lg border border-gray-200 divide-y divide-gray-100">
+                      {[
+                        ['To', getRecipientDisplay()],
+                        ['From', user?.name || 'HR'],
+                        ['Subject', formData.subject],
+                        ['Category', formData.category],
+                        ['Priority', formData.priority],
+                      ].map(([k, v]) => (
+                        <div key={k} className="flex items-center gap-4 px-4 py-3">
+                          <span className="text-xs text-gray-400 w-20 flex-shrink-0">{k}</span>
+                          <span className="text-sm text-gray-800 font-medium">
+                            {k === 'Priority' ? <Badge variant={formData.priority}>{v}</Badge> : v}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {formData.subject && (
+                      <div>
+                        <p className="text-xs text-gray-400 mb-2">Message preview</p>
+                        <div className="bg-white border border-gray-200 rounded-lg p-4">
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{formData.message}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {(formData.confidential || formData.urgent || formData.readReceipt || formData.followUp) && (
+                      <div className="flex flex-wrap gap-2">
+                        {formData.confidential && <Badge variant="warning">Confidential</Badge>}
+                        {formData.urgent && <Badge variant="danger">Urgent</Badge>}
+                        {formData.readReceipt && <Badge variant="info">Read Receipt</Badge>}
+                        {formData.followUp && <Badge>Follow-up</Badge>}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Navigation */}
+                <div className="flex items-center justify-between mt-6 pt-5 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={activeStep > 0 ? handlePrevStep : () => navigate(-1)}
+                    className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                  >
+                    {activeStep > 0 ? '← Back' : 'Cancel'}
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    {activeStep === 3 && (
+                      <button type="button" onClick={() => setSaveAsDraftConfirm(true)}
+                        className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+                        <DraftsIcon style={{ fontSize: 15 }} /> Save draft
+                      </button>
+                    )}
+                    {activeStep < 3 ? (
+                      <button type="button" onClick={handleNextStep}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors">
+                        Continue →
+                      </button>
+                    ) : (
+                      <button type="submit" disabled={loading}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
+                        {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <SendIcon style={{ fontSize: 15 }} />}
+                        {loading ? 'Sending…' : `Send to ${getRecipientCount()} recipient(s)`}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Templates Tab */}
+          {activeTab === 'templates' && (
+            <div className="p-5">
+              <p className="text-sm font-semibold text-gray-800 mb-4">Message Templates</p>
+              {templates.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                    <TemplateIcon className="text-gray-400" style={{ fontSize: 22 }} />
+                  </div>
+                  <p className="text-gray-600 text-sm font-medium">No templates yet</p>
+                  <p className="text-gray-400 text-xs mt-1">Save messages as templates for reuse</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {templates.map(template => (
+                    <div key={template.id} className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-all">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800">{template.name}</p>
+                          <p className="text-xs text-gray-400">Used {template.usageCount || 0} times</p>
+                        </div>
+                        <Badge>{template.category}</Badge>
+                      </div>
+                      <p className="text-xs text-gray-500 mb-1 font-medium">Subject</p>
+                      <p className="text-xs text-gray-700 mb-3 truncate">{template.subject}</p>
+                      <p className="text-xs text-gray-500 line-clamp-3 mb-3">{template.message.substring(0, 120)}…</p>
+                      <button onClick={() => {
+                        setFormData(prev => ({ ...prev, subject: template.subject, message: template.message, category: template.category }));
+                        setActiveTab('compose');
+                        toast.success(`"${template.name}" applied`);
+                      }} className="w-full flex items-center justify-center gap-1.5 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-xs font-medium transition-colors">
+                        <FileCopyIcon style={{ fontSize: 13 }} /> Use Template
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Drafts Tab */}
+          {activeTab === 'drafts' && (
+            <div className="p-5">
+              <p className="text-sm font-semibold text-gray-800 mb-4">Saved Drafts ({drafts.length})</p>
+              {drafts.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                    <DraftsIcon className="text-gray-400" style={{ fontSize: 22 }} />
+                  </div>
+                  <p className="text-gray-600 text-sm font-medium">No drafts yet</p>
+                  <p className="text-gray-400 text-xs mt-1 mb-4">Your saved drafts will appear here</p>
+                  <button onClick={() => setActiveTab('compose')} className="px-4 py-2 bg-gray-900 text-white text-sm rounded-lg hover:bg-gray-800 transition-colors">
+                    Compose Message
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {drafts.map(draft => (
+                    <div key={draft.id} className="flex items-start justify-between border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-800 truncate">{draft.subject || 'Untitled Draft'}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          To: {draft.recipientType === 'individual' ? draft.recipient : 
+                                draft.recipientType === 'multiple' ? `${draft.selectedUsers?.length || 0} recipients` :
+                                draft.recipientType === 'department' ? draft.selectedDepartment : 'All Employees'} · {new Date(draft.updatedAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 ml-3 flex-shrink-0">
+                        <button onClick={() => loadDraft(draft)} className="px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg hover:bg-gray-800 transition-colors">
+                          Edit
+                        </button>
+                        <button onClick={() => deleteDraft(draft.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                          <DeleteIcon style={{ fontSize: 15 }} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* AI Tab */}
+          {activeTab === 'ai' && (
+            <div className="p-5">
+              <p className="text-sm font-semibold text-gray-800 mb-4">AI Writing Assistant</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {[
+                  { icon: AutoFixHighIcon, title: 'Smart Suggestions', sub: 'AI-powered improvements for clarity and tone.', btn: 'Generate Suggestions' },
+                  { icon: PsychologyIcon,  title: 'Tone Analysis',     sub: 'Analyze if your message sounds professional.', btn: 'Analyze Tone' },
+                ].map(card => (
+                  <div key={card.title} className="border border-gray-200 rounded-lg p-4">
+                    <div className="w-9 h-9 bg-gray-100 rounded-lg flex items-center justify-center mb-3">
+                      <card.icon className="text-gray-600" style={{ fontSize: 18 }} />
+                    </div>
+                    <p className="text-sm font-semibold text-gray-800 mb-1">{card.title}</p>
+                    <p className="text-xs text-gray-500 mb-4">{card.sub}</p>
+                    <button className="w-full py-2 bg-gray-900 hover:bg-gray-800 text-white text-xs font-medium rounded-lg transition-colors">
+                      {card.btn}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Footer */}
+          <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 text-center">
+            <p className="text-xs text-gray-400">All messages are securely stored and encrypted.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Save Draft Confirm */}
+      {saveAsDraftConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setSaveAsDraftConfirm(false)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+            <h3 className="text-base font-semibold text-gray-900 mb-2">Save as draft?</h3>
+            <p className="text-sm text-gray-500 mb-5">You can continue editing this message later.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setSaveAsDraftConfirm(false)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">Cancel</button>
+              <button onClick={() => { saveDraft(); setSaveAsDraftConfirm(false); }} className="flex-1 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors">Save Draft</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <SuccessDialog
+        open={showSuccessDialog}
+        message={lastSentMessage}
+        onViewMessages={() => { setShowSuccessDialog(false); navigate('/hr/messages'); }}
+        onSendAnother={() => { setShowSuccessDialog(false); setFormData(EMPTY_FORM); setActiveStep(0); setSelectedUsers([]); setSelectedDepartment(''); }}
+      />
+    </div>
   );
 };
 

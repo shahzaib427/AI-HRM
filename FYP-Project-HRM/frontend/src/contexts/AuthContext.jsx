@@ -5,11 +5,9 @@ const AuthContext = createContext();
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-
   if (!context) {
     throw new Error('useAuth must be used inside AuthProvider');
   }
-
   return context;
 };
 
@@ -17,21 +15,18 @@ export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // ✅ Validate user object
   const validateUser = (user) => {
     return !!(user?._id || user?.id || user?.email);
   };
 
-  // ✅ Clear auth
   const clearAuth = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('authToken');
     localStorage.removeItem('user');
-
+    localStorage.removeItem('user_id');   // ← added
     setCurrentUser(null);
   };
 
-  // ✅ Load user ONCE
   const loadUser = () => {
     try {
       const token =
@@ -52,41 +47,46 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
+      // Restore user_id if missing
+      const userId = user._id || user.id;
+      if (userId && !localStorage.getItem('user_id')) {
+        localStorage.setItem('user_id', String(userId));
+      }
+
       setCurrentUser(user);
     } catch (err) {
       console.error('Auth load error:', err);
       clearAuth();
+    } finally {
+      setLoading(false);
     }
   };
 
-  // ✅ Run once when app loads
   useEffect(() => {
     loadUser();
-    setLoading(false);
   }, []);
 
-  // ✅ Login
   const login = (user, token) => {
     if (!user || !token) return false;
-
     if (!validateUser(user)) return false;
 
     localStorage.setItem('token', token);
     localStorage.setItem('authToken', token);
     localStorage.setItem('user', JSON.stringify(user));
 
-    setCurrentUser(user);
+    // Save user_id separately for Wellness + other components
+    const userId = user._id || user.id;
+    if (userId) localStorage.setItem('user_id', String(userId));
 
+    setCurrentUser(user);
     return true;
   };
 
-  // ✅ Logout
   const logout = () => {
     clearAuth();
     window.location.href = '/login';
   };
 
-  // ✅ Get token
   const getToken = () => {
     return (
       localStorage.getItem('token') ||
@@ -94,15 +94,16 @@ export const AuthProvider = ({ children }) => {
     );
   };
 
-  // ✅ Update user
   const updateUser = (newData) => {
     if (!currentUser) return false;
-
     const updated = { ...currentUser, ...newData };
-
     localStorage.setItem('user', JSON.stringify(updated));
-    setCurrentUser(updated);
 
+    // Keep user_id in sync if it changed
+    const userId = updated._id || updated.id;
+    if (userId) localStorage.setItem('user_id', String(userId));
+
+    setCurrentUser(updated);
     return true;
   };
 
@@ -115,7 +116,7 @@ export const AuthProvider = ({ children }) => {
         loading,
         getToken,
         updateUser,
-        isAuthenticated: !!currentUser && !loading
+        isAuthenticated: !!currentUser,  // removed "&& !loading" — prevents redirect flicker
       }}
     >
       {children}

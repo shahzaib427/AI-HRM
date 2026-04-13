@@ -1,0 +1,137 @@
+# IN-DEMAND SKILLS & TRAINING IN PAKISTAN
+
+## Most In-Demand Skills 2024
+
+Top 15 Skills Employers Want in Pakistan:
+
+1. Python (Data Science, Backend, AI) - Most in-demand
+2. JavaScript/TypeScript (Web Development) - Universal demand
+3. React.js/Next.js - Most popular framework
+4. Node.js - Backend development
+5. AI & Machine Learning - High growth
+6. Cloud Computing (AWS, Azure) - Enterprise demand
+7. Docker & Kubernetes - DevOps essential
+8. SQL & Databases - Always needed
+9. Git & GitHub - Every developer needs
+10. Flutter/React Native - Mobile development
+11. Java (Spring Boot) - Banks & large companies
+12. C# (.NET) - Service-based companies
+13. DevOps (CI/CD, Jenkins) - Automation
+14. Data Science (Pandas, NumPy) - Analytics
+15. Cybersecurity - Growing demand
+
+## Programming Languages by Demand
+
+- Python (Highest demand - AI, Data, Backend)
+- JavaScript/TypeScript (Universal - Web, Mobile)
+- Java (Enterprise - Banks, Large Companies)
+- C# (.NET - Service Companies)
+- Go/Golang (High paying, Growing)
+- Kotlin (Android Development)
+- Swift (iOS Development)
+- PHP (Legacy systems, WordPress)
+
+## Frameworks & Libraries
+
+Frontend:
+- React.js / Next.js (Most popular)
+- Vue.js (Growing)
+- Angular (Enterprise)
+- Tailwind CSS (Styling)
+
+Backend:
+- Node.js / Express (Startups, Product companies)
+- Django / FastAPI (Python)
+- Spring Boot (Java enterprise)
+- Laravel (PHP)
+- .NET Core (C#)
+
+Mobile:
+- Flutter (Cross-platform - Growing fast)
+- React Native (Cross-platform)
+- Kotlin (Native Android)
+- Swift (Native iOS)
+
+## Cloud & DevOps
+
+- AWS (Most in-demand - 70% market share)
+- Docker (Containerization - Essential)
+- Kubernetes (Container orchestration)
+- CI/CD (GitHub Actions, Jenkins, GitLab CI)
+- Terraform (Infrastructure as Code)
+- Azure (Enterprise clients)
+- Linux (Essential for DevOps)
+
+## Data Science & AI
+
+- Machine Learning (Scikit-learn, XGBoost)
+- Deep Learning (TensorFlow, PyTorch)
+- NLP (Transformers, BERT, LangChain)
+- Computer Vision (OpenCV, YOLO)
+- Data Visualization (Tableau, Power BI)
+- LLMs (GPT, Claude, Gemini APIs)
+
+## Database Skills
+
+- SQL (PostgreSQL, MySQL) - Always needed
+- MongoDB (NoSQL) - Popular for Node.js
+- Redis (Caching) - High performance
+- Firebase (Real-time) - Startups love it
+- Elasticsearch (Search)
+
+## Soft Skills in Demand
+
+- Problem Solving
+- Communication (English)
+- Team Collaboration
+- Agile/Scrum
+- Project Management
+- Client Handling
+
+## Free Learning Resources (Pakistan)
+
+International:
+- Coursera (Financial Aid available)
+- freeCodeCamp
+- Harvard CS50
+- The Odin Project
+- edX (Free audit)
+
+Local Pakistani:
+- PIAIC (Free - AI & Computing)
+- DigiSkills Pakistan (Free certificates)
+- NUST Online Courses
+- LUMS Online Courses
+- Saylani Mass Training (Free)
+
+YouTube (Urdu/Hindi):
+- Code with Harry
+- Programming with Mosh
+- Chai aur Code
+- FreeCodeCamp
+
+## Paid Certifications
+
+Cloud:
+- AWS Solutions Architect (Rs. 30,000)
+- Azure Developer Associate (Rs. 20,000)
+- Google Cloud Engineer (Rs. 25,000)
+
+DevOps:
+- Certified Kubernetes (Rs. 25,000)
+- Docker Certified (Rs. 15,000)
+
+AI/Data:
+- TensorFlow Certificate (Rs. 15,000)
+- AWS AI/ML (Rs. 20,000)
+
+## Quick Start Guide
+
+Choose your path:
+
+👨‍💻 Web Developer → JavaScript → React → Node.js
+🐍 Data Scientist → Python → Pandas → Machine Learning
+☁️ Cloud Engineer → Linux → AWS → Docker → Kubernetes
+📱 Mobile Dev → Flutter or React Native
+🔒 Cybersecurity → Networking → Linux → Security+
+🎨 UI/UX Designer → Figma → Adobe XD → Portfolio

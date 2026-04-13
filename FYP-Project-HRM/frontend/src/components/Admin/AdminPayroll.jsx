@@ -13,6 +13,34 @@ import {
   User, DollarSign, Users, Search
 } from 'lucide-react';
 
+// Badge Component
+const Badge = ({ children, variant = 'default' }) => {
+  const v = {
+    default: 'bg-slate-100 text-slate-600',
+    success: 'bg-emerald-50 text-emerald-700',
+    warning: 'bg-amber-50 text-amber-700',
+    danger: 'bg-red-50 text-red-700',
+    info: 'bg-indigo-50 text-indigo-700'
+  };
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${v[variant]}`}>{children}</span>;
+};
+
+// KPI Card Component with colored icons and subtitles
+const KpiCard = ({ label, value, sub, icon, iconBg }) => (
+  <div className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-all duration-200">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-xs text-slate-500 font-medium mb-2">{label}</p>
+        <p className="text-2xl font-semibold text-slate-900">{value}</p>
+        {sub && <p className="text-xs text-slate-400 mt-1">{sub}</p>}
+      </div>
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${iconBg}`}>
+        {icon}
+      </div>
+    </div>
+  </div>
+);
+
 const AdminPayroll = () => {
   // State Variables
   const [payrolls, setPayrolls] = useState([]);
@@ -135,38 +163,30 @@ const AdminPayroll = () => {
   }, [employeeSearch, employees]);
 
   // Fetch Payrolls
-// In AdminPayroll.js - UPDATE fetchPayrolls function
-const fetchPayrolls = async () => {
-  try {
-    setLoading(true);
-    const params = new URLSearchParams({
-      ...filters,
-      page: filters.page.toString(),
-      limit: filters.limit.toString()
-    }).toString();
-    
-    const res = await axiosInstance.get(`/admin/payroll?${params}`);
-    
-    // 🔍 DEBUG: Log the first payroll to see its structure
-    if (res.data.data && res.data.data.length > 0) {
-      console.log('📋 First payroll data:', res.data.data[0]);
-      console.log('📋 Bank details:', res.data.data[0].bankDetails);
-      console.log('📋 All fields in first payroll:', Object.keys(res.data.data[0]));
+  const fetchPayrolls = async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams({
+        ...filters,
+        page: filters.page.toString(),
+        limit: filters.limit.toString()
+      }).toString();
+      
+      const res = await axiosInstance.get(`/admin/payroll?${params}`);
+      
+      setPayrolls(res.data.data || []);
+      setPagination({
+        total: res.data.total || 0,
+        totalPages: res.data.totalPages || 1,
+        currentPage: res.data.currentPage || 1
+      });
+    } catch (error) {
+      console.error('Payrolls fetch error:', error.response?.data || error.message);
+      alert('Failed to load payrolls: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setLoading(false);
     }
-    
-    setPayrolls(res.data.data || []);
-    setPagination({
-      total: res.data.total || 0,
-      totalPages: res.data.totalPages || 1,
-      currentPage: res.data.currentPage || 1
-    });
-  } catch (error) {
-    console.error('Payrolls fetch error:', error.response?.data || error.message);
-    alert('Failed to load payrolls: ' + (error.response?.data?.error || error.message));
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   // Fetch Stats
   const fetchStats = async () => {
@@ -183,11 +203,10 @@ const fetchPayrolls = async () => {
     }
   };
 
-  // ==================== EMPLOYEE FETCH FUNCTIONS ====================
+  // Fetch Employees
   const fetchEmployees = async () => {
     try {
       setRefreshingEmployees(true);
-      console.log('🔄 Fetching employees...');
       
       const endpoints = [
         '/employees',
@@ -199,7 +218,6 @@ const fetchPayrolls = async () => {
       
       for (const endpoint of endpoints) {
         try {
-          console.log(`🔗 Trying endpoint: ${endpoint}`);
           const response = await axiosInstance.get(endpoint);
           
           if (response.data) {
@@ -213,13 +231,9 @@ const fetchPayrolls = async () => {
               employeesData = response.data.users;
             }
             
-            if (employeesData.length > 0) {
-              console.log(`🎯 Found ${employeesData.length} employees from ${endpoint}`);
-              break;
-            }
+            if (employeesData.length > 0) break;
           }
         } catch (endpointError) {
-          console.log(`❌ Failed for ${endpoint}:`, endpointError.message);
           continue;
         }
       }
@@ -231,30 +245,23 @@ const fetchPayrolls = async () => {
         return status === 'Active' || status === 'active' || isActive;
       });
       
-      console.log(`👥 Active employees: ${activeEmployees.length}`);
-      
       setEmployees(activeEmployees);
       setFilteredEmployees(activeEmployees);
       
-      return activeEmployees;
-      
     } catch (error) {
-      console.error('❌ Critical error in fetchEmployees:', error);
+      console.error('Error fetching employees:', error);
       setEmployees([]);
       setFilteredEmployees([]);
-      return [];
     } finally {
       setRefreshingEmployees(false);
     }
   };
 
-  // Manually refresh employees
   const refreshEmployees = async () => {
     await fetchEmployees();
     alert('✅ Employees list refreshed!');
   };
 
-  // Fetch Months/Years
   const fetchMonthsYears = async () => {
     try {
       const res = await axiosInstance.get('/admin/payroll/months-years');
@@ -295,7 +302,7 @@ const fetchPayrolls = async () => {
     }
   };
 
-  // ==================== HELPER FUNCTIONS ====================
+  // Helper Functions
   const getEmployeeName = (emp) => {
     if (!emp) return 'Unknown Employee';
     return emp.fullName || 
@@ -337,7 +344,7 @@ const fetchPayrolls = async () => {
     return emp.employmentStatus || emp.status || emp.employeeStatus || 'Active';
   };
 
-  // ==================== BULK PAYMENT FUNCTIONS ====================
+  // Bulk Payment Functions
   const handleOpenBulkPaymentModal = () => {
     const pendingPayrolls = payrolls.filter(p => p.paymentStatus === 'Pending');
     setBulkPaymentDetails({
@@ -399,7 +406,7 @@ const fetchPayrolls = async () => {
 
       const totalAmount = selectedPayrollsData.reduce((sum, p) => sum + (p.netSalary || 0), 0);
       
-      if (!confirm(`💰 Process Bulk Payment?\n\nSelected: ${selectedPayrollsData.length} payrolls\nTotal Amount: PKR ${totalAmount.toLocaleString()}\nTransaction ID: ${bulkPaymentDetails.transactionId}\n\nThis will update status to "Paid" and send salaries to employees' bank accounts.`)) {
+      if (!confirm(`💰 Process Bulk Payment?\n\nSelected: ${selectedPayrollsData.length} payrolls\nTotal Amount: PKR ${totalAmount.toLocaleString()}\nTransaction ID: ${bulkPaymentDetails.transactionId}`)) {
         setBulkPaymentProcessing(false);
         return;
       }
@@ -422,7 +429,7 @@ const fetchPayrolls = async () => {
             continue;
           }
 
-          const response = await axiosInstance.patch(`/admin/payroll/${payroll._id}/bulk-payment`, {
+          await axiosInstance.patch(`/admin/payroll/${payroll._id}/bulk-payment`, {
             paymentStatus: 'Paid',
             paymentDate: new Date().toISOString(),
             paymentMethod: bulkPaymentDetails.paymentMethod,
@@ -431,19 +438,7 @@ const fetchPayrolls = async () => {
             bankDetails: bankDetails
           });
 
-          if (response.data.success) {
-            successCount++;
-            
-            try {
-              await axiosInstance.post('/admin/payroll/send-payslip', {
-                payrollId: payroll._id,
-                employeeEmail: getEmployeeEmail(employee)
-              });
-            } catch (emailError) {
-              console.error('Email sending error:', emailError);
-            }
-          }
-
+          successCount++;
           await new Promise(resolve => setTimeout(resolve, 300));
 
         } catch (error) {
@@ -454,7 +449,7 @@ const fetchPayrolls = async () => {
       if (errors.length > 0) {
         alert(`⚠️ Bulk payment partially completed\n\nSuccess: ${successCount}\nFailed: ${errors.length}\n\nFirst 5 errors:\n${errors.slice(0, 5).join('\n')}`);
       } else {
-        alert(`✅ Bulk payment completed successfully!\n\nProcessed: ${selectedPayrollsData.length} payrolls\nTotal Amount: PKR ${totalAmount.toLocaleString()}\nTransaction ID: ${bulkPaymentDetails.transactionId}\n\nSalaries have been transferred to employees' bank accounts and email notifications sent.`);
+        alert(`✅ Bulk payment completed successfully!\n\nProcessed: ${selectedPayrollsData.length} payrolls\nTotal Amount: PKR ${totalAmount.toLocaleString()}\nTransaction ID: ${bulkPaymentDetails.transactionId}`);
       }
 
       fetchPayrolls();
@@ -476,12 +471,12 @@ const fetchPayrolls = async () => {
     }
   };
 
-  // ==================== EXCEL EXPORT FUNCTIONS ====================
+  // Excel Export Functions
   const handleExportToExcel = async () => {
     try {
       setExportLoading(true);
       
-      if (!confirm('📊 Export all payroll records to Excel?\n\nThis may take a moment...')) {
+      if (!confirm('📊 Export all payroll records to Excel?')) {
         setExportLoading(false);
         return;
       }
@@ -517,41 +512,20 @@ const fetchPayrolls = async () => {
         'Payment Method': payroll.paymentMethod || '',
         'Bank Name': payroll.bankDetails?.bankName || '',
         'Account Number': payroll.bankDetails?.accountNumber || '',
-        'Transaction ID': payroll.transactionId || '',
-        'HRA': payroll.hra || 0,
-        'DA': payroll.da || 0,
-        'Conveyance': payroll.conveyance || 0,
-        'Medical Allowance': payroll.medicalAllowance || 0,
-        'Special Allowance': payroll.specialAllowance || 0,
-        'TDS': payroll.tds || 0,
-        'PF': payroll.pf || 0,
-        'Professional Tax': payroll.professionalTax || 0,
-        'Remarks': payroll.notes || '',
-        'Generated At': payroll.createdAt || '',
-        'Updated At': payroll.updatedAt || ''
+        'Transaction ID': payroll.transactionId || ''
       }));
       
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(excelData);
-      
-      const wscols = [
-        { wch: 5 }, { wch: 12 }, { wch: 20 }, { wch: 15 }, { wch: 10 }, { wch: 8 },
-        { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 15 }, { wch: 15 },
-        { wch: 15 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 18 },
-        { wch: 18 }, { wch: 10 }, { wch: 10 }, { wch: 16 }, { wch: 25 }, { wch: 20 },
-        { wch: 20 }
-      ];
-      ws['!cols'] = wscols;
-      
       XLSX.utils.book_append_sheet(wb, ws, 'Payroll Records');
       
       const date = new Date();
-      const timestamp = `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}_${date.getHours().toString().padStart(2, '0')}-${date.getMinutes().toString().padStart(2, '0')}`;
+      const timestamp = `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
       const filename = `Payroll_Export_${timestamp}.xlsx`;
       
       XLSX.writeFile(wb, filename);
       
-      alert(`✅ Excel file exported successfully!\n\nFile: ${filename}\nRecords: ${allPayrolls.length}`);
+      alert(`✅ Excel file exported successfully!\n\nRecords: ${allPayrolls.length}`);
       
     } catch (error) {
       console.error('Export to Excel error:', error);
@@ -578,32 +552,17 @@ const fetchPayrolls = async () => {
         'Payment Method': payroll.paymentMethod || '',
         'Bank Name': payroll.bankDetails?.bankName || '',
         'Account Number': payroll.bankDetails?.accountNumber || '',
-        'IFSC Code': payroll.bankDetails?.ifscCode || '',
-        'Transaction ID': payroll.transactionId || '',
-        'HRA': payroll.hra || 0,
-        'DA': payroll.da || 0,
-        'Conveyance': payroll.conveyance || 0,
-        'Medical Allowance': payroll.medicalAllowance || 0,
-        'Special Allowance': payroll.specialAllowance || 0,
-        'TDS': payroll.tds || 0,
-        'PF': payroll.pf || 0,
-        'Professional Tax': payroll.professionalTax || 0,
-        'Remarks': payroll.notes || '',
-        'Email': payroll.employeeEmail || '',
-        'Phone': payroll.employeePhone || '',
-        'Payment Notes': payroll.paymentNotes || ''
+        'Transaction ID': payroll.transactionId || ''
       }];
       
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(excelData);
-      
       XLSX.utils.book_append_sheet(wb, ws, 'Payroll Details');
       
       const filename = `Payroll_${payroll.employeeId}_${payroll.month}_${payroll.year}.xlsx`;
-      
       XLSX.writeFile(wb, filename);
       
-      alert(`✅ Payroll exported to Excel!\nFile: ${filename}`);
+      alert(`✅ Payroll exported to Excel!`);
       
     } catch (error) {
       console.error('Export single payroll error:', error);
@@ -611,7 +570,7 @@ const fetchPayrolls = async () => {
     }
   };
 
-  // ==================== EXCEL IMPORT FUNCTIONS ====================
+  // Import Functions
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -645,23 +604,12 @@ const fetchPayrolls = async () => {
         try {
           const data = e.target.result;
           const workbook = XLSX.read(data, { type: 'binary' });
-          
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
-          
           const jsonData = XLSX.utils.sheet_to_json(worksheet);
           
           if (jsonData.length === 0) {
             alert('❌ No data found in the Excel file');
-            return;
-          }
-          
-          const requiredColumns = ['Employee ID', 'Employee Name', 'Month', 'Year', 'Basic Salary', 'Net Salary'];
-          const firstRow = jsonData[0];
-          const missingColumns = requiredColumns.filter(col => !Object.keys(firstRow).includes(col));
-          
-          if (missingColumns.length > 0) {
-            alert(`❌ Missing required columns in Excel file:\n\n${missingColumns.join(', ')}\n\nPlease check the file format.`);
             return;
           }
           
@@ -706,14 +654,8 @@ const fetchPayrolls = async () => {
                 }
               };
               
-              const response = await axiosInstance.post('/admin/payroll/import', payrollData);
-              
-              if (response.data.success) {
-                successCount++;
-              } else {
-                failedCount++;
-                errors.push(`Row ${i + 1}: ${response.data.error}`);
-              }
+              await axiosInstance.post('/admin/payroll/import', payrollData);
+              successCount++;
               
             } catch (rowError) {
               failedCount++;
@@ -730,7 +672,7 @@ const fetchPayrolls = async () => {
           fetchPayrolls();
           fetchStats();
           
-          alert(`✅ Import completed!\n\nSuccess: ${successCount}\nFailed: ${failedCount}\n\n${errors.length > 0 ? 'First few errors:\n' + errors.slice(0, 5).join('\n') : ''}`);
+          alert(`✅ Import completed!\n\nSuccess: ${successCount}\nFailed: ${failedCount}`);
           
           setShowImportModal(false);
           setImportFile(null);
@@ -765,13 +707,12 @@ const fetchPayrolls = async () => {
       'Year': '2024',
       'Basic Salary': 50000,
       'Net Salary': 55000,
-      'Status': 'Paid',
-      'Payment Date': '2024-01-31',
+      'Status': 'Pending',
+      'Payment Date': '',
       'Payment Method': 'Bank Transfer',
-      'Bank Name': 'HBL',
-      'Account Number': '1234567890123',
-      'IFSC Code': 'HBL1234567',
-      'Transaction ID': 'TRX20240131001',
+      'Bank Name': '',
+      'Account Number': '',
+      'Transaction ID': '',
       'HRA': 5000,
       'DA': 3000,
       'Conveyance': 2000,
@@ -780,300 +721,20 @@ const fetchPayrolls = async () => {
       'TDS': 2500,
       'PF': 4000,
       'Professional Tax': 200,
-      'Remarks': 'Regular payroll'
+      'Remarks': ''
     }];
     
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(templateData);
-    
-    const instructions = [
-      ['Payroll Import Template Instructions'],
-      [''],
-      ['1. Fill in the data according to the template'],
-      ['2. Required fields: Employee ID, Employee Name, Month, Year, Basic Salary, Net Salary'],
-      ['3. Status can be: Pending, Paid, Failed'],
-      ['4. Month should be full name: January, February, etc.'],
-      ['5. Year should be 4 digits: 2024'],
-      ['6. Salary fields should be numbers only'],
-      ['7. Remove this instructions sheet before importing'],
-      [''],
-      ['Note: Existing records with same Employee ID, Month, Year will be updated']
-    ];
-    
-    const wsInstructions = XLSX.utils.aoa_to_sheet(instructions);
-    
-    XLSX.utils.book_append_sheet(wb, wsInstructions, 'Instructions');
     XLSX.utils.book_append_sheet(wb, ws, 'Template');
-    
     XLSX.writeFile(wb, 'Payroll_Import_Template.xlsx');
     
-    alert('📋 Template downloaded!\n\nPlease follow the instructions in the "Instructions" sheet.');
+    alert('📋 Template downloaded!');
   };
 
-  // ==================== PAYSLIP TRANSCRIPT ====================
-  const handleDownloadPayslipWithTranscript = async (payrollId) => {
-    try {
-      const response = await axiosInstance.get(`/admin/payroll/${payrollId}/payslip-transcript`);
-      const payroll = response.data.data;
-      
-      const transcriptHTML = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Payslip Transcript - ${payroll.employeeName}</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
-            .header { text-align: center; border-bottom: 3px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
-            .company-name { font-size: 28px; font-weight: bold; color: #1e40af; }
-            .document-title { font-size: 22px; margin: 10px 0; color: #333; }
-            .section { margin-bottom: 25px; }
-            .section-title { font-size: 18px; font-weight: bold; color: #1e40af; border-bottom: 2px solid #ccc; padding-bottom: 5px; margin-bottom: 15px; }
-            .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
-            .info-item { margin-bottom: 8px; }
-            .label { font-weight: bold; color: #555; }
-            .value { color: #333; }
-            .amount { font-weight: bold; color: #059669; }
-            .status-paid { color: #059669; font-weight: bold; }
-            .status-pending { color: #d97706; font-weight: bold; }
-            .transaction-details { background-color: #f0f9ff; padding: 15px; border-radius: 8px; border-left: 4px solid #3b82f6; }
-            .timestamp { font-style: italic; color: #666; }
-            .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc; text-align: center; color: #666; font-size: 14px; }
-            .signature { margin-top: 40px; }
-            .signature-line { width: 300px; border-top: 1px solid #333; margin-top: 40px; }
-            @media print {
-              body { margin: 20px; }
-              .no-print { display: none; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div class="company-name">COMPANY NAME</div>
-            <div class="document-title">PAYSLIP TRANSCRIPT</div>
-            <div>Official Salary Payment Record</div>
-          </div>
-          
-          <div class="section">
-            <div class="section-title">Employee Information</div>
-            <div class="info-grid">
-              <div class="info-item">
-                <span class="label">Employee Name:</span>
-                <span class="value">${payroll.employeeName || 'N/A'}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">Employee ID:</span>
-                <span class="value">${payroll.employeeId || 'N/A'}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">Department:</span>
-                <span class="value">${payroll.employeeDepartment || 'N/A'}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">Period:</span>
-                <span class="value">${payroll.month || 'N/A'} ${payroll.year || 'N/A'}</span>
-              </div>
-            </div>
-          </div>
-          
-          <div class="section">
-            <div class="section-title">Salary Breakdown</div>
-            <div class="info-grid">
-              <div class="info-item">
-                <span class="label">Basic Salary:</span>
-                <span class="value amount">PKR ${(payroll.basicSalary || 0).toLocaleString()}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">Net Salary:</span>
-                <span class="value amount">PKR ${(payroll.netSalary || 0).toLocaleString()}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">House Rent Allowance (HRA):</span>
-                <span class="value">PKR ${(payroll.hra || 0).toLocaleString()}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">Dearness Allowance (DA):</span>
-                <span class="value">PKR ${(payroll.da || 0).toLocaleString()}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">Conveyance Allowance:</span>
-                <span class="value">PKR ${(payroll.conveyance || 0).toLocaleString()}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">Medical Allowance:</span>
-                <span class="value">PKR ${(payroll.medicalAllowance || 0).toLocaleString()}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">Special Allowance:</span>
-                <span class="value">PKR ${(payroll.specialAllowance || 0).toLocaleString()}</span>
-              </div>
-            </div>
-          </div>
-          
-          <div class="section">
-            <div class="section-title">Deductions</div>
-            <div class="info-grid">
-              <div class="info-item">
-                <span class="label">Tax Deducted at Source (TDS):</span>
-                <span class="value">PKR ${(payroll.tds || 0).toLocaleString()}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">Provident Fund (PF):</span>
-                <span class="value">PKR ${(payroll.pf || 0).toLocaleString()}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">Professional Tax:</span>
-                <span class="value">PKR ${(payroll.professionalTax || 0).toLocaleString()}</span>
-              </div>
-            </div>
-          </div>
-          
-          <div class="section">
-            <div class="section-title">Payment Information</div>
-            <div class="info-grid">
-              <div class="info-item">
-                <span class="label">Payment Status:</span>
-                <span class="value ${payroll.paymentStatus === 'Paid' ? 'status-paid' : 'status-pending'}">
-                  ${payroll.paymentStatus || 'Pending'}
-                </span>
-              </div>
-              <div class="info-item">
-                <span class="label">Payment Method:</span>
-                <span class="value">${payroll.paymentMethod || 'N/A'}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">Payment Date:</span>
-                <span class="value">${payroll.paymentDate || 'N/A'}</span>
-              </div>
-              ${payroll.transactionId ? `
-              <div class="info-item">
-                <span class="label">Transaction ID:</span>
-                <span class="value">${payroll.transactionId}</span>
-              </div>
-              ` : ''}
-            </div>
-          </div>
-          
-          ${payroll.bankDetails ? `
-          <div class="section">
-            <div class="section-title">Bank Transfer Details</div>
-            <div class="info-grid">
-              <div class="info-item">
-                <span class="label">Bank Name:</span>
-                <span class="value">${payroll.bankDetails.bankName || 'N/A'}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">Account Number:</span>
-                <span class="value">${payroll.bankDetails.accountNumber || 'N/A'}</span>
-              </div>
-              ${payroll.bankDetails.ifscCode ? `
-              <div class="info-item">
-                <span class="label">IFSC Code:</span>
-                <span class="value">${payroll.bankDetails.ifscCode}</span>
-              </div>
-              ` : ''}
-            </div>
-          </div>
-          ` : ''}
-          
-          <div class="section">
-            <div class="section-title">Transaction Transcript</div>
-            <div class="transaction-details">
-              <div class="info-item">
-                <span class="label">Salary Processing Time:</span>
-                <span class="value timestamp">${new Date().toLocaleString()}</span>
-              </div>
-              
-              ${payroll.paymentStatus === 'Paid' ? `
-              <div class="info-item">
-                <span class="label">Transaction Confirmation:</span>
-                <span class="value amount">✅ SALARY TRANSFER CONFIRMED</span>
-              </div>
-              <div class="info-item">
-                <span class="label">Amount Transferred:</span>
-                <span class="value amount">PKR ${(payroll.netSalary || 0).toLocaleString()}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">Transferred to:</span>
-                <span class="value">${payroll.employeeName}</span>
-              </div>
-              ${payroll.bankDetails ? `
-              <div class="info-item">
-                <span class="label">Bank Account:</span>
-                <span class="value">${payroll.bankDetails.bankName || 'N/A'} - Account ending with ${payroll.bankDetails.accountNumber ? payroll.bankDetails.accountNumber.slice(-4) : 'N/A'}</span>
-              </div>
-              ` : ''}
-              ${payroll.transactionId ? `
-              <div class="info-item">
-                <span class="label">Reference Number:</span>
-                <span class="value">${payroll.transactionId}</span>
-              </div>
-              ` : ''}
-              <div class="info-item">
-                <span class="label">Transfer Completion:</span>
-                <span class="value">Salary successfully transferred to employee's bank account at ${new Date().toLocaleTimeString()} on ${new Date().toLocaleDateString()}</span>
-              </div>
-              ` : `
-              <div class="info-item">
-                <span class="label">Payment Status:</span>
-                <span class="value status-pending">⏳ PENDING: Salary transfer not yet processed</span>
-              </div>
-              <div class="info-item">
-                <span class="label">Next Steps:</span>
-                <span class="value">Salary will be transferred once payment is processed by the finance department.</span>
-              </div>
-              `}
-            </div>
-          </div>
-          
-          <div class="section">
-            <div class="info-item">
-              <span class="label">Remarks:</span>
-              <span class="value">${payroll.notes || 'No remarks'}</span>
-            </div>
-          </div>
-          
-          <div class="signature">
-            <div class="info-item">
-              <span class="label">Authorized Signatory:</span>
-            </div>
-            <div class="signature-line"></div>
-            <div class="info-item timestamp">
-              Finance Department
-            </div>
-          </div>
-          
-          <div class="footer">
-            <div>Generated on: ${new Date().toLocaleDateString()}</div>
-            <div>Generated by: Admin Payroll System</div>
-            <div>This is an official document - For official use only</div>
-            <div class="no-print">
-              <button onclick="window.print()" style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 20px;">
-                🖨️ Print Transcript
-              </button>
-            </div>
-          </div>
-        </body>
-        </html>
-      `;
-      
-      const printWindow = window.open('', '_blank');
-      printWindow.document.write(transcriptHTML);
-      printWindow.document.close();
-      
-      printWindow.onload = function() {
-        printWindow.focus();
-      };
-      
-    } catch (error) {
-      console.error('Payslip transcript error:', error);
-      alert('❌ Failed to generate payslip transcript: ' + (error.response?.data?.error || error.message));
-    }
-  };
-
-  // ==================== GENERATE PAYROLL FUNCTIONS ====================
+  // Payroll Functions
   const handleGeneratePayroll = async (e) => {
     e.preventDefault();
-    console.log('🚀 handleGeneratePayroll called');
     
     try {
       setGenerating(true);
@@ -1097,11 +758,7 @@ const fetchPayrolls = async () => {
         year: parseInt(selectedYear)
       };
       
-      console.log('📦 Sending payload:', payload);
-      
       const response = await axiosInstance.post('/admin/payroll/generate', payload);
-      
-      console.log('✅ Response:', response.data);
       
       if (response.data.success) {
         alert('✅ Payroll generated successfully!');
@@ -1117,14 +774,8 @@ const fetchPayrolls = async () => {
       }
       
     } catch (error) {
-      console.error('❌ Error:', error);
-      console.error('❌ Error response:', error.response?.data);
-      
-      if (error.response?.data?.error) {
-        alert(`❌ ${error.response.data.error}`);
-      } else {
-        alert(`❌ Error: ${error.message}`);
-      }
+      console.error('Error:', error);
+      alert(`❌ ${error.response?.data?.error || error.message}`);
     } finally {
       setGenerating(false);
     }
@@ -1148,8 +799,6 @@ const fetchPayrolls = async () => {
         })
         .map(emp => emp._id || emp.id)
         .filter(Boolean);
-      
-      console.log('📤 Bulk generating', employeeIds.length, 'payroll IDs');
       
       if (employeeIds.length === 0) {
         alert('❌ No active employees found');
@@ -1177,14 +826,13 @@ const fetchPayrolls = async () => {
       fetchStats();
       
     } catch (error) {
-      console.error('❌ Bulk error:', error);
+      console.error('Bulk error:', error);
       alert(error.response?.data?.error || 'Failed');
     } finally {
       setGenerating(false);
     }
   };
 
-  // ==================== OTHER FUNCTIONS ====================
   const handleDelete = async (id) => {
     if (!confirm('🗑️ Are you sure you want to delete this payroll record?')) {
       return;
@@ -1249,7 +897,7 @@ const fetchPayrolls = async () => {
         }
       });
       
-      const res = await axiosInstance.put(`/admin/payroll/${selectedPayroll._id}`, updatedData);
+      await axiosInstance.put(`/admin/payroll/${selectedPayroll._id}`, updatedData);
       
       setShowUpdateModal(false);
       setSelectedPayroll(null);
@@ -1278,122 +926,106 @@ const fetchPayrolls = async () => {
     }
   };
 
-  const handleOpenBankTransferModal = (payrollId) => {
-    setSelectedForPayment(payrollId);
-    setPaymentMethod('Bank Transfer');
-    setPaymentDetails({
-      accountNumber: '',
-      bankName: '',
-      transactionId: '',
-      notes: ''
-    });
-    setShowBankTransferModal(true);
-  };
-
-  const handleOpenCashModal = (payrollId) => {
-    setSelectedForPayment(payrollId);
-    setShowCashModal(true);
-  };
-
-  const handleBankTransfer = async (e) => {
-    e.preventDefault();
-    
-    if (!selectedForPayment) return;
-    
-    if (!paymentDetails.accountNumber) {
-      alert('❌ Please enter account number');
-      return;
-    }
-    
-    if (!paymentDetails.bankName) {
-      alert('❌ Please enter bank name');
-      return;
-    }
-    
-    try {
-      setPaymentProcessing(true);
-      
-      const payroll = payrolls.find(p => p._id === selectedForPayment);
-      
-      if (!payroll) {
-        alert('❌ Payroll not found');
-        setPaymentProcessing(false);
-        return;
-      }
-      
-      const transactionId = paymentDetails.transactionId || `TRX${Date.now()}${Math.floor(Math.random() * 1000)}`;
-      
-      const response = await axiosInstance.patch(`/admin/payroll/${selectedForPayment}/bank-transfer`, {
-        paymentStatus: 'Paid',
-        paymentDate: new Date().toISOString(),
-        paymentMethod: 'Bank Transfer',
-        transactionId: transactionId,
-        paymentNotes: `Bank transfer to ${paymentDetails.bankName}. ${paymentDetails.notes}`,
-        bankDetails: {
-          accountNumber: paymentDetails.accountNumber,
-          bankName: paymentDetails.bankName,
-          ifscCode: paymentDetails.ifscCode || ''
-        }
-      });
-      
-      alert(`✅ Bank Transfer Successful!\n\nTransaction ID: ${transactionId}\nAmount: PKR ${payroll.netSalary.toLocaleString()}\nAccount: ${paymentDetails.accountNumber}\nBank: ${paymentDetails.bankName}\n\nEmail receipt has been sent to employee.`);
-      
-      setShowBankTransferModal(false);
-      setSelectedForPayment(null);
-      setPaymentDetails({
-        accountNumber: '',
-        bankName: '',
-        transactionId: '',
-        notes: ''
-      });
-      
-      fetchPayrolls();
-      fetchStats();
-      
-    } catch (error) {
-      console.error('Bank transfer error:', error);
-      alert('❌ Bank transfer failed: ' + (error.response?.data?.error || error.message));
-    } finally {
-      setPaymentProcessing(false);
-    }
-  };
-
-  const handleCashPayment = async () => {
-    if (!selectedForPayment) return;
-    
-    try {
-      const payroll = payrolls.find(p => p._id === selectedForPayment);
-      
-      if (!payroll) {
-        alert('❌ Payroll not found');
-        return;
-      }
-      
-      await axiosInstance.patch(`/admin/payroll/${selectedForPayment}/status`, {
-        paymentStatus: 'Paid',
-        paymentDate: new Date().toISOString(),
-        paymentMethod: 'Cash',
-        transactionId: `CASH${Date.now()}`,
-        paymentNotes: 'Cash payment received manually'
-      });
-      
-      setShowCashModal(false);
-      setSelectedForPayment(null);
-      
-      fetchPayrolls();
-      fetchStats();
-      
-      alert('✅ Status updated to Paid (Cash Payment)');
-    } catch (error) {
-      alert('❌ Update failed: ' + (error.response?.data?.error || error.message));
-    }
-  };
-
   const handleDownloadPayslip = async (payrollId) => {
     try {
       window.open(`/admin/payroll/${payrollId}/payslip-pdf`, '_blank');
     } catch (error) {
       alert('❌ Failed to download payslip');
+    }
+  };
+
+  const handleDownloadPayslipWithTranscript = async (payrollId) => {
+    try {
+      const response = await axiosInstance.get(`/admin/payroll/${payrollId}/payslip-transcript`);
+      const payroll = response.data.data;
+      
+      const transcriptHTML = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Payslip Transcript - ${payroll.employeeName}</title>
+          <style>
+            body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 40px; line-height: 1.6; background: #f8fafc; }
+            .container { max-width: 800px; margin: 0 auto; background: white; border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden; }
+            .header { background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%); color: white; padding: 30px; text-align: center; }
+            .company-name { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+            .document-title { font-size: 20px; opacity: 0.9; }
+            .content { padding: 30px; }
+            .section { margin-bottom: 30px; }
+            .section-title { font-size: 18px; font-weight: 600; color: #4f46e5; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 20px; }
+            .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+            .info-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
+            .label { font-weight: 500; color: #64748b; }
+            .value { color: #1e293b; font-weight: 500; }
+            .amount { font-weight: 700; color: #10b981; }
+            .status-paid { color: #10b981; font-weight: 700; }
+            .status-pending { color: #f59e0b; font-weight: 700; }
+            .footer { background: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 12px; }
+            @media print {
+              body { background: white; margin: 0; }
+              .container { box-shadow: none; }
+              button { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <div class="company-name">COMPANY NAME</div>
+              <div class="document-title">PAYSLIP TRANSCRIPT</div>
+            </div>
+            
+            <div class="content">
+              <div class="section">
+                <div class="section-title">Employee Information</div>
+                <div class="info-grid">
+                  <div class="info-item"><span class="label">Employee Name:</span><span class="value">${payroll.employeeName || 'N/A'}</span></div>
+                  <div class="info-item"><span class="label">Employee ID:</span><span class="value">${payroll.employeeId || 'N/A'}</span></div>
+                  <div class="info-item"><span class="label">Department:</span><span class="value">${payroll.employeeDepartment || 'N/A'}</span></div>
+                  <div class="info-item"><span class="label">Period:</span><span class="value">${payroll.month || 'N/A'} ${payroll.year || 'N/A'}</span></div>
+                </div>
+              </div>
+              
+              <div class="section">
+                <div class="section-title">Salary Breakdown</div>
+                <div class="info-grid">
+                  <div class="info-item"><span class="label">Basic Salary:</span><span class="value amount">PKR ${(payroll.basicSalary || 0).toLocaleString()}</span></div>
+                  <div class="info-item"><span class="label">Net Salary:</span><span class="value amount">PKR ${(payroll.netSalary || 0).toLocaleString()}</span></div>
+                  <div class="info-item"><span class="label">HRA:</span><span class="value">PKR ${(payroll.hra || 0).toLocaleString()}</span></div>
+                  <div class="info-item"><span class="label">DA:</span><span class="value">PKR ${(payroll.da || 0).toLocaleString()}</span></div>
+                  <div class="info-item"><span class="label">Conveyance:</span><span class="value">PKR ${(payroll.conveyance || 0).toLocaleString()}</span></div>
+                  <div class="info-item"><span class="label">Medical Allowance:</span><span class="value">PKR ${(payroll.medicalAllowance || 0).toLocaleString()}</span></div>
+                </div>
+              </div>
+              
+              <div class="section">
+                <div class="section-title">Payment Information</div>
+                <div class="info-grid">
+                  <div class="info-item"><span class="label">Payment Status:</span><span class="${payroll.paymentStatus === 'Paid' ? 'status-paid' : 'status-pending'}">${payroll.paymentStatus || 'Pending'}</span></div>
+                  <div class="info-item"><span class="label">Payment Method:</span><span class="value">${payroll.paymentMethod || 'N/A'}</span></div>
+                  <div class="info-item"><span class="label">Payment Date:</span><span class="value">${payroll.paymentDate || 'N/A'}</span></div>
+                  ${payroll.transactionId ? `<div class="info-item"><span class="label">Transaction ID:</span><span class="value">${payroll.transactionId}</span></div>` : ''}
+                </div>
+              </div>
+            </div>
+            
+            <div class="footer">
+              <div>Generated on: ${new Date().toLocaleDateString()}</div>
+              <div>This is an official document</div>
+              <button onclick="window.print()" style="margin-top: 16px; padding: 10px 24px; background: #4f46e5; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 500;">🖨️ Print Transcript</button>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+      
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(transcriptHTML);
+      printWindow.document.close();
+      
+    } catch (error) {
+      console.error('Payslip transcript error:', error);
+      alert('❌ Failed to generate payslip transcript');
     }
   };
 
@@ -1403,7 +1035,6 @@ const fetchPayrolls = async () => {
     }
   };
 
-  // ==================== EMPLOYEE STATS ====================
   const getActiveEmployeesCount = () => {
     return employees.filter(emp => {
       const status = getEmployeeStatus(emp);
@@ -1434,67 +1065,80 @@ const fetchPayrolls = async () => {
     return [...new Set(departments)];
   };
 
-  // Loading State
   if (loading && payrolls.length === 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="text-center p-8">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-xl font-bold text-gray-700">Loading Payroll Dashboard...</p>
-          <p className="text-gray-500 text-sm">Your enterprise payroll system is ready</p>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-slate-600 font-medium">Loading Payroll Dashboard...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 p-4 lg:p-6">
+    <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <div className="max-w-7xl mx-auto mb-8">
-        <div className="text-center md:text-left mb-6">
-          <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-gray-800 via-blue-800 to-indigo-800 bg-clip-text text-transparent mb-2">
-            💰 Payroll Dashboard
-          </h1>
-          <p className="text-gray-600 font-medium max-w-2xl mx-auto md:mx-0 text-sm">
-            Complete payroll management with bulk payments & bank transfers
-          </p>
+      <div className="bg-white border-b border-slate-200 px-6 py-5">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-semibold text-slate-800 flex items-center gap-2">
+                <DollarSign className="text-indigo-500 text-sm" />
+                Payroll Dashboard
+              </h1>
+              <p className="text-sm text-slate-500 mt-1">
+                Complete payroll management with bulk payments & bank transfers
+              </p>
+            </div>
+            <button
+              onClick={fetchPayrolls}
+              disabled={loading}
+              className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 shadow-sm"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
         </div>
+      </div>
 
+      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {/* Employee Summary */}
-        <div className="mb-6 p-4 bg-white/80 backdrop-blur-xl rounded-2xl shadow-lg border border-white/50">
+        <div className="bg-white rounded-lg border border-slate-200 p-5">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{getActiveEmployeesCount()}</div>
-              <div className="text-xs font-medium text-gray-500">Active Employees</div>
+              <div className="text-2xl font-bold text-indigo-600">{getActiveEmployeesCount()}</div>
+              <div className="text-xs text-slate-500 font-medium">Active Employees</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">
+              <div className="text-2xl font-bold text-emerald-600">
                 {getActiveEmployeesCount() - getEmployeesWithoutBankDetails()}
               </div>
-              <div className="text-xs font-medium text-gray-500">With Bank Details</div>
+              <div className="text-xs text-slate-500 font-medium">With Bank Details</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-amber-600">
                 {getEmployeesWithoutBankDetails()}
               </div>
-              <div className="text-xs font-medium text-gray-500">Without Bank Details</div>
+              <div className="text-xs text-slate-500 font-medium">Without Bank Details</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">
+              <div className="text-2xl font-bold text-indigo-600">
                 {getUniqueDepartments().length}
               </div>
-              <div className="text-xs font-medium text-gray-500">Departments</div>
+              <div className="text-xs text-slate-500 font-medium">Departments</div>
             </div>
           </div>
-          <div className="mt-3 pt-3 border-t border-gray-200">
+          <div className="mt-4 pt-3 border-t border-slate-100">
             <button
               onClick={refreshEmployees}
               disabled={refreshingEmployees}
-              className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-200 transition-colors flex items-center gap-1 mx-auto"
+              className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-200 transition-colors flex items-center gap-1 mx-auto"
             >
               {refreshingEmployees ? (
                 <>
-                  <div className="animate-spin rounded-full h-3 w-3 border-t-2 border-blue-600"></div>
+                  <div className="animate-spin rounded-full h-3 w-3 border-t-2 border-indigo-600"></div>
                   Refreshing...
                 </>
               ) : (
@@ -1508,10 +1152,10 @@ const fetchPayrolls = async () => {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap gap-3 justify-center md:justify-start mb-6">
+        <div className="flex flex-wrap gap-3">
           <button
             onClick={handleOpenBulkPaymentModal}
-            className="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-300 flex items-center gap-2 text-sm"
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 shadow-sm"
           >
             <Send className="w-4 h-4" />
             Bulk Payment
@@ -1519,7 +1163,7 @@ const fetchPayrolls = async () => {
           
           <button
             onClick={() => setShowBulkModal(true)}
-            className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-300 flex items-center gap-2 text-sm"
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 shadow-sm"
           >
             <Users className="w-4 h-4" />
             Bulk Generate
@@ -1527,7 +1171,7 @@ const fetchPayrolls = async () => {
           
           <button
             onClick={() => setShowGenerateModal(true)}
-            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-300 flex items-center gap-2 text-sm"
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 shadow-sm"
           >
             <User className="w-4 h-4" />
             Individual
@@ -1536,7 +1180,7 @@ const fetchPayrolls = async () => {
           <button
             onClick={handleExportToExcel}
             disabled={exportLoading || payrolls.length === 0}
-            className="px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-300 flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 shadow-sm"
           >
             {exportLoading ? (
               <>
@@ -1553,7 +1197,7 @@ const fetchPayrolls = async () => {
           
           <button
             onClick={() => setShowImportModal(true)}
-            className="px-6 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-300 flex items-center gap-2 text-sm"
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 shadow-sm"
           >
             <Upload className="w-4 h-4" />
             Import Excel
@@ -1561,62 +1205,58 @@ const fetchPayrolls = async () => {
           
           <button
             onClick={handleDownloadTemplate}
-            className="px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-300 flex items-center gap-2 text-sm"
+            className="px-4 py-2 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2"
           >
             <FileSpreadsheet className="w-4 h-4" />
             Template
           </button>
         </div>
-      </div>
 
-      {/* Stats Cards */}
-      <div className="max-w-7xl mx-auto grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 px-2">
-        <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-4 shadow-lg border border-white/50 hover:shadow-xl transition-all duration-300 group">
-          <div className="text-2xl font-bold text-gray-900 mb-1 group-hover:text-blue-600 transition-colors">
-            {stats.totalPayrolls || 0}
-          </div>
-          <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Payrolls</div>
+        {/* Stats Cards with Colored Icons */}
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <KpiCard 
+            label="Total Payrolls" 
+            value={stats.totalPayrolls || 0} 
+            sub="All time records"
+            icon={<FileSpreadsheet className="w-5 h-5 text-white" />}
+            iconBg="bg-indigo-500"
+          />
+          <KpiCard 
+            label="Paid" 
+            value={stats.paidPayments || 0} 
+            sub="Completed payments"
+            icon={<CheckCircle className="w-5 h-5 text-white" />}
+            iconBg="bg-emerald-500"
+          />
+          <KpiCard 
+            label="Pending" 
+            value={stats.pendingPayments || 0} 
+            sub="Awaiting approval"
+            icon={<Clock className="w-5 h-5 text-white" />}
+            iconBg="bg-amber-500"
+          />
+          <KpiCard 
+            label="Total Amount" 
+            value={`PKR ${(stats.totalAmount || 0).toLocaleString()}`} 
+            sub="Overall payroll"
+            icon={<DollarSign className="w-5 h-5 text-white" />}
+            iconBg="bg-purple-500"
+          />
         </div>
-        <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-4 shadow-lg border border-white/50 hover:shadow-xl transition-all duration-300 group">
-          <div className="text-2xl font-bold text-emerald-600 mb-1">{stats.paidPayments || 0}</div>
-          <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-            <CheckCircle className="w-3 h-3 inline mr-1" />
-            Paid
-          </div>
-        </div>
-        <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-4 shadow-lg border border-white/50 hover:shadow-xl transition-all duration-300 group">
-          <div className="text-2xl font-bold text-amber-600 mb-1">{stats.pendingPayments || 0}</div>
-          <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-            <Clock className="w-3 h-3 inline mr-1" />
-            Pending
-          </div>
-        </div>
-        <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-4 shadow-lg border border-white/50 hover:shadow-xl transition-all duration-300 group">
-          <div className="text-2xl font-bold text-blue-600 mb-1">
-            PKR {(stats.totalAmount || 0).toLocaleString()}
-          </div>
-          <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-            <DollarSign className="w-3 h-3 inline mr-1" />
-            Total Amount
-          </div>
-        </div>
-      </div>
 
-      {/* Filters & Table */}
-      <div className="max-w-7xl mx-auto space-y-6 px-2">
         {/* Filters */}
-        <div className="bg-white/90 backdrop-blur-xl rounded-2xl p-4 shadow-xl border border-white/50">
-          <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-            <Filter className="w-4 h-4" />
+        <div className="bg-white rounded-lg border border-slate-200 p-5">
+          <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
+            <Filter className="w-4 h-4 text-indigo-500" />
             Filters
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Year</label>
+              <label className="block text-xs font-medium text-slate-700 mb-1">Year</label>
               <select
                 value={filters.year}
                 onChange={(e) => setFilters({ ...filters, year: e.target.value, page: 1 })}
-                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
               >
                 <option value="">All Years</option>
                 {monthsYears.years?.map(year => (
@@ -1626,11 +1266,11 @@ const fetchPayrolls = async () => {
             </div>
             
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Month</label>
+              <label className="block text-xs font-medium text-slate-700 mb-1">Month</label>
               <select
                 value={filters.month}
                 onChange={(e) => setFilters({ ...filters, month: e.target.value, page: 1 })}
-                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
               >
                 <option value="all">All Months</option>
                 {monthsYears.months?.map(month => (
@@ -1640,11 +1280,11 @@ const fetchPayrolls = async () => {
             </div>
             
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+              <label className="block text-xs font-medium text-slate-700 mb-1">Status</label>
               <select
                 value={filters.status}
                 onChange={(e) => setFilters({ ...filters, status: e.target.value, page: 1 })}
-                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
               >
                 <option value="all">All Status</option>
                 <option value="Pending">Pending</option>
@@ -1653,10 +1293,10 @@ const fetchPayrolls = async () => {
               </select>
             </div>
             
-            <div className="flex items-end gap-2">
+            <div className="flex items-end">
               <button
                 onClick={() => setFilters({ year: '', month: 'all', status: 'all', page: 1, limit: 10 })}
-                className="w-full px-3 py-2 bg-gray-500 text-white font-medium rounded-lg hover:bg-gray-600 transition-colors text-sm flex items-center justify-center gap-2"
+                className="w-full px-3 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors flex items-center justify-center gap-2"
               >
                 <RefreshCw className="w-3 h-3" />
                 Reset
@@ -1666,65 +1306,47 @@ const fetchPayrolls = async () => {
         </div>
 
         {/* Payroll Table */}
-        <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl border border-white/50 overflow-hidden">
-          <div className="p-4 bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 text-white">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <FileSpreadsheet className="w-5 h-5" />
-                Payroll Records
-              </h2>
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-lg text-sm font-medium">
-                  {payrolls.length} of {pagination.total}
-                </span>
-                <span className="px-2 py-1 bg-white/10 rounded-lg text-xs">
-                  Page {pagination.currentPage} of {pagination.totalPages}
-                </span>
+        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
+                  <FileSpreadsheet className="text-indigo-500 text-sm" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">Payroll Records</p>
+                  <p className="text-xs text-slate-500">{payrolls.length} of {pagination.total} records</p>
+                </div>
+              </div>
+              <div className="text-sm text-slate-500">
+                Page {pagination.currentPage} of {pagination.totalPages}
               </div>
             </div>
           </div>
           
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+              <thead className="bg-slate-50 border-b border-slate-100">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    <User className="w-3 h-3 inline mr-1" />
-                    Employee
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    <Calendar className="w-3 h-3 inline mr-1" />
-                    Period
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    💵 Basic
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    <DollarSign className="w-3 h-3 inline mr-1" />
-                    Net
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    📊 Status
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    <Building className="w-3 h-3 inline mr-1" />
-                    Bank
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    ⚙️ Actions
-                  </th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Employee</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Period</th>
+                  <th className="px-5 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Basic</th>
+                  <th className="px-5 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Net</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Bank</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-slate-100">
                 {payrolls.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={7} className="px-5 py-12 text-center text-slate-500">
                       <div className="flex flex-col items-center">
-                        <FileSpreadsheet className="w-12 h-12 text-gray-400 mb-2" />
+                        <FileSpreadsheet className="w-12 h-12 text-slate-300 mb-3" />
                         <p className="mb-2">No payroll records found</p>
                         <button 
                           onClick={() => setShowGenerateModal(true)}
-                          className="text-blue-600 hover:text-blue-800 font-medium"
+                          className="text-indigo-600 hover:text-indigo-700 font-medium text-sm"
                         >
                           Click to generate payroll
                         </button>
@@ -1733,87 +1355,72 @@ const fetchPayrolls = async () => {
                   </tr>
                 ) : (
                   payrolls.map((payroll) => (
-                    <tr key={payroll._id} className="hover:bg-blue-50 transition-all duration-200">
-                      <td className="px-4 py-3">
-                        <div className="font-semibold text-sm text-gray-900">{payroll.employeeName || 'Unknown'}</div>
-                        <div className="text-xs text-gray-500 mt-0.5">{payroll.employeeDepartment || 'N/A'}</div>
-                        <div className="text-xs text-gray-400">{payroll.employeeId || ''}</div>
+                    <tr key={payroll._id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-5 py-4">
+                        <div className="font-medium text-sm text-slate-800">{payroll.employeeName || 'Unknown'}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">{payroll.employeeDepartment || 'N/A'}</div>
+                        <div className="text-xs text-slate-400">{payroll.employeeId || ''}</div>
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="font-semibold text-sm">{payroll.month || 'N/A'}</div>
-                        <div className="text-xs text-gray-500">{payroll.year || 'N/A'}</div>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="text-sm font-semibold text-blue-600">
+                      <td className="px-5 py-4">
+                        <div className="font-medium text-sm text-slate-800">{payroll.month || 'N/A'}</div>
+                        <div className="text-xs text-slate-500">{payroll.year || 'N/A'}</div>
+                       </td>
+                      <td className="px-5 py-4 text-right">
+                        <div className="text-sm font-semibold text-slate-800">
                           PKR {(payroll.basicSalary || 0).toLocaleString()}
                         </div>
-                      </td>
-                      <td className="px-4 py-3 text-right">
+                       </td>
+                      <td className="px-5 py-4 text-right">
                         <div className="text-sm font-bold text-emerald-600">
                           PKR {(payroll.netSalary || 0).toLocaleString()}
                         </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded-lg text-xs font-medium ${
-                          payroll.paymentStatus === 'Paid' 
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
-                            : payroll.paymentStatus === 'Pending'
-                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                            : 'bg-gray-100 text-gray-800 border border-gray-200'
-                        }`}>
-                          {payroll.paymentStatus === 'Paid' ? '✅ Paid' : 
-                           payroll.paymentStatus === 'Pending' ? '⏳ Pending' : 
-                           '❌ Failed'}
-                        </span>
+                       </td>
+                      <td className="px-5 py-4">
+                        <Badge variant={
+                          payroll.paymentStatus === 'Paid' ? 'success' : 
+                          payroll.paymentStatus === 'Pending' ? 'warning' : 'danger'
+                        }>
+                          {payroll.paymentStatus === 'Paid' ? 'Paid' : 
+                           payroll.paymentStatus === 'Pending' ? 'Pending' : 'Failed'}
+                        </Badge>
                         {payroll.paymentDate && (
-                          <div className="text-xs text-gray-500 mt-1">
+                          <div className="text-xs text-slate-400 mt-1">
                             {new Date(payroll.paymentDate).toLocaleDateString()}
                           </div>
                         )}
-                      </td>
-                      
-                      {/* ✅ FIXED: Bank Details Column */}
-                      <td className="px-4 py-3 max-w-xs">
+                       </td>
+                      <td className="px-5 py-4">
                         {payroll.bankDetails?.bankName ? (
                           <div className="space-y-1">
-                            <div className="font-medium text-gray-900 flex items-center gap-1">
-                              <Building className="w-3 h-3 text-blue-600" />
-                              {payroll.bankDetails.bankName}
-                            </div>
+                            <div className="font-medium text-slate-800 text-xs">{payroll.bankDetails.bankName}</div>
                             {payroll.bankDetails.accountNumber && (
-                              <div className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full inline-block">
+                              <div className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full inline-block">
                                 ****{payroll.bankDetails.accountNumber.slice(-4)}
-                              </div>
-                            )}
-                            {payroll.transactionId && (
-                              <div className="text-gray-500 text-xs truncate max-w-[150px]" title={payroll.transactionId}>
-                                ID: {payroll.transactionId}
                               </div>
                             )}
                           </div>
                         ) : (
-                          <span className="text-orange-500 text-xs font-medium flex items-center gap-1">
+                          <span className="text-amber-600 text-xs flex items-center gap-1">
                             <AlertCircle className="w-3 h-3" />
                             No bank details
                           </span>
                         )}
-                      </td>
-                      
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col gap-1">
+                       </td>
+                      <td className="px-5 py-4">
+                        <div className="flex flex-wrap gap-1">
                           <button
                             onClick={() => handleDownloadPayslipWithTranscript(payroll._id)}
-                            className="px-2 py-1 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-medium rounded hover:shadow transition-all text-xs flex items-center justify-center gap-1"
-                            title="View detailed transcript"
+                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded transition-colors flex items-center gap-1"
+                            title="View transcript"
                           >
                             <Eye className="w-3 h-3" />
-                            Transcript
+                            View
                           </button>
                           
                           <button
                             onClick={() => handleDownloadPayslip(payroll._id)}
-                            className="px-2 py-1 bg-gradient-to-r from-red-500 to-red-600 text-white font-medium rounded hover:shadow transition-all text-xs flex items-center justify-center gap-1"
-                            title="Download PDF payslip"
+                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded transition-colors flex items-center gap-1"
+                            title="Download PDF"
                           >
                             <Printer className="w-3 h-3" />
                             PDF
@@ -1821,7 +1428,7 @@ const fetchPayrolls = async () => {
                           
                           <button
                             onClick={() => handleExportSinglePayroll(payroll)}
-                            className="px-2 py-1 bg-gradient-to-r from-green-500 to-green-600 text-white font-medium rounded hover:shadow transition-all text-xs flex items-center justify-center gap-1"
+                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded transition-colors flex items-center gap-1"
                             title="Export to Excel"
                           >
                             <Download className="w-3 h-3" />
@@ -1830,7 +1437,7 @@ const fetchPayrolls = async () => {
                           
                           <button
                             onClick={() => handleOpenUpdateModal(payroll)}
-                            className="px-2 py-1 bg-gradient-to-r from-blue-500 to-cyan-600 text-white font-medium rounded hover:shadow transition-all text-xs flex items-center justify-center gap-1"
+                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded transition-colors flex items-center gap-1"
                           >
                             <Edit className="w-3 h-3" />
                             Edit
@@ -1839,22 +1446,22 @@ const fetchPayrolls = async () => {
                           <select
                             onChange={(e) => handleStatusUpdate(payroll._id, e.target.value)}
                             value={payroll.paymentStatus || 'Pending'}
-                            className="px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-medium bg-white text-xs"
+                            className="px-2 py-1 border border-slate-200 rounded text-xs font-medium bg-white text-slate-700"
                           >
-                            <option value="Pending">⏳ Pending</option>
-                            <option value="Paid">✅ Paid</option>
-                            <option value="Failed">❌ Failed</option>
+                            <option value="Pending">Pending</option>
+                            <option value="Paid">Paid</option>
+                            <option value="Failed">Failed</option>
                           </select>
                           
                           <button
                             onClick={() => handleDelete(payroll._id)}
-                            className="px-2 py-1 bg-gradient-to-r from-red-500 to-red-600 text-white font-medium rounded hover:shadow transition-all text-xs flex items-center justify-center gap-1"
+                            className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-medium rounded transition-colors flex items-center gap-1"
                           >
-                            🗑️ Delete
+                            Delete
                           </button>
                         </div>
-                      </td>
-                    </tr>
+                       </td>
+                     </tr>
                   ))
                 )}
               </tbody>
@@ -1863,353 +1470,87 @@ const fetchPayrolls = async () => {
           
           {/* Pagination */}
           {pagination.totalPages > 1 && (
-            <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
-              <div className="text-xs text-gray-700">
-                Showing <span className="font-medium">{((pagination.currentPage - 1) * filters.limit) + 1}</span> to{' '}
-                <span className="font-medium">
-                  {Math.min(pagination.currentPage * filters.limit, pagination.total)}
-                </span>{' '}
-                of <span className="font-medium">{pagination.total}</span> records
-              </div>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => handlePageChange(pagination.currentPage - 1)}
-                  disabled={pagination.currentPage === 1}
-                  className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 flex items-center gap-1"
-                >
-                  <ChevronLeft className="w-3 h-3" />
-                  Previous
-                </button>
-                {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
-                  let pageNum;
-                  if (pagination.totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (pagination.currentPage <= 3) {
-                    pageNum = i + 1;
-                  } else if (pagination.currentPage >= pagination.totalPages - 2) {
-                    pageNum = pagination.totalPages - 4 + i;
-                  } else {
-                    pageNum = pagination.currentPage - 2 + i;
-                  }
-                  
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => handlePageChange(pageNum)}
-                      className={`px-3 py-1 rounded text-xs ${
-                        pagination.currentPage === pageNum
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-                <button
-                  onClick={() => handlePageChange(pagination.currentPage + 1)}
-                  disabled={pagination.currentPage === pagination.totalPages}
-                  className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 flex items-center gap-1"
-                >
-                  Next
-                  <ChevronRight className="w-3 h-3" />
-                </button>
+            <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/50">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-slate-600">
+                  Showing {((pagination.currentPage - 1) * filters.limit) + 1} to{' '}
+                  {Math.min(pagination.currentPage * filters.limit, pagination.total)} of {pagination.total}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handlePageChange(pagination.currentPage - 1)}
+                    disabled={pagination.currentPage === 1}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => handlePageChange(pagination.currentPage + 1)}
+                    disabled={pagination.currentPage === pagination.totalPages}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                  >
+                    Next
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* ==================== BULK PAYMENT MODAL ==================== */}
-      {showBulkPaymentModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white/95 backdrop-blur-xl rounded-2xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border-2 border-white/50">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <Send className="w-5 h-5" />
-                Bulk Salary Payment
-              </h3>
-              <button
-                onClick={() => {
-                  setShowBulkPaymentModal(false);
-                  setBulkPaymentDetails({
-                    paymentMethod: 'Bank Transfer',
-                    transactionId: '',
-                    notes: '',
-                    selectedPayrolls: []
-                  });
-                }}
-                className="text-xl text-gray-500 hover:text-gray-700"
-              >
-                ×
-              </button>
-            </div>
-            
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
-                  <select
-                    value={bulkPaymentDetails.paymentMethod}
-                    onChange={(e) => setBulkPaymentDetails({...bulkPaymentDetails, paymentMethod: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="Bank Transfer">🏦 Bank Transfer</option>
-                    <option value="Cash">💵 Cash</option>
-                    <option value="Cheque">📄 Cheque</option>
-                    <option value="Online Payment">🌐 Online Payment</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Transaction ID *</label>
-                  <input
-                    type="text"
-                    value={bulkPaymentDetails.transactionId}
-                    onChange={(e) => setBulkPaymentDetails({...bulkPaymentDetails, transactionId: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="TRX-2024-001"
-                    required
-                  />
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
-                <textarea
-                  value={bulkPaymentDetails.notes}
-                  onChange={(e) => setBulkPaymentDetails({...bulkPaymentDetails, notes: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  rows="2"
-                  placeholder="Additional notes about this bulk payment..."
-                />
-              </div>
-              
-              <div className="flex gap-3">
-                <button
-                  onClick={handleSelectAllPending}
-                  className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium flex items-center gap-2"
-                >
-                  <CheckCircle className="w-3 h-3" />
-                  Select All Pending
-                </button>
-                <button
-                  onClick={handleClearSelections}
-                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium flex items-center gap-2"
-                >
-                  <XCircle className="w-3 h-3" />
-                  Clear All
-                </button>
-                <div className="ml-auto text-sm font-medium text-gray-700 flex items-center gap-2">
-                  <Users className="w-4 h-4" />
-                  Selected: {bulkPaymentDetails.selectedPayrolls.length} payrolls
-                </div>
-              </div>
-              
-              <div className="border rounded-lg overflow-hidden">
-                <div className="bg-gray-50 p-3 font-medium text-gray-700 flex items-center justify-between">
-                  <span>Select Payrolls for Payment</span>
-                  <span className="text-sm font-normal">
-                    {payrolls.filter(p => p.paymentStatus === 'Pending').length} pending payrolls
-                  </span>
-                </div>
-                <div className="max-h-64 overflow-y-auto">
-                  {payrolls
-                    .filter(p => p.paymentStatus === 'Pending')
-                    .map((payroll) => {
-                      const employee = employees.find(emp => emp._id === payroll.employeeId);
-                      return (
-                        <div 
-                          key={payroll._id}
-                          className={`p-3 border-t flex items-center justify-between hover:bg-gray-50 ${
-                            bulkPaymentDetails.selectedPayrolls.includes(payroll._id) ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <input
-                              type="checkbox"
-                              checked={bulkPaymentDetails.selectedPayrolls.includes(payroll._id)}
-                              onChange={() => handleTogglePayrollSelection(payroll._id)}
-                              className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
-                            />
-                            <div>
-                              <div className="font-medium flex items-center gap-2">
-                                {payroll.employeeName}
-                                {getEmployeeBankDetails(employee) ? (
-                                  <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">🏦</span>
-                                ) : (
-                                  <span className="text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded">⚠️</span>
-                                )}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                {payroll.month} {payroll.year} • PKR {payroll.netSalary?.toLocaleString()}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="text-sm">
-                            {getEmployeeBankDetails(employee) ? (
-                              <div className="text-green-600 text-right">
-                                <div>{getEmployeeBankDetails(employee)?.bankName}</div>
-                                <div className="text-xs">****{getEmployeeBankDetails(employee)?.accountNumber?.slice(-4)}</div>
-                              </div>
-                            ) : (
-                              <span className="text-red-500">No bank details</span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
-              
-              {bulkPaymentDetails.selectedPayrolls.length > 0 && (
-                <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-                  <h4 className="font-bold text-blue-800 mb-2 flex items-center gap-2">
-                    <DollarSign className="w-4 h-4" />
-                    Payment Summary
-                  </h4>
-                  <div className="grid grid-cols-3 gap-4 text-sm">
-                    <div>
-                      <div className="text-gray-600">Selected Payrolls</div>
-                      <div className="font-bold text-lg">{bulkPaymentDetails.selectedPayrolls.length}</div>
-                    </div>
-                    <div>
-                      <div className="text-gray-600">Total Amount</div>
-                      <div className="font-bold text-lg text-emerald-600">
-                        PKR {payrolls
-                          .filter(p => bulkPaymentDetails.selectedPayrolls.includes(p._id))
-                          .reduce((sum, p) => sum + (p.netSalary || 0), 0)
-                          .toLocaleString()}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-gray-600">Payment Method</div>
-                      <div className="font-bold">{bulkPaymentDetails.paymentMethod}</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              <div className="flex gap-3 pt-4 border-t border-gray-200">
-                <button
-                  onClick={() => {
-                    setShowBulkPaymentModal(false);
-                    setBulkPaymentDetails({
-                      paymentMethod: 'Bank Transfer',
-                      transactionId: '',
-                      notes: '',
-                      selectedPayrolls: []
-                    });
-                  }}
-                  className="flex-1 px-4 py-3 border border-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
-                >
-                  <XCircle className="w-4 h-4" />
-                  Cancel
-                </button>
-                
-                <button
-                  onClick={handleBulkPayment}
-                  disabled={bulkPaymentProcessing || bulkPaymentDetails.selectedPayrolls.length === 0}
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-700 text-sm font-bold text-white rounded-lg hover:shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {bulkPaymentProcessing ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"></div>
-                      Processing Payments...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="w-4 h-4" />
-                      Process Bulk Payment
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ==================== INDIVIDUAL PAYROLL MODAL ==================== */}
+      {/* Individual Payroll Modal */}
       {showGenerateModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white/95 backdrop-blur-xl rounded-2xl p-6 max-w-md w-full shadow-2xl border-2 border-white/50">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <User className="w-5 h-5" />
-                Generate Individual Payroll
-              </h3>
-              <button
-                onClick={() => {
-                  setShowGenerateModal(false);
-                  setEmployeeSearch('');
-                }}
-                className="text-xl text-gray-500 hover:text-gray-700"
-              >
-                ×
-              </button>
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="px-6 py-4 border-b border-slate-100">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                  <User className="w-5 h-5 text-indigo-500" />
+                  Generate Individual Payroll
+                </h3>
+                <button onClick={() => { setShowGenerateModal(false); setEmployeeSearch(''); }} className="text-slate-400 hover:text-slate-600 text-2xl">×</button>
+              </div>
             </div>
             
-            <form onSubmit={handleGeneratePayroll} className="space-y-4">
+            <form onSubmit={handleGeneratePayroll} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Select Employee *</label>
-                
-                {/* Employee Search */}
-                <div className="mb-2 relative">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Select Employee *</label>
+                <div className="relative mb-2">
                   <input
                     type="text"
                     value={employeeSearch}
                     onChange={(e) => setEmployeeSearch(e.target.value)}
-                    className="w-full p-2 pl-9 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
                     placeholder="Search employees..."
                   />
-                  <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
+                  <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                 </div>
                 
                 <select
                   value={selectedEmployee}
                   onChange={(e) => setSelectedEmployee(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
                   required
                   size="5"
                 >
                   <option value="">-- Choose Employee --</option>
-                  {filteredEmployees.length === 0 ? (
-                    <option value="" disabled>No employees found. {employeeSearch ? 'Try different search.' : 'Please add employees first.'}</option>
-                  ) : (
-                    filteredEmployees
-                      .filter(emp => {
-                        const status = getEmployeeStatus(emp);
-                        return !['Terminated', 'Inactive', 'Resigned', 'Suspended', 'Left'].includes(status);
-                      })
-                      .map((emp) => (
-                        <option key={emp._id} value={emp._id}>
-                          {getEmployeeName(emp)} - {getEmployeeDepartment(emp)}
-                          {getEmployeeBankDetails(emp) ? ' ✅' : ' ⚠️'}
-                        </option>
-                      ))
-                  )}
+                  {filteredEmployees.map((emp) => (
+                    <option key={emp._id} value={emp._id}>
+                      {getEmployeeName(emp)} - {getEmployeeDepartment(emp)}
+                    </option>
+                  ))}
                 </select>
-                
-                <div className="mt-2 text-xs text-gray-600">
-                  {employees.length === 0 ? (
-                    <p className="text-red-500">⚠️ No employees found in database</p>
-                  ) : (
-                    <>
-                      <p>Showing: {filteredEmployees.length} of {employees.length} employees</p>
-                      <p>With Bank Details: {employees.filter(emp => getEmployeeBankDetails(emp)).length}</p>
-                    </>
-                  )}
-                </div>
               </div>
               
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Month *</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Month *</label>
                   <select
                     value={selectedMonth}
                     onChange={(e) => setSelectedMonth(e.target.value)}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
                     required
                   >
                     <option value="">-- Select Month --</option>
@@ -2220,11 +1561,11 @@ const fetchPayrolls = async () => {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Year *</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Year *</label>
                   <select
                     value={selectedYear}
                     onChange={(e) => setSelectedYear(e.target.value)}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
                     required
                   >
                     <option value="">-- Select Year --</option>
@@ -2235,56 +1576,18 @@ const fetchPayrolls = async () => {
                 </div>
               </div>
               
-              {selectedEmployee && (
-                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 text-xs">
-                  <p className="font-medium text-blue-800 mb-1">Selected Employee Info:</p>
-                  {(() => {
-                    const emp = employees.find(e => e._id === selectedEmployee);
-                    if (emp) {
-                      const bankDetails = getEmployeeBankDetails(emp);
-                      return (
-                        <>
-                          <p>Name: {getEmployeeName(emp)}</p>
-                          <p>Department: {getEmployeeDepartment(emp)}</p>
-                          <p>Email: {getEmployeeEmail(emp) || 'N/A'}</p>
-                          <p>Status: {getEmployeeStatus(emp)}</p>
-                          <p className={bankDetails ? 'text-green-600' : 'text-red-600'}>
-                            Bank: {bankDetails ? `${bankDetails.bankName} (****${bankDetails.accountNumber?.slice(-4)})` : 'Not set'}
-                          </p>
-                        </>
-                      );
-                    }
-                    return 'Employee not found';
-                  })()}
-                </div>
-              )}
-              
               <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowGenerateModal(false);
-                    setEmployeeSearch('');
-                  }}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 transition-all"
-                >
+                <button type="button" onClick={() => setShowGenerateModal(false)} className="flex-1 px-4 py-2 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  disabled={generating || employees.length === 0}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                >
+                <button type="submit" disabled={generating} className="flex-1 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
                   {generating ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"></div>
                       Generating...
                     </>
                   ) : (
-                    <>
-                      <Plus className="w-4 h-4" />
-                      Generate Payroll
-                    </>
+                    'Generate Payroll'
                   )}
                 </button>
               </div>
@@ -2293,31 +1596,28 @@ const fetchPayrolls = async () => {
         </div>
       )}
 
-      {/* ==================== BULK GENERATE MODAL ==================== */}
+      {/* Bulk Generate Modal */}
       {showBulkModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white/95 backdrop-blur-xl rounded-2xl p-6 max-w-md w-full shadow-2xl border-2 border-white/50">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <Users className="w-5 h-5" />
-                Bulk Generate Payroll
-              </h3>
-              <button
-                onClick={() => setShowBulkModal(false)}
-                className="text-xl text-gray-500 hover:text-gray-700"
-              >
-                ×
-              </button>
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="px-6 py-4 border-b border-slate-100">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-indigo-500" />
+                  Bulk Generate Payroll
+                </h3>
+                <button onClick={() => setShowBulkModal(false)} className="text-slate-400 hover:text-slate-600 text-2xl">×</button>
+              </div>
             </div>
             
-            <form onSubmit={handleBulkGenerate} className="space-y-4">
+            <form onSubmit={handleBulkGenerate} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Month *</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Month *</label>
                   <select
                     value={bulkMonth}
                     onChange={(e) => setBulkMonth(e.target.value)}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
                     required
                   >
                     <option value="">-- Select Month --</option>
@@ -2328,11 +1628,11 @@ const fetchPayrolls = async () => {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Year *</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Year *</label>
                   <select
                     value={bulkYear}
                     onChange={(e) => setBulkYear(e.target.value)}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
                     required
                   >
                     <option value="">-- Select Year --</option>
@@ -2343,85 +1643,11 @@ const fetchPayrolls = async () => {
                 </div>
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Department (Optional)</label>
-                <select
-                  value={bulkDepartment}
-                  onChange={(e) => setBulkDepartment(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="all">All Departments</option>
-                  {getUniqueDepartments().map(dept => (
-                    <option key={dept} value={dept}>{dept}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  {employees
-                    .filter(emp => {
-                      const deptMatch = bulkDepartment === 'all' || getEmployeeDepartment(emp) === bulkDepartment;
-                      const isActive = !['Terminated', 'Inactive', 'Resigned', 'Suspended'].includes(
-                        getEmployeeStatus(emp)
-                      );
-                      return deptMatch && isActive;
-                    })
-                    .length} active employees selected
-                </p>
-              </div>
-              
-              {employees.length > 0 && (
-                <div className="text-xs text-gray-500 bg-emerald-50 p-2 rounded">
-                  <p>📊 Bulk Generate Summary:</p>
-                  <ul className="list-disc pl-4 mt-1">
-                    <li>Department: {bulkDepartment === 'all' ? 'All Departments' : bulkDepartment}</li>
-                    <li>Selected Employees: {
-                      employees
-                        .filter(emp => {
-                          const deptMatch = bulkDepartment === 'all' || getEmployeeDepartment(emp) === bulkDepartment;
-                          const isActive = !['Terminated', 'Inactive', 'Resigned', 'Suspended'].includes(
-                            getEmployeeStatus(emp)
-                          );
-                          return deptMatch && isActive;
-                        })
-                        .length
-                    }</li>
-                    <li>With Bank Details: {
-                      employees
-                        .filter(emp => {
-                          const deptMatch = bulkDepartment === 'all' || getEmployeeDepartment(emp) === bulkDepartment;
-                          const isActive = !['Terminated', 'Inactive', 'Resigned', 'Suspended'].includes(
-                            getEmployeeStatus(emp)
-                          );
-                          return deptMatch && isActive;
-                        })
-                        .filter(emp => getEmployeeBankDetails(emp))
-                        .length
-                    }</li>
-                  </ul>
-                </div>
-              )}
-              
-              {employees.length === 0 && (
-                <div className="p-3 bg-red-50 rounded-lg border border-red-200">
-                  <p className="text-red-600 text-sm font-medium">⚠️ No employees found!</p>
-                  <p className="text-red-500 text-xs mt-1">
-                    Please add employees first before generating payroll.
-                  </p>
-                </div>
-              )}
-              
               <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowBulkModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 transition-all"
-                >
+                <button type="button" onClick={() => setShowBulkModal(false)} className="flex-1 px-4 py-2 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  disabled={generating || employees.length === 0}
-                  className="flex-1 px-4 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                >
+                <button type="submit" disabled={generating} className="flex-1 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
                   {generating ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"></div>
@@ -2437,182 +1663,161 @@ const fetchPayrolls = async () => {
         </div>
       )}
 
-      {/* ==================== UPDATE PAYROLL MODAL ==================== */}
-      {showUpdateModal && selectedPayroll && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white/95 backdrop-blur-xl rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border-2 border-white/50">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <Edit className="w-5 h-5" />
-                Update Payroll Details
-              </h3>
-              <button
-                onClick={() => setShowUpdateModal(false)}
-                className="text-xl text-gray-500 hover:text-gray-700"
-              >
-                ×
-              </button>
+      {/* Bulk Payment Modal */}
+      {showBulkPaymentModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-slate-100">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                  <Send className="w-5 h-5 text-indigo-500" />
+                  Bulk Salary Payment
+                </h3>
+                <button onClick={() => setShowBulkPaymentModal(false)} className="text-slate-400 hover:text-slate-600 text-2xl">×</button>
+              </div>
             </div>
             
-            {(() => {
-              const employee = employees.find(emp => emp._id === selectedPayroll.employeeId);
-              return employee ? (
-                <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <h4 className="font-bold text-blue-800 mb-2 flex items-center gap-2">
-                    <Building className="w-4 h-4" />
-                    Employee Bank Details
-                  </h4>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="text-gray-600">Bank Name:</span>
-                      <span className="font-medium ml-2">{getEmployeeBankDetails(employee)?.bankName || 'Not set'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Account Number:</span>
-                      <span className="font-medium ml-2">{getEmployeeBankDetails(employee)?.accountNumber ? `****${getEmployeeBankDetails(employee)?.accountNumber?.slice(-4)}` : 'Not set'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">IFSC Code:</span>
-                      <span className="font-medium ml-2">{getEmployeeBankDetails(employee)?.ifscCode || 'Not set'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Account Holder:</span>
-                      <span className="font-medium ml-2">{getEmployeeName(employee)}</span>
-                    </div>
-                  </div>
-                </div>
-              ) : null;
-            })()}
-            
-            <form onSubmit={handleUpdatePayroll} className="space-y-4">
+            <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Basic Salary</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Payment Method</label>
+                  <select
+                    value={bulkPaymentDetails.paymentMethod}
+                    onChange={(e) => setBulkPaymentDetails({...bulkPaymentDetails, paymentMethod: e.target.value})}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
+                  >
+                    <option value="Bank Transfer">Bank Transfer</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Cheque">Cheque</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Transaction ID *</label>
                   <input
-                    type="number"
-                    value={updateData.basicSalary}
-                    onChange={(e) => setUpdateData({...updateData, basicSalary: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    type="text"
+                    value={bulkPaymentDetails.transactionId}
+                    onChange={(e) => setBulkPaymentDetails({...bulkPaymentDetails, transactionId: e.target.value})}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
+                    placeholder="TRX-2024-001"
                     required
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Net Salary</label>
-                  <input
-                    type="number"
-                    value={updateData.netSalary}
-                    onChange={(e) => setUpdateData({...updateData, netSalary: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">HRA</label>
-                  <input
-                    type="number"
-                    value={updateData.hra}
-                    onChange={(e) => setUpdateData({...updateData, hra: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">DA</label>
-                  <input
-                    type="number"
-                    value={updateData.da}
-                    onChange={(e) => setUpdateData({...updateData, da: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Conveyance</label>
-                  <input
-                    type="number"
-                    value={updateData.conveyance}
-                    onChange={(e) => setUpdateData({...updateData, conveyance: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Medical Allowance</label>
-                  <input
-                    type="number"
-                    value={updateData.medicalAllowance}
-                    onChange={(e) => setUpdateData({...updateData, medicalAllowance: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Special Allowance</label>
-                  <input
-                    type="number"
-                    value={updateData.specialAllowance}
-                    onChange={(e) => setUpdateData({...updateData, specialAllowance: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">TDS</label>
-                  <input
-                    type="number"
-                    value={updateData.tds}
-                    onChange={(e) => setUpdateData({...updateData, tds: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">PF</label>
-                  <input
-                    type="number"
-                    value={updateData.pf}
-                    onChange={(e) => setUpdateData({...updateData, pf: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Professional Tax</label>
-                  <input
-                    type="number"
-                    value={updateData.professionalTax}
-                    onChange={(e) => setUpdateData({...updateData, professionalTax: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Notes (Optional)</label>
                 <textarea
-                  value={updateData.notes}
-                  onChange={(e) => setUpdateData({...updateData, notes: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  rows="3"
-                  placeholder="Additional notes about payroll updates..."
+                  value={bulkPaymentDetails.notes}
+                  onChange={(e) => setBulkPaymentDetails({...bulkPaymentDetails, notes: e.target.value})}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
+                  rows="2"
+                  placeholder="Additional notes about this bulk payment..."
                 />
               </div>
               
+              <div className="flex gap-3">
+                <button onClick={handleSelectAllPending} className="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-medium hover:bg-indigo-100 transition-colors">
+                  Select All Pending
+                </button>
+                <button onClick={handleClearSelections} className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-200 transition-colors">
+                  Clear All
+                </button>
+                <div className="ml-auto text-sm font-medium text-slate-700">
+                  Selected: {bulkPaymentDetails.selectedPayrolls.length} payrolls
+                </div>
+              </div>
+              
+              <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <div className="bg-slate-50 p-3 font-medium text-slate-700 border-b border-slate-200">
+                  Select Payrolls for Payment
+                </div>
+                <div className="max-h-64 overflow-y-auto">
+                  {payrolls
+                    .filter(p => p.paymentStatus === 'Pending')
+                    .map((payroll) => (
+                      <div key={payroll._id} className="p-3 border-t border-slate-100 flex items-center justify-between hover:bg-slate-50">
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={bulkPaymentDetails.selectedPayrolls.includes(payroll._id)}
+                            onChange={() => handleTogglePayrollSelection(payroll._id)}
+                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <div>
+                            <div className="font-medium text-sm text-slate-800">{payroll.employeeName}</div>
+                            <div className="text-xs text-slate-500">{payroll.month} {payroll.year} • PKR {payroll.netSalary?.toLocaleString()}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+              
               <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowUpdateModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 transition-all"
-                >
+                <button onClick={() => setShowBulkPaymentModal(false)} className="flex-1 px-4 py-2 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  disabled={generating}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                >
+                <button onClick={handleBulkPayment} disabled={bulkPaymentProcessing || bulkPaymentDetails.selectedPayrolls.length === 0} className="flex-1 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
+                  {bulkPaymentProcessing ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"></div>
+                      Processing...
+                    </>
+                  ) : (
+                    'Process Bulk Payment'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Payroll Modal */}
+      {showUpdateModal && selectedPayroll && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-slate-100">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                  <Edit className="w-5 h-5 text-indigo-500" />
+                  Update Payroll Details
+                </h3>
+                <button onClick={() => setShowUpdateModal(false)} className="text-slate-400 hover:text-slate-600 text-2xl">×</button>
+              </div>
+            </div>
+            
+            <form onSubmit={handleUpdatePayroll} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Basic Salary</label>
+                  <input type="number" value={updateData.basicSalary} onChange={(e) => setUpdateData({...updateData, basicSalary: e.target.value})} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors" required />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Net Salary</label>
+                  <input type="number" value={updateData.netSalary} onChange={(e) => setUpdateData({...updateData, netSalary: e.target.value})} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors" required />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">HRA</label>
+                  <input type="number" value={updateData.hra} onChange={(e) => setUpdateData({...updateData, hra: e.target.value})} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">DA</label>
+                  <input type="number" value={updateData.da} onChange={(e) => setUpdateData({...updateData, da: e.target.value})} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors" />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
+                <textarea value={updateData.notes} onChange={(e) => setUpdateData({...updateData, notes: e.target.value})} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors" rows="3" placeholder="Additional notes..." />
+              </div>
+              
+              <div className="flex gap-3 pt-4">
+                <button type="button" onClick={() => setShowUpdateModal(false)} className="flex-1 px-4 py-2 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
+                  Cancel
+                </button>
+                <button type="submit" disabled={generating} className="flex-1 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
                   {generating ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"></div>
@@ -2628,289 +1833,48 @@ const fetchPayrolls = async () => {
         </div>
       )}
 
-      {/* ==================== BANK TRANSFER MODAL ==================== */}
-      {showBankTransferModal && selectedForPayment && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white/95 backdrop-blur-xl rounded-2xl p-6 max-w-md w-full shadow-2xl border-2 border-white/50">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <CreditCard className="w-5 h-5" />
-                Bank Transfer Payment
-              </h3>
-              <button
-                onClick={() => setShowBankTransferModal(false)}
-                className="text-xl text-gray-500 hover:text-gray-700"
-              >
-                ×
-              </button>
-            </div>
-            
-            <form onSubmit={handleBankTransfer} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
-                <input
-                  type="text"
-                  value={paymentDetails.accountNumber}
-                  onChange={(e) => setPaymentDetails({...paymentDetails, accountNumber: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="1234567890123"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
-                <input
-                  type="text"
-                  value={paymentDetails.bankName}
-                  onChange={(e) => setPaymentDetails({...paymentDetails, bankName: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="HBL, UBL, MCB, etc."
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Transaction ID (Optional)</label>
-                <input
-                  type="text"
-                  value={paymentDetails.transactionId}
-                  onChange={(e) => setPaymentDetails({...paymentDetails, transactionId: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="TRX123456789"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
-                <textarea
-                  value={paymentDetails.notes}
-                  onChange={(e) => setPaymentDetails({...paymentDetails, notes: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  rows="2"
-                  placeholder="Additional payment details..."
-                />
-              </div>
-              
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowBankTransferModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={paymentProcessing}
-                  className="flex-1 px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {paymentProcessing ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"></div>
-                      Processing...
-                    </>
-                  ) : (
-                    'Process Payment'
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ==================== CASH PAYMENT MODAL ==================== */}
-      {showCashModal && selectedForPayment && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white/95 backdrop-blur-xl rounded-2xl p-6 max-w-md w-full shadow-2xl border-2 border-white/50">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <Banknote className="w-5 h-5" />
-                Cash Payment Confirmation
-              </h3>
-              <button
-                onClick={() => setShowCashModal(false)}
-                className="text-xl text-gray-500 hover:text-gray-700"
-              >
-                ×
-              </button>
-            </div>
-            
-            <div className="space-y-4">
-              <p className="text-gray-600">
-                Are you sure you want to mark this payroll as <span className="font-bold text-green-600">Paid (Cash)</span>?
-              </p>
-              
-              <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                <p className="text-sm text-yellow-700 font-medium flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4" />
-                  Important
-                </p>
-                <p className="text-sm text-yellow-600 mt-1">
-                  This action will update the payment status to "Paid" and record the payment as cash transaction.
-                  Make sure you have collected the cash payment before confirming.
-                </p>
-              </div>
-              
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowCashModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCashPayment}
-                  className="flex-1 px-4 py-2 bg-yellow-500 text-white text-sm font-bold rounded-lg hover:bg-yellow-600 transition-all flex items-center justify-center gap-2"
-                >
-                  <Banknote className="w-4 h-4" />
-                  Confirm Cash Payment
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ==================== IMPORT EXCEL MODAL ==================== */}
+      {/* Import Modal */}
       {showImportModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white/95 backdrop-blur-xl rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl border-2 border-white/50">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <Upload className="w-5 h-5" />
-                Import Payroll from Excel
-              </h3>
-              <button
-                onClick={() => {
-                  setShowImportModal(false);
-                  setImportFile(null);
-                  setImportProgress(0);
-                }}
-                className="text-xl text-gray-500 hover:text-gray-700"
-              >
-                ×
-              </button>
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="px-6 py-4 border-b border-slate-100">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                  <Upload className="w-5 h-5 text-indigo-500" />
+                  Import Payroll from Excel
+                </h3>
+                <button onClick={() => setShowImportModal(false)} className="text-slate-400 hover:text-slate-600 text-2xl">×</button>
+              </div>
             </div>
             
-            <div className="space-y-6">
-              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <h4 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4" />
-                  Import Instructions
-                </h4>
-                <ul className="text-sm text-blue-700 space-y-1">
-                  <li>• Download template first for correct format</li>
-                  <li>• Required columns: Employee ID, Name, Month, Year, Basic Salary, Net Salary</li>
-                  <li>• Existing records will be updated</li>
-                  <li>• New records will be created</li>
-                  <li>• File types: .xlsx, .xls, .csv</li>
-                </ul>
-              </div>
-              
-              <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center">
-                <FileSpreadsheet className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-sm text-gray-600 mb-3">
-                  {importFile ? importFile.name : 'Drag & drop or click to select Excel file'}
+            <div className="p-6 space-y-4">
+              <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center">
+                <FileSpreadsheet className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                <p className="text-sm text-slate-600 mb-3">
+                  {importFile ? importFile.name : 'Click to select Excel file'}
                 </p>
-                <input
-                  type="file"
-                  id="excel-import"
-                  accept=".xlsx,.xls,.csv"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-                <label
-                  htmlFor="excel-import"
-                  className="inline-block px-6 py-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 transition-colors text-sm font-medium"
-                >
+                <input type="file" id="excel-import" accept=".xlsx,.xls,.csv" onChange={handleFileSelect} className="hidden" />
+                <label htmlFor="excel-import" className="inline-block px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg cursor-pointer hover:bg-indigo-700 transition-colors shadow-sm">
                   {importFile ? 'Change File' : 'Select File'}
                 </label>
-                
-                {importFile && (
-                  <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
-                    <p className="text-sm text-green-700">
-                      ✅ File selected: {importFile.name}
-                    </p>
-                    <p className="text-xs text-green-600 mt-1">
-                      Size: {(importFile.size / 1024).toFixed(2)} KB
-                    </p>
-                  </div>
-                )}
               </div>
               
-              {importLoading && (
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm text-gray-600">
-                    <span>Importing...</span>
-                    <span>{importProgress}%</span>
-                  </div>
-                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-green-500 rounded-full transition-all duration-300"
-                      style={{ width: `${importProgress}%` }}
-                    ></div>
-                  </div>
-                </div>
-              )}
-              
-              <div className="flex gap-3 pt-4 border-t border-gray-200">
-                <button
-                  onClick={() => {
-                    setShowImportModal(false);
-                    setImportFile(null);
-                    setImportProgress(0);
-                  }}
-                  className="flex-1 px-4 py-3 border border-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
-                >
-                  <XCircle className="w-4 h-4" />
-                  Cancel
-                </button>
-                
-                <button
-                  onClick={handleDownloadTemplate}
-                  className="px-4 py-3 bg-amber-500 text-white text-sm font-bold rounded-lg hover:bg-amber-600 transition-all flex items-center justify-center gap-2"
-                >
+              <div className="flex gap-3">
+                <button onClick={handleDownloadTemplate} className="flex-1 px-4 py-2 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors flex items-center justify-center gap-2">
                   <FileSpreadsheet className="w-4 h-4" />
                   Template
                 </button>
-                
-                <button
-                  onClick={handleImportExcel}
-                  disabled={!importFile || importLoading}
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-sm font-bold text-white rounded-lg hover:shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                >
+                <button onClick={handleImportExcel} disabled={!importFile || importLoading} className="flex-1 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
                   {importLoading ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"></div>
                       Importing...
                     </>
                   ) : (
-                    <>
-                      <Upload className="w-4 h-4" />
-                      Import Now
-                    </>
+                    'Import Now'
                   )}
                 </button>
               </div>
-              
-              {importResults.success > 0 && (
-                <div className="p-4 bg-green-50 rounded-lg border border-green-200 mt-4">
-                  <p className="text-green-700 font-medium flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4" />
-                    Import Completed Successfully!
-                  </p>
-                  <div className="text-sm text-green-600 mt-2">
-                    <p>Successfully processed: {importResults.success} records</p>
-                    {importResults.failed > 0 && (
-                      <p>Failed: {importResults.failed} records</p>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>

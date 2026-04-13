@@ -2,12 +2,40 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axiosInstance from '@/utils/axiosInstance';
 import { 
   FiSearch, FiDownload, FiFilter, FiX, FiCheck, FiClock, FiUser, FiAlertCircle, 
-  FiCalendar, FiMapPin, FiEdit3, FiTrash2, FiPlus, FiRefreshCw, FiChevronLeft, 
+  FiCalendar, FiEdit3, FiTrash2, FiRefreshCw, FiChevronLeft, 
   FiChevronRight, FiRotateCcw, FiEye, FiMoreVertical, FiCheckCircle, FiXCircle,
-  FiMail, FiFileText // Added new icons
+  FiMail, FiUsers
 } from 'react-icons/fi';
 import { CSVLink } from 'react-csv';
-import { format, parseISO, differenceInMinutes, isValid, addDays } from 'date-fns';
+import { format, differenceInMinutes, isValid, addDays } from 'date-fns';
+
+// KPI Card component with colored icons
+const KpiCard = ({ icon: Icon, label, value, sub, iconBg }) => (
+  <div className="bg-white rounded-xl border border-gray-100 p-5 hover:shadow-md transition-all duration-200">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-xs text-gray-500 font-medium mb-2">{label}</p>
+        <p className="text-2xl font-semibold text-gray-900">{value}</p>
+        {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+      </div>
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${iconBg}`}>
+        <Icon className="w-5 h-5 text-white" />
+      </div>
+    </div>
+  </div>
+);
+
+// Badge component
+const Badge = ({ children, variant = 'default' }) => {
+  const v = {
+    default: 'bg-gray-100 text-gray-600',
+    success: 'bg-green-50 text-green-700',
+    warning: 'bg-yellow-50 text-yellow-700',
+    danger: 'bg-red-50 text-red-700',
+    info: 'bg-blue-50 text-blue-700'
+  };
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${v[variant]}`}>{children}</span>;
+};
 
 const AdminAttendance = () => {
   // States
@@ -29,6 +57,8 @@ const AdminAttendance = () => {
   const [showReportModal, setShowReportModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [sendingReport, setSendingReport] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [recordToDelete, setRecordToDelete] = useState(null);
   const csvLinkRef = useRef(null);
   const tableContainerRef = useRef(null);
   const actionsRefs = useRef({});
@@ -43,6 +73,15 @@ const AdminAttendance = () => {
     } catch {
       return 'Error';
     }
+  };
+
+  const formatDate = (dateString, options = {}) => {
+    if (!dateString) return 'N/A';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'N/A';
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', ...options });
+    } catch { return 'N/A'; }
   };
 
   const safeTimeAgo = (dateValue) => {
@@ -71,7 +110,6 @@ const AdminAttendance = () => {
         limit: pagination.limit
       }).toString();
 
-      // ✅ FIXED: Changed from '/attendance/all' to '/attendance'
       const { data } = await axiosInstance.get(`/attendance?${params}`);
       
       if (data.success) {
@@ -94,7 +132,7 @@ const AdminAttendance = () => {
   const fetchPendingRequests = async () => {
     try {
       setLoadingRequests(true);
-     const { data } = await axiosInstance.get('/attendance/pending-requests');
+      const { data } = await axiosInstance.get('/attendance/pending-requests');
       if (data.success) {
         setPendingRequests(data.data || []);
         setStats(prev => ({ ...prev, pending: data.count || 0 }));
@@ -123,143 +161,95 @@ const AdminAttendance = () => {
     });
   };
 
-  // 📄 Prepare CSV data for export - UPDATED
+  // 📄 Prepare CSV data for export
   const prepareCSVData = (data) => {
     const formattedData = data.map(record => ({
       'Employee Name': record.employee?.name || 'N/A',
       'Employee ID': record.employee?.employeeId || 'N/A',
       'Department': record.employee?.department || 'N/A',
-      'Date': safeDateFormat(record.date, 'yyyy-MM-dd'),
+      'Date': formatDate(record.date, { year: 'numeric', month: 'short', day: 'numeric' }),
       'Check-in Time': record.approvedCheckIn ? safeDateFormat(record.approvedCheckIn) : 
                        (record.checkInRequest?.approved === false ? 'Pending' : 'Not Checked In'),
       'Check-out Time': record.approvedCheckOut ? safeDateFormat(record.approvedCheckOut) :
                         (record.checkOutRequest?.approved === false ? 'Pending' : 'Not Checked Out'),
       'Total Hours': record.totalHours?.toFixed(2) || '0.00',
       'Status': record.status ? record.status.charAt(0).toUpperCase() + record.status.slice(1) : 'N/A',
-      'Late Minutes': record.lateMinutes || 0,
-      'Remarks': record.checkInRequest?.remarks || record.checkOutRequest?.remarks || record.remarks || 'N/A',
-      'Check-in Request Status': record.checkInRequest ? (record.checkInRequest.approved === false ? 'Pending' : 'Approved') : 'No Request',
-      'Check-out Request Status': record.checkOutRequest ? (record.checkOutRequest.approved === false ? 'Pending' : 'Approved') : 'No Request'
+      'Late Minutes': record.lateMinutes || 0
     }));
     setCsvData(formattedData);
   };
 
-// ✅ FIXED: Handle approve request with better debugging
-const handleApproveRequest = async () => {
-  try {
-    console.log('🔍 Starting approval...');
-    console.log('📋 Selected request:', selectedRequest);
-    console.log('📋 Approval data:', approvalData);
-    
-    const { type, actualTime, remarks } = approvalData;
-    
-    // Validate actualTime format
-    let payload = { remarks: remarks || '' };
-    
-    if (actualTime) {
-      // Check if actualTime is already in ISO format (from datetime-local input)
-      if (actualTime.includes('T')) {
-        payload.actualTime = actualTime;
-      } else {
-        // Parse HH:mm format
-        const [hours, minutes] = actualTime.split(':');
-        const date = new Date();
-        date.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
-        payload.actualTime = date.toISOString();
-      }
-    }
-
-    const endpoint = type === 'checkin' ? 
-      `/attendance/approve-checkin/${selectedRequest._id}` : 
-      `/attendance/approve-checkout/${selectedRequest._id}`; 
-    
-    console.log('📤 Sending to endpoint:', endpoint);
-    console.log('📦 Payload:', payload);
-    
-    // First, debug the attendance record
+  // ✅ Handle approve request
+  const handleApproveRequest = async () => {
     try {
-      const debugRes = await axiosInstance.get(`/attendance/debug/${selectedRequest._id}`);
-      console.log('🔍 Debug attendance data:', debugRes.data);
-    } catch (debugError) {
-      console.error('❌ Debug failed:', debugError.response?.data || debugError.message);
-    }
-
-    // Then try to approve
-    const { data } = await axiosInstance.put(endpoint, payload);
-
-    console.log('✅ Approval response:', data);
-
-    if (data && data.success) {
-      alert(`✅ ${type === 'checkin' ? 'Check-in' : 'Check-out'} approved successfully!`);
-      setShowApprovalModal(false);
-      setSelectedRequest(null);
-      setApprovalData({ type: '', actualTime: '', remarks: '' });
+      const { type, actualTime, remarks } = approvalData;
       
-      // Refresh data
-      fetchAttendance();
-      fetchPendingRequests();
-    } else {
-      alert(data?.message || 'Approval failed - Invalid response from server');
-    }
-  } catch (error) {
-    console.error('❌ Approval error details:', {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status,
-      headers: error.response?.headers
-    });
-    
-    // Better error handling
-    if (error.response) {
-      const errorData = error.response.data;
+      let payload = { remarks: remarks || '' };
       
-      if (errorData?.message) {
-        alert(`❌ Approval failed: ${errorData.message}`);
-      } else if (errorData?.error) {
-        alert(`❌ Server error: ${errorData.error}`);
-      } else {
-        alert(`❌ Server error: ${error.response.status}`);
+      if (actualTime) {
+        if (actualTime.includes('T')) {
+          payload.actualTime = actualTime;
+        } else {
+          const [hours, minutes] = actualTime.split(':');
+          const date = new Date();
+          date.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
+          payload.actualTime = date.toISOString();
+        }
       }
+
+      const endpoint = type === 'checkin' ? 
+        `/attendance/approve-checkin/${selectedRequest._id}` : 
+        `/attendance/approve-checkout/${selectedRequest._id}`;
       
-      // Log detailed error
-      console.error('Full error response:', error.response);
-    } else if (error.request) {
-      alert('❌ No response from server. Please check your connection.');
-    } else {
-      alert(`❌ Error: ${error.message}`);
-    }
-  }
-};
+      const { data } = await axiosInstance.put(endpoint, payload);
 
-  // ❌ Handle reject request - UPDATED
- // ✅ FIXED: Handle reject request
-const handleRejectRequest = async (request, type) => {
-  const reason = prompt(`Enter reason for rejecting ${type} request:`, 'Request does not comply with company policy');
-  if (!reason) return;
+      if (data && data.success) {
+        alert(`✅ ${type === 'checkin' ? 'Check-in' : 'Check-out'} approved successfully!`);
+        setShowApprovalModal(false);
+        setSelectedRequest(null);
+        setApprovalData({ type: '', actualTime: '', remarks: '' });
+        
+        fetchAttendance();
+        fetchPendingRequests();
+      } else {
+        alert(data?.message || 'Approval failed');
+      }
+    } catch (error) {
+      alert(error.response?.data?.message || 'Approval failed');
+    }
+  };
 
-  try {
-    const { data } = await axiosInstance.put(`/attendance/reject/${request._id}`, { type, reason });
-    
-    if (data && data.success) {
-      alert(`❌ ${type === 'checkin' ? 'Check-in' : 'Check-out'} request rejected`);
-      fetchPendingRequests();
-      fetchAttendance();
-    } else {
-      alert(data?.message || 'Rejection failed');
-    }
-  } catch (error) {
-    console.error('Reject error:', error);
-    alert(error.response?.data?.message || 'Rejection failed. Please try again.');
-  }
-};
-  // 🗑️ Handle delete record - UPDATED
-  const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this attendance record? This action cannot be undone.')) {
-      return;
-    }
+  // ❌ Handle reject request
+  const handleRejectRequest = async (request, type) => {
+    const reason = prompt(`Enter reason for rejecting ${type} request:`);
+    if (!reason) return;
 
     try {
-      await axiosInstance.delete(`/attendance/${id}`);
+      const { data } = await axiosInstance.put(`/attendance/reject/${request._id}`, { type, reason });
+      
+      if (data && data.success) {
+        alert(`❌ ${type === 'checkin' ? 'Check-in' : 'Check-out'} request rejected`);
+        fetchPendingRequests();
+        fetchAttendance();
+      } else {
+        alert(data?.message || 'Rejection failed');
+      }
+    } catch (error) {
+      alert(error.response?.data?.message || 'Rejection failed');
+    }
+  };
+
+  // 🗑️ Handle delete record with confirmation
+  const handleDeleteClick = (record) => {
+    setRecordToDelete(record);
+    setDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!recordToDelete) return;
+    
+    try {
+      const { data } = await axiosInstance.delete(`/attendance/${recordToDelete._id}`);
       if (data.success) {
         alert('✅ Record deleted successfully');
         fetchAttendance();
@@ -267,17 +257,19 @@ const handleRejectRequest = async (request, type) => {
         alert(data.message || 'Delete failed');
       }
     } catch (error) {
-      alert(error.response?.data?.message || 'Failed to delete record. Please try again.');
+      alert(error.response?.data?.message || 'Failed to delete record');
+    } finally {
+      setDeleteConfirm(false);
+      setRecordToDelete(null);
     }
   };
 
-  // ✏️ Handle update record - UPDATED
+  // ✏️ Handle update record
   const handleUpdate = async (e) => {
     e.preventDefault();
     if (!editing) return;
 
     try {
-      // Prepare update payload
       const updatePayload = {
         status: editing.status,
         lateMinutes: editing.lateMinutes || 0,
@@ -285,11 +277,10 @@ const handleRejectRequest = async (request, type) => {
         totalHours: editing.totalHours || 0
       };
 
-      // If dates are being updated
       if (editing.approvedCheckIn) updatePayload.approvedCheckIn = editing.approvedCheckIn;
       if (editing.approvedCheckOut) updatePayload.approvedCheckOut = editing.approvedCheckOut;
 
-      await axiosInstance.put(`/attendance/${editing._id}`, updatePayload);
+      const { data } = await axiosInstance.put(`/attendance/${editing._id}`, updatePayload);
       
       if (data.success) {
         alert('✅ Record updated successfully');
@@ -299,49 +290,7 @@ const handleRejectRequest = async (request, type) => {
         alert(data.message || 'Update failed');
       }
     } catch (error) {
-      alert(error.response?.data?.message || 'Update failed. Please try again.');
-      console.error('Update error:', error);
-    }
-  };
-
-  // 📧 Send attendance report email
-  const handleSendReport = async (employee) => {
-    try {
-      setSendingReport(true);
-      await axiosInstance.post(`/attendance/send-report/${employee._id}`, {
-        periodStart: filters.dateFrom,
-        periodEnd: filters.dateTo
-      });
-
-      if (data.success) {
-        alert(`📧 Report sent to ${employee.email}`);
-        setShowReportModal(false);
-        setSelectedEmployee(null);
-      } else {
-        alert(data.message || 'Failed to send report');
-      }
-    } catch (error) {
-      alert(error.response?.data?.message || 'Failed to send report');
-    } finally {
-      setSendingReport(false);
-    }
-  };
-
-  // 🆕 Clear stuck checkout request - UPDATED
-  const clearStuckCheckout = async (attendanceId, employeeName) => {
-    if (!confirm(`Clear stuck checkout request for ${employeeName}? This will allow them to request checkout again.`)) return;
-    
-    try {
-      await axiosInstance.put(`/attendance/clear-stuck-checkout/${attendanceId}`);
-      if (data.success) {
-        alert('✅ Stuck checkout cleared! Employee can now request checkout.');
-        fetchAttendance();
-        fetchPendingRequests();
-      } else {
-        alert(data.message || 'Failed to clear stuck checkout');
-      }
-    } catch (error) {
-      alert(error.response?.data?.message || 'Failed to clear stuck checkout');
+      alert(error.response?.data?.message || 'Update failed');
     }
   };
 
@@ -361,15 +310,15 @@ const handleRejectRequest = async (request, type) => {
   // 🎨 Status badge color mapping
   const getStatusColor = (status) => {
     const colors = {
-      present: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
-      late: 'bg-amber-100 text-amber-800 border border-amber-200',
-      absent: 'bg-rose-100 text-rose-800 border border-rose-200',
-      pending: 'bg-blue-100 text-blue-800 border border-blue-200',
-      checkout_pending: 'bg-purple-100 text-purple-800 border border-purple-200',
-      'Not Checked In': 'bg-gray-100 text-gray-800 border border-gray-200',
-      'half-day': 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+      present: 'bg-green-100 text-green-800 border-green-200',
+      late: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      absent: 'bg-red-100 text-red-800 border-red-200',
+      pending: 'bg-gray-100 text-gray-800 border-gray-200',
+      checkout_pending: 'bg-gray-100 text-gray-800 border-gray-200',
+      'Not Checked In': 'bg-gray-100 text-gray-800 border-gray-200',
+      'half-day': 'bg-gray-100 text-gray-800 border-gray-200'
     };
-    return colors[status] || 'bg-gray-100 text-gray-800 border border-gray-200';
+    return colors[status] || 'bg-gray-100 text-gray-800 border-gray-200';
   };
 
   // 📅 Set default date filters
@@ -393,7 +342,7 @@ const handleRejectRequest = async (request, type) => {
     return () => clearTimeout(debounceTimer);
   }, [filters, pagination.page, fetchAttendance]);
 
-  // 🔄 Fetch pending requests on mount and when needed
+  // 🔄 Fetch pending requests on mount
   useEffect(() => {
     fetchPendingRequests();
   }, []);
@@ -406,204 +355,172 @@ const handleRejectRequest = async (request, type) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-6 lg:p-8">
-      {/* 📊 Header Section */}
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
-            Attendance Management
-          </h1>
-          <p className="text-gray-600">
-            Monitor and manage employee attendance records and requests
-          </p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Page Header */}
+      <div className="bg-white border-b border-gray-100 px-6 py-5">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                <FiUsers className="text-indigo-500 text-sm" />
+                Attendance Management
+              </h1>
+              <p className="text-sm text-gray-500 mt-1">
+                Monitor and manage employee attendance records
+              </p>
+            </div>
+            <button
+              onClick={fetchAttendance}
+              disabled={loading}
+              className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 shadow-sm"
+            >
+              <FiRefreshCw className={`text-xs ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+        {/* Statistics Cards with Colored Icons */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <KpiCard icon={FiUser} label="Total Records" value={stats.total} sub="All time" iconBg="bg-indigo-500" />
+          <KpiCard icon={FiAlertCircle} label="Pending Requests" value={stats.pending} sub="Awaiting approval" iconBg="bg-amber-500" />
+          <KpiCard icon={FiCheck} label="Present Today" value={stats.present} sub="Checked in" iconBg="bg-emerald-500" />
+          <KpiCard icon={FiClock} label="Late Arrivals" value={stats.late} sub="Today" iconBg="bg-red-500" />
+          <KpiCard icon={FiClock} label="Avg Hours" value={`${stats.avgHours}h`} sub="Per day" iconBg="bg-purple-500" />
         </div>
 
-        {/* 📈 Statistics Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-          {[
-            { 
-              label: 'Total Records', 
-              value: stats.total, 
-              icon: FiUser, 
-              color: 'bg-blue-500',
-              bgColor: 'bg-blue-50'
-            },
-            { 
-              label: 'Pending Requests', 
-              value: stats.pending, 
-              icon: FiAlertCircle, 
-              color: 'bg-amber-500',
-              bgColor: 'bg-amber-50'
-            },
-            { 
-              label: 'Present Today', 
-              value: stats.present, 
-              icon: FiCheck, 
-              color: 'bg-emerald-500',
-              bgColor: 'bg-emerald-50'
-            },
-            { 
-              label: 'Late Arrivals', 
-              value: stats.late, 
-              icon: FiClock, 
-              color: 'bg-orange-500',
-              bgColor: 'bg-orange-50'
-            },
-            { 
-              label: 'Avg Hours', 
-              value: `${stats.avgHours}h`, 
-              icon: FiClock, 
-              color: 'bg-purple-500',
-              bgColor: 'bg-purple-50'
-            }
-          ].map((stat, index) => (
-            <div key={index} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-              <div className="flex items-center">
-                <div className={`p-2 rounded-lg ${stat.bgColor} mr-3`}>
-                  <stat.icon className={`w-5 h-5 ${stat.color.replace('bg-', 'text-')}`} />
+        {/* Pending Requests Section */}
+        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+          <div className="border-b border-gray-100 px-5 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center">
+                  <FiAlertCircle className="text-amber-500 text-sm" />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 font-medium">{stat.label}</p>
-                  <p className="text-xl font-bold text-gray-900">{stat.value}</p>
+                  <p className="text-sm font-semibold text-gray-800">Pending Approval Requests</p>
+                  <p className="text-xs text-gray-400">{pendingRequests.length} requests</p>
                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* ⚠️ Pending Requests Section - UPDATED */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-8 overflow-hidden">
-          <div className="border-b border-gray-200 px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <FiAlertCircle className="w-5 h-5 text-amber-500 mr-2" />
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Pending Approval Requests ({pendingRequests.length})
-                </h2>
               </div>
               <button
                 onClick={fetchPendingRequests}
                 disabled={loadingRequests}
-                className="flex items-center text-sm font-medium text-gray-700 hover:text-gray-900 disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
               >
-                <FiRefreshCw className={`w-4 h-4 mr-1 ${loadingRequests ? 'animate-spin' : ''}`} />
+                <FiRefreshCw className={`text-xs ${loadingRequests ? 'animate-spin' : ''}`} />
                 Refresh
               </button>
             </div>
           </div>
 
-          <div className="p-6">
+          <div className="p-5">
             {loadingRequests ? (
               <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
               </div>
             ) : pendingRequests.length === 0 ? (
-              <div className="text-center py-8">
-                <FiCheck className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
-                <p className="text-gray-600">No pending requests</p>
+              <div className="text-center py-12">
+                <div className="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                  <FiCheck className="text-gray-400 text-lg" />
+                </div>
+                <p className="text-gray-700 font-medium">No pending requests</p>
+                <p className="text-gray-400 text-sm mt-1">All requests have been processed</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <div className="min-w-full inline-block align-middle">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        <th className="px-4 py-3">Employee</th>
-                        <th className="px-4 py-3">Type</th>
-                        <th className="px-4 py-3">Requested Time</th>
-                        <th className="px-4 py-3">Date</th>
-                        <th className="px-4 py-3 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {pendingRequests.map((request) => {
-                        const isCheckin = request.checkInRequest?.approved === false;
-                        const requestedTime = isCheckin 
-                          ? request.checkInRequest?.requestedAt 
-                          : request.checkOutRequest?.requestedAt;
-                        
-                        return (
-                          <tr key={request._id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3">
-                              <div className="font-medium text-gray-900">{request.employee?.name}</div>
-                              <div className="text-sm text-gray-500">{request.employee?.employeeId}</div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                isCheckin 
-                                  ? 'bg-blue-100 text-blue-800' 
-                                  : 'bg-purple-100 text-purple-800'
-                              }`}>
-                                {isCheckin ? 'Check-in' : 'Check-out'}
-                              </span>
-                              <div className="text-xs text-gray-500 mt-1">
-                                Requested: {safeTimeAgo(requestedTime)}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="text-sm text-gray-900">{safeDateFormat(requestedTime)}</div>
-                              <div className="text-xs text-gray-500">{safeTimeAgo(requestedTime)}</div>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-900">
-                              {safeDateFormat(request.date, 'MMM dd, yyyy')}
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center justify-end space-x-2">
-                                <button
-                                  onClick={() => {
-                                    setSelectedRequest(request);
-                                    setApprovalData({ 
-                                      type: isCheckin ? 'checkin' : 'checkout', 
-                                      actualTime: '', 
-                                      remarks: '' 
-                                    });
-                                    setShowApprovalModal(true);
-                                  }}
-                                  className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200"
-                                >
-                                  <FiCheckCircle className="w-4 h-4 mr-1" />
-                                  Approve
-                                </button>
-                                <button
-                                  onClick={() => handleRejectRequest(request, isCheckin ? 'checkin' : 'checkout')}
-                                  className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg border border-rose-200"
-                                >
-                                  <FiXCircle className="w-4 h-4 mr-1" />
-                                  Reject
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3">Employee</th>
+                      <th className="px-4 py-3">Type</th>
+                      <th className="px-4 py-3">Requested Time</th>
+                      <th className="px-4 py-3">Date</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {pendingRequests.map((request) => {
+                      const isCheckin = request.checkInRequest?.approved === false;
+                      const requestedTime = isCheckin 
+                        ? request.checkInRequest?.requestedAt 
+                        : request.checkOutRequest?.requestedAt;
+                      
+                      return (
+                        <tr key={request._id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-gray-900">{request.employee?.name}</div>
+                            <div className="text-xs text-gray-500">{request.employee?.employeeId}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge variant={isCheckin ? 'info' : 'default'}>
+                              {isCheckin ? 'Check-in' : 'Check-out'}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="text-sm text-gray-900">{safeDateFormat(requestedTime)}</div>
+                            <div className="text-xs text-gray-400">{safeTimeAgo(requestedTime)}</div>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900">
+                            {formatDate(request.date, { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end space-x-2">
+                              <button
+                                onClick={() => {
+                                  setSelectedRequest(request);
+                                  setApprovalData({ 
+                                    type: isCheckin ? 'checkin' : 'checkout', 
+                                    actualTime: '', 
+                                    remarks: '' 
+                                  });
+                                  setShowApprovalModal(true);
+                                }}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
+                              >
+                                <FiCheckCircle className="w-3.5 h-3.5" />
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => handleRejectRequest(request, isCheckin ? 'checkin' : 'checkout')}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                              >
+                                <FiXCircle className="w-3.5 h-3.5" />
+                                Reject
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
         </div>
 
-        {/* 🔍 Filters and Export Section */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-8 p-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        {/* Filters Section */}
+        <div className="bg-white rounded-xl border border-gray-100 p-5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="relative flex-1 max-w-md">
-              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
                 placeholder="Search by employee name or ID..."
                 value={filters.search}
                 onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
               />
             </div>
             
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center gap-3">
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
               >
-                <FiFilter className="w-4 h-4 mr-2" />
+                <FiFilter className="w-4 h-4" />
                 Filters
               </button>
               
@@ -617,9 +534,9 @@ const handleRejectRequest = async (request, type) => {
               <button
                 onClick={() => csvLinkRef.current?.link.click()}
                 disabled={csvData.length === 0}
-                className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 shadow-sm"
               >
-                <FiDownload className="w-4 h-4 mr-2" />
+                <FiDownload className="w-4 h-4" />
                 Export CSV
               </button>
             </div>
@@ -627,22 +544,20 @@ const handleRejectRequest = async (request, type) => {
 
           {/* Advanced Filters */}
           {showFilters && (
-            <div className="border-t border-gray-200 pt-6 mt-6">
+            <div className="border-t border-gray-100 pt-5 mt-5">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                   <select
                     value={filters.status}
                     onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                   >
                     <option value="">All Status</option>
                     <option value="present">Present</option>
                     <option value="late">Late</option>
                     <option value="absent">Absent</option>
                     <option value="pending">Pending</option>
-                    <option value="checkout_pending">Checkout Pending</option>
-                    <option value="Not Checked In">Not Checked In</option>
                     <option value="half-day">Half Day</option>
                   </select>
                 </div>
@@ -653,7 +568,7 @@ const handleRejectRequest = async (request, type) => {
                     type="date"
                     value={filters.dateFrom}
                     onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                   />
                 </div>
                 
@@ -663,7 +578,7 @@ const handleRejectRequest = async (request, type) => {
                     type="date"
                     value={filters.dateTo}
                     onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                   />
                 </div>
                 
@@ -679,7 +594,7 @@ const handleRejectRequest = async (request, type) => {
                         dateTo: format(today, 'yyyy-MM-dd')
                       });
                     }}
-                    className="w-full px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200"
+                    className="w-full px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors"
                   >
                     Reset Filters
                   </button>
@@ -689,248 +604,186 @@ const handleRejectRequest = async (request, type) => {
           )}
         </div>
 
-        {/* 📋 Attendance Records Table - UPDATED */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
+        {/* Attendance Records Table */}
+        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+          <div className="border-b border-gray-100 px-5 py-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">Attendance Records</h2>
-              <div className="flex items-center space-x-2">
-                <span className="text-sm text-gray-600">
-                  {pagination.total} records • Page {pagination.page} of {pagination.pages}
-                </span>
-                <button
-                  onClick={fetchAttendance}
-                  disabled={loading}
-                  className="p-2 text-gray-600 hover:text-gray-900 disabled:opacity-50"
-                  title="Refresh"
-                >
-                  <FiRefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                </button>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
+                  <FiCalendar className="text-indigo-500 text-sm" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">Attendance Records</p>
+                  <p className="text-xs text-gray-400">{pagination.total} records</p>
+                </div>
+              </div>
+              <div className="text-sm text-gray-500">
+                Page {pagination.page} of {pagination.pages}
               </div>
             </div>
           </div>
 
           {loading ? (
             <div className="flex justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
             </div>
           ) : attendances.length === 0 ? (
-            <div className="text-center py-12">
-              <FiCalendar className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-              <p className="text-gray-600">No attendance records found</p>
-              <p className="text-sm text-gray-500 mt-1">Try adjusting your filters</p>
+            <div className="text-center py-16">
+              <div className="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                <FiCalendar className="text-gray-400 text-lg" />
+              </div>
+              <p className="text-gray-700 font-medium">No attendance records found</p>
+              <p className="text-gray-400 text-sm mt-1">Try adjusting your filters</p>
             </div>
           ) : (
             <>
-              {/* Scrollable table container */}
-              <div 
-                ref={tableContainerRef}
-                className="max-h-[calc(100vh-400px)] min-h-[400px] overflow-y-auto custom-scrollbar"
-              >
+              <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="sticky top-0 bg-gray-50 z-10">
-                    <tr className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <th className="px-6 py-3 sticky left-0 bg-gray-50 z-20">Employee</th>
-                      <th className="px-6 py-3">Date</th>
-                      <th className="px-6 py-3">Check-in</th>
-                      <th className="px-6 py-3">Check-out</th>
-                      <th className="px-6 py-3">Hours</th>
-                      <th className="px-6 py-3">Status</th>
-                      <th className="px-6 py-3 text-right sticky right-0 bg-gray-50 z-20">Actions</th>
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check-in</th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check-out</th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hours</th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {attendances.map((record) => {
-                      const hasStuckCheckout = record.checkOutRequest?.approved === false && record.approvedCheckIn;
-                      
-                      return (
-                        <tr key={record._id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 sticky left-0 bg-white z-10">
-                            <div className="font-medium text-gray-900">{record.employee?.name}</div>
-                            <div className="text-sm text-gray-500">
-                              {record.employee?.employeeId} • {record.employee?.department}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            {safeDateFormat(record.date, 'MMM dd, yyyy')}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className={`font-medium ${
-                              record.approvedCheckIn ? 'text-emerald-600' : 'text-gray-400'
-                            }`}>
-                              {safeDateFormat(record.approvedCheckIn) || '-'}
-                            </div>
-                            {record.checkInRequest?.approved === false && (
-                              <button
-                                onClick={() => {
-                                  setSelectedRequest(record);
-                                  setApprovalData({ type: 'checkin', actualTime: '', remarks: '' });
-                                  setShowApprovalModal(true);
-                                }}
-                                className="text-xs text-blue-600 hover:text-blue-800 mt-1 flex items-center"
-                              >
-                                <FiAlertCircle className="w-3 h-3 mr-1" />
-                                Approve pending
-                              </button>
-                            )}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className={`font-medium ${
-                              record.approvedCheckOut ? 'text-emerald-600' : 'text-gray-400'
-                            }`}>
-                              {safeDateFormat(record.approvedCheckOut) || '-'}
-                            </div>
-                            {record.checkOutRequest?.approved === false && (
-                              <div className="mt-1 space-y-1">
+                  <tbody className="divide-y divide-gray-100">
+                    {attendances.map((record) => (
+                      <tr key={record._id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-5 py-4">
+                          <div className="font-medium text-gray-900">{record.employee?.name}</div>
+                          <div className="text-xs text-gray-500">{record.employee?.employeeId}</div>
+                        </td>
+                        <td className="px-5 py-4 text-sm text-gray-900">
+                          {formatDate(record.date, { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className={record.approvedCheckIn ? 'text-green-600 font-medium' : 'text-gray-400'}>
+                            {safeDateFormat(record.approvedCheckIn) || '-'}
+                          </span>
+                          {record.checkInRequest?.approved === false && (
+                            <button
+                              onClick={() => {
+                                setSelectedRequest(record);
+                                setApprovalData({ type: 'checkin', actualTime: '', remarks: '' });
+                                setShowApprovalModal(true);
+                              }}
+                              className="text-xs text-amber-600 hover:text-amber-700 mt-1 block"
+                            >
+                              Pending approval
+                            </button>
+                          )}
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className={record.approvedCheckOut ? 'text-green-600 font-medium' : 'text-gray-400'}>
+                            {safeDateFormat(record.approvedCheckOut) || '-'}
+                          </span>
+                          {record.checkOutRequest?.approved === false && (
+                            <button
+                              onClick={() => {
+                                setSelectedRequest(record);
+                                setApprovalData({ type: 'checkout', actualTime: '', remarks: '' });
+                                setShowApprovalModal(true);
+                              }}
+                              className="text-xs text-amber-600 hover:text-amber-700 mt-1 block"
+                            >
+                              Pending approval
+                            </button>
+                          )}
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className={`font-semibold ${parseFloat(record.totalHours) >= 7 ? 'text-green-600' : 'text-amber-600'}`}>
+                            {record.totalHours?.toFixed(1) || 0}h
+                          </span>
+                          {record.lateMinutes > 0 && (
+                            <div className="text-xs text-amber-600">Late: {record.lateMinutes}m</div>
+                          )}
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(record.status)}`}>
+                            {record.status ? record.status.charAt(0).toUpperCase() + record.status.slice(1) : 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 text-right">
+                          <div className="relative inline-block" ref={el => actionsRefs.current[record._id] = el}>
+                            <button
+                              onClick={() => setShowActionsDropdown(showActionsDropdown === record._id ? null : record._id)}
+                              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                              <FiMoreVertical className="w-4 h-4" />
+                            </button>
+                            
+                            {showActionsDropdown === record._id && (
+                              <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-100 z-50 py-1">
                                 <button
                                   onClick={() => {
-                                    setSelectedRequest(record);
-                                    setApprovalData({ type: 'checkout', actualTime: '', remarks: '' });
-                                    setShowApprovalModal(true);
+                                    setEditing(record);
+                                    setShowActionsDropdown(null);
                                   }}
-                                  className="text-xs text-purple-600 hover:text-purple-800 flex items-center"
+                                  className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                                 >
-                                  <FiAlertCircle className="w-3 h-3 mr-1" />
-                                  Approve pending
+                                  <FiEdit3 className="w-4 h-4 text-indigo-500" />
+                                  Edit Record
                                 </button>
-                                {hasStuckCheckout && (
-                                  <button
-                                    onClick={() => clearStuckCheckout(record._id, record.employee?.name)}
-                                    className="text-xs text-amber-600 hover:text-amber-800 flex items-center"
-                                    title="Clear stuck checkout"
-                                  >
-                                    <FiRotateCcw className="w-3 h-3 mr-1" />
-                                    Clear stuck
-                                  </button>
-                                )}
+                                <button
+                                  onClick={() => {
+                                    setSelectedEmployee(record.employee);
+                                    setShowReportModal(true);
+                                    setShowActionsDropdown(null);
+                                  }}
+                                  className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                                >
+                                  <FiMail className="w-4 h-4 text-emerald-500" />
+                                  Send Report
+                                </button>
+                                <div className="border-t border-gray-100 my-1"></div>
+                                <button
+                                  onClick={() => {
+                                    handleDeleteClick(record);
+                                    setShowActionsDropdown(null);
+                                  }}
+                                  className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                >
+                                  <FiTrash2 className="w-4 h-4" />
+                                  Delete Record
+                                </button>
                               </div>
                             )}
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`font-bold ${
-                              parseFloat(record.totalHours) >= 7 ? 'text-emerald-600' : 'text-amber-600'
-                            }`}>
-                              {record.totalHours?.toFixed(1) || 0}h
-                            </span>
-                            {record.lateMinutes > 0 && (
-                              <div className="text-xs text-amber-600">
-                                Late: {record.lateMinutes}m
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(record.status)}`}>
-                              {record.status ? record.status.charAt(0).toUpperCase() + record.status.slice(1) : 'N/A'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-right sticky right-0 bg-white z-10">
-                            <div className="relative inline-block text-left" 
-                                 ref={el => actionsRefs.current[record._id] = el}>
-                              <button
-                                onClick={() => setShowActionsDropdown(
-                                  showActionsDropdown === record._id ? null : record._id
-                                )}
-                                className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
-                                title="More actions"
-                              >
-                                <FiMoreVertical className="w-5 h-5" />
-                              </button>
-                              
-                              {showActionsDropdown === record._id && (
-                                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50 py-1">
-                                  <button
-                                    onClick={() => {
-                                      setEditing({
-                                        ...record,
-                                        _id: record._id,
-                                        employee: record.employee?._id,
-                                        date: record.date ? new Date(record.date).toISOString().split('T')[0] : ''
-                                      });
-                                      setShowActionsDropdown(null);
-                                    }}
-                                    className="flex items-center w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100"
-                                  >
-                                    <FiEdit3 className="w-4 h-4 mr-3 text-blue-600" />
-                                    Edit Record
-                                  </button>
-                                  
-                                  <button
-                                    onClick={() => {
-                                      setSelectedEmployee(record.employee);
-                                      setShowReportModal(true);
-                                      setShowActionsDropdown(null);
-                                    }}
-                                    className="flex items-center w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100"
-                                  >
-                                    <FiMail className="w-4 h-4 mr-3 text-green-600" />
-                                    Send Report
-                                  </button>
-                                  
-                                  {hasStuckCheckout && (
-                                    <button
-                                      onClick={() => {
-                                        clearStuckCheckout(record._id, record.employee?.name);
-                                        setShowActionsDropdown(null);
-                                      }}
-                                      className="flex items-center w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100"
-                                    >
-                                      <FiRotateCcw className="w-4 h-4 mr-3 text-amber-600" />
-                                      Clear Stuck Checkout
-                                    </button>
-                                  )}
-                                  
-                                  <div className="border-t border-gray-200 my-1"></div>
-                                  
-                                  <button
-                                    onClick={() => {
-                                      if (window.confirm('Are you sure you want to delete this record?')) {
-                                        handleDelete(record._id);
-                                        setShowActionsDropdown(null);
-                                      }
-                                    }}
-                                    className="flex items-center w-full px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50"
-                                  >
-                                    <FiTrash2 className="w-4 h-4 mr-3" />
-                                    Delete Record
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
 
               {/* Pagination */}
               {pagination.pages > 1 && (
-                <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+                <div className="px-5 py-4 border-t border-gray-100 bg-gray-50">
                   <div className="flex items-center justify-between">
-                    <div className="text-sm text-gray-700">
-                      Showing <span className="font-medium">{(pagination.page - 1) * pagination.limit + 1}</span> to{' '}
-                      <span className="font-medium">
-                        {Math.min(pagination.page * pagination.limit, pagination.total)}
-                      </span>{' '}
-                      of <span className="font-medium">{pagination.total}</span> results
+                    <div className="text-sm text-gray-600">
+                      Showing {(pagination.page - 1) * pagination.limit + 1} to{' '}
+                      {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
                     </div>
-                    <div className="flex space-x-2">
+                    <div className="flex gap-2">
                       <button
                         onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
                         disabled={pagination.page <= 1}
-                        className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
                       >
-                        <FiChevronLeft className="w-4 h-4 mr-2" />
+                        <FiChevronLeft className="w-4 h-4" />
                         Previous
                       </button>
                       <button
                         onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
                         disabled={pagination.page >= pagination.pages}
-                        className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
                       >
                         Next
-                        <FiChevronRight className="w-4 h-4 ml-2" />
+                        <FiChevronRight className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
@@ -941,71 +794,59 @@ const handleRejectRequest = async (request, type) => {
         </div>
       </div>
 
-      {/* ✅ Approval Modal - UPDATED */}
+      {/* Approval Modal */}
       {showApprovalModal && selectedRequest && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
-            <div className="px-6 py-4 border-b border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900">
                 Approve {approvalData.type === 'checkin' ? 'Check-in' : 'Check-out'}
               </h3>
-              <p className="text-sm text-gray-600 mt-1">
-                {selectedRequest.employee?.name} • {safeDateFormat(selectedRequest.date, 'MMM dd, yyyy')}
+              <p className="text-sm text-gray-500 mt-1">
+                {selectedRequest.employee?.name} • {formatDate(selectedRequest.date, { month: 'short', day: 'numeric', year: 'numeric' })}
               </p>
             </div>
             
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Adjust Time (Optional)
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Adjust Time (Optional)</label>
                 <input
                   type="datetime-local"
-                  value={approvalData.actualTime || formatDateTimeLocal(
-                    approvalData.type === 'checkin' 
-                      ? selectedRequest.requestedCheckIn 
-                      : selectedRequest.requestedCheckOut
-                  )}
+                  value={approvalData.actualTime}
                   onChange={(e) => setApprovalData(prev => ({ ...prev, actualTime: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Requested: {safeDateFormat(
-                    approvalData.type === 'checkin' 
-                      ? selectedRequest.requestedCheckIn 
-                      : selectedRequest.requestedCheckOut
-                  )}
+                <p className="text-xs text-gray-400 mt-1">
+                  Leave empty to use requested time
                 </p>
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Remarks (Optional)
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Remarks (Optional)</label>
                 <textarea
                   value={approvalData.remarks}
                   onChange={(e) => setApprovalData(prev => ({ ...prev, remarks: e.target.value }))}
                   rows="3"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 resize-none"
                   placeholder="Add any remarks..."
                 />
               </div>
             </div>
             
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
               <button
                 onClick={() => {
                   setShowApprovalModal(false);
                   setSelectedRequest(null);
                   setApprovalData({ type: '', actualTime: '', remarks: '' });
                 }}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleApproveRequest}
-                className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700"
+                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
               >
                 Approve Request
               </button>
@@ -1014,14 +855,14 @@ const handleRejectRequest = async (request, type) => {
         </div>
       )}
 
-      {/* ✏️ Edit Modal - UPDATED */}
+      {/* Edit Modal */}
       {editing && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full">
-            <div className="px-6 py-4 border-b border-gray-200">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900">Edit Attendance Record</h3>
-              <p className="text-sm text-gray-600 mt-1">
-                {attendances.find(a => a._id === editing._id)?.employee?.name || 'Unknown Employee'}
+              <p className="text-sm text-gray-500 mt-1">
+                {editing.employee?.name || 'Unknown Employee'}
               </p>
             </div>
             
@@ -1031,9 +872,9 @@ const handleRejectRequest = async (request, type) => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
                   <input
                     type="date"
-                    value={editing.date || ''}
+                    value={editing.date ? format(new Date(editing.date), 'yyyy-MM-dd') : ''}
                     disabled
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-50"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-sm"
                   />
                 </div>
                 
@@ -1042,16 +883,14 @@ const handleRejectRequest = async (request, type) => {
                   <select
                     value={editing.status || ''}
                     onChange={(e) => setEditing(prev => ({ ...prev, status: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                     required
                   >
                     <option value="">Select Status</option>
                     <option value="present">Present</option>
                     <option value="late">Late</option>
                     <option value="absent">Absent</option>
-                    <option value="pending">Pending</option>
                     <option value="half-day">Half Day</option>
-                    <option value="Not Checked In">Not Checked In</option>
                   </select>
                 </div>
                 
@@ -1062,7 +901,7 @@ const handleRejectRequest = async (request, type) => {
                     min="0"
                     value={editing.lateMinutes || 0}
                     onChange={(e) => setEditing(prev => ({ ...prev, lateMinutes: parseInt(e.target.value) || 0 }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                   />
                 </div>
                 
@@ -1075,7 +914,7 @@ const handleRejectRequest = async (request, type) => {
                     max="24"
                     value={editing.totalHours || 0}
                     onChange={(e) => setEditing(prev => ({ ...prev, totalHours: parseFloat(e.target.value) || 0 }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                   />
                 </div>
               </div>
@@ -1086,7 +925,7 @@ const handleRejectRequest = async (request, type) => {
                   type="datetime-local"
                   value={formatDateTimeLocal(editing.approvedCheckIn)}
                   onChange={(e) => setEditing(prev => ({ ...prev, approvedCheckIn: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                 />
               </div>
               
@@ -1096,7 +935,7 @@ const handleRejectRequest = async (request, type) => {
                   type="datetime-local"
                   value={formatDateTimeLocal(editing.approvedCheckOut)}
                   onChange={(e) => setEditing(prev => ({ ...prev, approvedCheckOut: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                 />
               </div>
               
@@ -1106,22 +945,22 @@ const handleRejectRequest = async (request, type) => {
                   value={editing.remarks || ''}
                   onChange={(e) => setEditing(prev => ({ ...prev, remarks: e.target.value }))}
                   rows="3"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 resize-none"
                   placeholder="Add remarks..."
                 />
               </div>
               
-              <div className="flex justify-end space-x-3 pt-4">
+              <div className="flex justify-end gap-3 pt-4">
                 <button
                   type="button"
                   onClick={() => setEditing(null)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
                 >
                   Save Changes
                 </button>
@@ -1131,163 +970,123 @@ const handleRejectRequest = async (request, type) => {
         </div>
       )}
 
-      {/* 📧 Report Modal */}
-      {showReportModal && selectedEmployee && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && recordToDelete && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Send Attendance Report
-              </h3>
-              <p className="text-sm text-gray-600 mt-1">
-                Send report to {selectedEmployee.name}
+            <div className="px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
+                  <FiTrash2 className="text-red-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">Delete Attendance Record</h3>
+              </div>
+            </div>
+            
+            <div className="p-6">
+              <p className="text-sm text-gray-600 mb-4">
+                Are you sure you want to delete this attendance record? This action cannot be undone.
               </p>
+              <div className="p-4 bg-gray-50 rounded-lg border border-gray-100 mb-5">
+                <p className="text-sm font-medium text-gray-800">
+                  {recordToDelete.employee?.name || 'Employee'} • {formatDate(recordToDelete.date, { month: 'short', day: 'numeric', year: 'numeric' })}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Check-in: {safeDateFormat(recordToDelete.approvedCheckIn) || 'Not checked in'}
+                </p>
+                <p className="text-xs text-gray-500">
+                  Check-out: {safeDateFormat(recordToDelete.approvedCheckOut) || 'Not checked out'}
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setDeleteConfirm(false);
+                    setRecordToDelete(null);
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <FiTrash2 className="w-4 h-4" />
+                  Delete Record
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report Modal */}
+      {showReportModal && selectedEmployee && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900">Send Attendance Report</h3>
+              <p className="text-sm text-gray-500 mt-1">Send report to {selectedEmployee.name}</p>
             </div>
             
             <div className="p-6">
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Period
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Period</label>
                 <div className="text-sm text-gray-600">
-                  {filters.dateFrom ? safeDateFormat(filters.dateFrom, 'MMM dd, yyyy') : 'Last 2 weeks'} 
+                  {filters.dateFrom ? formatDate(filters.dateFrom, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Last 2 weeks'} 
                   {' to '}
-                  {filters.dateTo ? safeDateFormat(filters.dateTo, 'MMM dd, yyyy') : 'Today'}
+                  {filters.dateTo ? formatDate(filters.dateTo, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Today'}
                 </div>
               </div>
               
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Recipient Email
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Recipient Email</label>
                 <div className="text-sm text-gray-600">{selectedEmployee.email}</div>
               </div>
-              
-              <p className="text-sm text-gray-600 mb-6">
-                A detailed attendance report will be sent to the employee's email address.
-              </p>
             </div>
             
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
               <button
                 onClick={() => {
                   setShowReportModal(false);
                   setSelectedEmployee(null);
                 }}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={() => handleSendReport(selectedEmployee)}
-                disabled={sendingReport}
-                className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                onClick={() => {
+                  alert('Report feature coming soon');
+                  setShowReportModal(false);
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
               >
-                {sendingReport ? (
-                  <>
-                    <FiRefreshCw className="w-4 h-4 mr-2 animate-spin inline" />
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <FiMail className="w-4 h-4 mr-2" />
-                    Send Report
-                  </>
-                )}
+                Send Report
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ⚠️ Error Notification */}
+      {/* Error Notification */}
       {error && (
         <div className="fixed bottom-4 right-4 z-50 animate-fade-in">
-          <div className="bg-rose-50 border border-rose-200 rounded-lg shadow-lg p-4 max-w-sm">
+          <div className="bg-red-50 border border-red-200 rounded-lg shadow-lg p-4 max-w-sm">
             <div className="flex items-start">
-              <FiAlertCircle className="w-5 h-5 text-rose-500 mt-0.5 mr-3 flex-shrink-0" />
+              <FiAlertCircle className="w-5 h-5 text-red-500 mt-0.5 mr-3 flex-shrink-0" />
               <div className="flex-1">
-                <h4 className="text-sm font-medium text-rose-800">Error</h4>
-                <p className="text-sm text-rose-700 mt-1">{error}</p>
+                <h4 className="text-sm font-medium text-red-800">Error</h4>
+                <p className="text-sm text-red-700 mt-1">{error}</p>
               </div>
-              <button
-                onClick={() => setError(null)}
-                className="ml-4 text-rose-500 hover:text-rose-700"
-              >
+              <button onClick={() => setError(null)} className="ml-4 text-red-500 hover:text-red-700">
                 <FiX className="w-4 h-4" />
               </button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Custom CSS */}
-      <style jsx global>{`
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .animate-fade-in {
-          animation: fade-in 0.3s ease-out;
-        }
-        
-        .custom-scrollbar {
-          scrollbar-width: thin;
-          scrollbar-color: #cbd5e0 #f1f5f9;
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 8px;
-          height: 8px;
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: #f1f5f9;
-          border-radius: 4px;
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background-color: #cbd5e0;
-          border-radius: 4px;
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background-color: #94a3b8;
-        }
-        
-        /* Sticky table header fix */
-        .sticky {
-          position: sticky;
-        }
-        
-        .sticky.top-0 {
-          top: 0;
-        }
-        
-        .sticky.left-0 {
-          left: 0;
-          box-shadow: 2px 0 5px -2px rgba(0, 0, 0, 0.1);
-        }
-        
-        .sticky.right-0 {
-          right: 0;
-          box-shadow: -2px 0 5px -2px rgba(0, 0, 0, 0.1);
-        }
-        
-        /* Ensure z-index layers work properly */
-        .z-10 {
-          z-index: 10;
-        }
-        
-        .z-20 {
-          z-index: 20;
-        }
-        
-        .z-50 {
-          z-index: 50;
-        }
-      `}</style>
     </div>
   );
 };

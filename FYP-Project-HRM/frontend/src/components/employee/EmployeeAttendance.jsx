@@ -1,346 +1,202 @@
 import React, { useState, useEffect } from 'react';
 import axiosInstance from '../../utils/axiosInstance';
 import {
-  FaCheckCircle, 
-  FaTimesCircle, 
-  FaClock, 
-  FaCalendarDay,
-  FaHistory,
-  FaUserClock,
-  FaExclamationTriangle,
-  FaTrash,
-  FaEye,
-  FaDownload,
-  FaFileCsv,
-  FaChartLine,
-  FaUser
+  FaCheckCircle, FaTimesCircle, FaClock, FaCalendarDay,
+  FaHistory, FaUserClock, FaExclamationTriangle,
+  FaEye, FaDownload, FaFileCsv, FaChartLine, FaUser
 } from 'react-icons/fa';
 
-// Helper function for time formatting
+// ─── Unchanged helper logic ────────────────────────────────────────────────────
+
 const formatTime = (timeString) => {
   if (!timeString) return '--:--';
   try {
     const date = new Date(timeString);
     if (isNaN(date.getTime())) return '--:--';
-    
-    // Format to 12-hour with AM/PM
-    return date.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    });
-  } catch {
-    return '--:--';
-  }
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  } catch { return '--:--'; }
 };
 
-// Helper function to get actual time
-const getActualTime = (record) => {
-  return {
-    checkIn: record.approvedCheckIn || record.requestedCheckIn || record.checkIn,
-    checkOut: record.approvedCheckOut || record.requestedCheckOut || record.checkOut
-  };
-};
+const getActualTime = (record) => ({
+  checkIn:  record.approvedCheckIn  || record.requestedCheckIn  || record.checkIn,
+  checkOut: record.approvedCheckOut || record.requestedCheckOut || record.checkOut,
+});
 
-// Format date consistently
 const formatDate = (dateString, options = {}) => {
   if (!dateString) return 'N/A';
   try {
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return 'N/A';
-    
-    const defaultOptions = { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
-    };
-    
-    return date.toLocaleDateString('en-US', { ...defaultOptions, ...options });
-  } catch {
-    return 'N/A';
-  }
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', ...options });
+  } catch { return 'N/A'; }
 };
 
-// Helper function to get time-based status
 const getTimeBasedStatus = (checkInTime, checkOutTime = null) => {
   if (!checkInTime) return { status: 'Not Checked In', color: 'gray', message: 'Not checked in yet' };
-  
   const checkInDate = new Date(checkInTime);
-  const checkInHour = checkInDate.getHours();
-  const checkInMinute = checkInDate.getMinutes();
-  
-  // Convert to total minutes for easier comparison
-  const checkInTotalMinutes = checkInHour * 60 + checkInMinute;
-  
-  // Define thresholds (in minutes from midnight)
-  const PRESENT_THRESHOLD = 9 * 60; // 9:00 AM = 540 minutes
-  const LATE_THRESHOLD = 9 * 60 + 30; // 9:30 AM = 570 minutes
-  
+  const checkInTotalMinutes = checkInDate.getHours() * 60 + checkInDate.getMinutes();
+  const PRESENT_THRESHOLD = 9 * 60;
+  const LATE_THRESHOLD    = 9 * 60 + 30;
+
   if (checkOutTime) {
     const checkOutDate = new Date(checkOutTime);
-    const checkOutHour = checkOutDate.getHours();
-    const checkOutMinute = checkOutDate.getMinutes();
-    const checkOutTotalMinutes = checkOutHour * 60 + checkOutMinute;
-    
-    const ON_TIME_THRESHOLD = 17 * 60; // 5:00 PM = 1020 minutes
-    const EARLY_THRESHOLD = 17 * 60 - 30; // 4:30 PM = 990 minutes
-    
-    // Check in status
-    let checkInStatus = '';
-    let checkInColor = '';
-    
-    if (checkInTotalMinutes < PRESENT_THRESHOLD) {
-      checkInStatus = 'Present';
-      checkInColor = 'green';
-    } else if (checkInTotalMinutes < LATE_THRESHOLD) {
-      checkInStatus = 'Late';
-      checkInColor = 'orange';
-    } else {
-      checkInStatus = 'Very Late';
-      checkInColor = 'red';
-    }
-    
-    // Check out status
-    let checkOutStatus = '';
-    let checkOutColor = '';
-    
-    if (checkOutTotalMinutes >= ON_TIME_THRESHOLD) {
-      checkOutStatus = 'On Time';
-      checkOutColor = 'green';
-    } else if (checkOutTotalMinutes >= EARLY_THRESHOLD) {
-      checkOutStatus = 'Early Leave';
-      checkOutColor = 'yellow';
-    } else {
-      checkOutStatus = 'Very Early';
-      checkOutColor = 'red';
-    }
-    
-    // Calculate total hours worked
-    const totalHours = (checkOutTotalMinutes - checkInTotalMinutes) / 60;
-    
+    const checkOutTotalMinutes = checkOutDate.getHours() * 60 + checkOutDate.getMinutes();
+    const ON_TIME_THRESHOLD = 17 * 60;
+    const EARLY_THRESHOLD   = 17 * 60 - 30;
+
+    const checkInStatus = checkInTotalMinutes < PRESENT_THRESHOLD ? 'Present' : checkInTotalMinutes < LATE_THRESHOLD ? 'Late' : 'Very Late';
+    const checkInColor  = checkInTotalMinutes < PRESENT_THRESHOLD ? 'green'   : checkInTotalMinutes < LATE_THRESHOLD ? 'orange' : 'red';
+    const checkOutStatus = checkOutTotalMinutes >= ON_TIME_THRESHOLD ? 'On Time' : checkOutTotalMinutes >= EARLY_THRESHOLD ? 'Early Leave' : 'Very Early';
+    const checkOutColor  = checkOutTotalMinutes >= ON_TIME_THRESHOLD ? 'green'   : checkOutTotalMinutes >= EARLY_THRESHOLD ? 'yellow'      : 'red';
     return {
-      status: checkInStatus,
-      checkOutStatus: checkOutStatus,
-      color: checkInColor,
-      checkOutColor: checkOutColor,
-      message: `${checkInStatus} (Checked in at ${formatTime(checkInTime)}) - ${checkOutStatus} (Checked out at ${formatTime(checkOutTime)})`,
-      totalHours: totalHours
-    };
-  } else {
-    // Only check-in available
-    let status = '';
-    let color = '';
-    let message = '';
-    
-    if (checkInTotalMinutes < PRESENT_THRESHOLD) {
-      status = 'Present';
-      color = 'green';
-      message = `Present (Checked in early at ${formatTime(checkInTime)})`;
-    } else if (checkInTotalMinutes < LATE_THRESHOLD) {
-      status = 'Late';
-      color = 'orange';
-      message = `Late (Checked in at ${formatTime(checkInTime)})`;
-    } else {
-      status = 'Very Late';
-      color = 'red';
-      message = `Very Late (Checked in at ${formatTime(checkInTime)})`;
-    }
-    
-    return {
-      status: status,
-      color: color,
-      message: message,
-      checkInTime: formatTime(checkInTime)
+      status: checkInStatus, color: checkInColor, checkOutStatus, checkOutColor,
+      message: `${checkInStatus} (${formatTime(checkInTime)}) · ${checkOutStatus} (${formatTime(checkOutTime)})`,
+      totalHours: (checkOutTotalMinutes - checkInTotalMinutes) / 60,
     };
   }
+
+  const status  = checkInTotalMinutes < PRESENT_THRESHOLD ? 'Present' : checkInTotalMinutes < LATE_THRESHOLD ? 'Late' : 'Very Late';
+  const color   = checkInTotalMinutes < PRESENT_THRESHOLD ? 'green'   : checkInTotalMinutes < LATE_THRESHOLD ? 'orange' : 'red';
+  return { status, color, message: `${status} (checked in at ${formatTime(checkInTime)})`, checkInTime: formatTime(checkInTime) };
 };
 
-// Add this helper function to get current time status
 const getCurrentTimeStatus = (todayAttendance) => {
   const now = new Date();
-  const currentHour = now.getHours();
-  const currentMinute = now.getMinutes();
-  const currentTotalMinutes = currentHour * 60 + currentMinute;
-  
-  // Work hours: 9 AM to 5 PM
-  const WORK_START = 9 * 60; // 9:00 AM
-  const WORK_END = 17 * 60; // 5:00 PM
-  const LATE_THRESHOLD = WORK_START + 30; // 9:30 AM
-  
+  const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
+  const WORK_START     = 9 * 60;
+  const LATE_THRESHOLD = 9 * 60 + 30;
+
   if (!todayAttendance?.approvedCheckIn) {
-    // Not checked in yet
-    if (currentTotalMinutes < WORK_START) {
-      return {
-        message: `Expected check-in: 9:00 AM (in ${WORK_START - currentTotalMinutes} minutes)`,
-        color: 'blue',
-        icon: '⏰'
-      };
-    } else if (currentTotalMinutes < LATE_THRESHOLD) {
-      return {
-        message: `You're late! Expected check-in was 9:00 AM`,
-        color: 'orange',
-        icon: '⚠️'
-      };
-    } else {
-      return {
-        message: `You're very late! Expected check-in was 9:00 AM`,
-        color: 'red',
-        icon: '🚨'
-      };
-    }
-  } else if (!todayAttendance?.approvedCheckOut) {
-    // Checked in but not checked out
-    const checkInTime = new Date(todayAttendance.approvedCheckIn || todayAttendance.requestedCheckIn);
-    const checkInHour = checkInTime.getHours();
-    const checkInMinute = checkInTime.getMinutes();
-    const checkInTotalMinutes = checkInHour * 60 + checkInMinute;
-    
-    let checkInStatus = '';
-    if (checkInTotalMinutes < WORK_START) {
-      checkInStatus = 'Present';
-    } else if (checkInTotalMinutes < LATE_THRESHOLD) {
-      checkInStatus = 'Late';
-    } else {
-      checkInStatus = 'Very Late';
-    }
-    
-    // Calculate expected check-out time (8 hours after check-in)
-    const expectedCheckOutMinutes = checkInTotalMinutes + 8 * 60;
-    const remainingMinutes = expectedCheckOutMinutes - currentTotalMinutes;
-    
-    if (remainingMinutes > 0) {
-      return {
-        message: `${checkInStatus} - Expected check-out: ${Math.floor(expectedCheckOutMinutes / 60)}:${(expectedCheckOutMinutes % 60).toString().padStart(2, '0')} (in ${remainingMinutes} minutes)`,
-        color: 'green',
-        icon: '⏳'
-      };
-    } else {
-      return {
-        message: `${checkInStatus} - Overdue for check-out by ${Math.abs(remainingMinutes)} minutes`,
-        color: 'yellow',
-        icon: '⚠️'
-      };
-    }
-  } else {
-    // Already checked out
-    const timeStatus = getTimeBasedStatus(
-      todayAttendance.approvedCheckIn, 
-      todayAttendance.approvedCheckOut
-    );
-    
-    return {
-      message: timeStatus.message,
-      color: timeStatus.color,
-      icon: '✅'
-    };
+    if (currentTotalMinutes < WORK_START) return { message: `Expected check-in at 9:00 AM · in ${WORK_START - currentTotalMinutes} min`, color: 'blue' };
+    if (currentTotalMinutes < LATE_THRESHOLD) return { message: `You're late · expected 9:00 AM`, color: 'orange' };
+    return { message: `Very late · expected check-in was 9:00 AM`, color: 'red' };
+  }
+
+  if (!todayAttendance?.approvedCheckOut) {
+    const ci = new Date(todayAttendance.approvedCheckIn || todayAttendance.requestedCheckIn);
+    const ciMins = ci.getHours() * 60 + ci.getMinutes();
+    const status = ciMins < WORK_START ? 'Present' : ciMins < LATE_THRESHOLD ? 'Late' : 'Very Late';
+    const expected = ciMins + 8 * 60;
+    const remaining = expected - currentTotalMinutes;
+    const hh = String(Math.floor(expected / 60)).padStart(2, '0');
+    const mm = String(expected % 60).padStart(2, '0');
+    return remaining > 0
+      ? { message: `${status} · expected checkout ${hh}:${mm} (${remaining} min remaining)`, color: 'green' }
+      : { message: `${status} · overdue checkout by ${Math.abs(remaining)} min`, color: 'yellow' };
+  }
+
+  return { ...getTimeBasedStatus(todayAttendance.approvedCheckIn, todayAttendance.approvedCheckOut), };
+};
+
+// ─── UI Primitives ────────────────────────────────────────────────────────────
+
+const Badge = ({ children, variant = 'default' }) => {
+  const v = {
+    default:  'bg-slate-100 text-slate-600',
+    success:  'bg-emerald-50 text-emerald-700',
+    warning:  'bg-amber-50 text-amber-700',
+    danger:   'bg-red-50 text-red-700',
+    info:     'bg-blue-50 text-blue-700',
+    orange:   'bg-orange-50 text-orange-700',
+  };
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${v[variant]}`}>{children}</span>;
+};
+
+const statusVariant = (status) => {
+  if (!status) return 'default';
+  switch (status.toLowerCase()) {
+    case 'present':   return 'success';
+    case 'late':      return 'orange';
+    case 'half-day':  return 'warning';
+    case 'absent':    return 'danger';
+    default:          return 'default';
   }
 };
 
-// CSV Export Modal Component
+const timeColorVariant = (color) => {
+  if (color === 'green')  return 'success';
+  if (color === 'orange') return 'orange';
+  if (color === 'yellow') return 'warning';
+  if (color === 'red')    return 'danger';
+  return 'default';
+};
+
+const KpiCard = ({ icon: Icon, label, value, sub, iconBg }) => (
+  <div className="bg-white rounded-2xl border border-slate-200 p-5">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-xs text-slate-500 font-medium mb-2">{label}</p>
+        <p className="text-2xl font-semibold text-slate-900">{value}</p>
+        {sub && <p className="text-xs text-slate-400 mt-1">{sub}</p>}
+      </div>
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${iconBg}`}>
+        <Icon className="text-white text-sm" />
+      </div>
+    </div>
+  </div>
+);
+
+// ─── CSV Export Modal ─────────────────────────────────────────────────────────
+
 const CSVExportModal = ({ isOpen, onClose, onExport, loading }) => {
   const [dateRange, setDateRange] = useState({
     startDate: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0]
+    endDate:   new Date().toISOString().split('T')[0],
   });
   const [includeAll, setIncludeAll] = useState(true);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl max-w-md w-full p-6">
-        <div className="flex items-center mb-6">
-          <div className="w-12 h-12 bg-gradient-to-r from-blue-400 to-blue-600 rounded-full flex items-center justify-center mr-4">
-            <FaFileCsv className="text-white text-xl" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
+            <FaFileCsv className="text-emerald-600" />
           </div>
           <div>
-            <h3 className="text-xl font-bold text-gray-900">Export Attendance Data</h3>
-            <p className="text-gray-600 text-sm">Download your attendance records as CSV</p>
+            <h3 className="text-base font-semibold text-slate-900">Export Attendance</h3>
+            <p className="text-xs text-slate-500">Download records as CSV</p>
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div>
-            <label className="flex items-center mb-3">
-              <input
-                type="checkbox"
-                checked={includeAll}
-                onChange={(e) => setIncludeAll(e.target.checked)}
-                className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500 border-gray-300"
-              />
-              <span className="ml-2 text-gray-700 font-medium">Export all records</span>
-            </label>
-            
-            {!includeAll && (
-              <div className="space-y-4 p-4 bg-blue-50 rounded-lg">
-                <div>
-                  <label className="block text-sm font-medium text-blue-700 mb-1">
-                    Start Date
-                  </label>
-                  <input
-                    type="date"
-                    value={dateRange.startDate}
-                    onChange={(e) => setDateRange({...dateRange, startDate: e.target.value})}
-                    max={dateRange.endDate}
-                    className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-blue-700 mb-1">
-                    End Date
-                  </label>
-                  <input
-                    type="date"
-                    value={dateRange.endDate}
-                    onChange={(e) => setDateRange({...dateRange, endDate: e.target.value})}
-                    min={dateRange.startDate}
-                    max={new Date().toISOString().split('T')[0]}
-                    className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
+        <div className="space-y-5">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={includeAll} onChange={e => setIncludeAll(e.target.checked)}
+              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+            <span className="text-sm text-slate-700 font-medium">Export all records</span>
+          </label>
 
-          <div className="bg-gradient-to-r from-green-50 to-green-100 border-l-4 border-green-400 p-4 rounded-lg">
-            <div className="flex">
-              <FaFileCsv className="h-5 w-5 text-green-500 mr-3 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-green-800">How to Download:</p>
-                <ul className="text-xs text-green-700 mt-1 space-y-1">
-                  <li>1. Click "Export CSV" to start download</li>
-                  <li>2. Check your browser's downloads folder</li>
-                  <li>3. The file will be named: <code className="bg-green-200 px-1 rounded">attendance_YYYY-MM-DD.csv</code></li>
-                  <li>4. Open with Excel, Google Sheets, or any spreadsheet software</li>
-                </ul>
-              </div>
+          {!includeAll && (
+            <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 rounded-xl">
+              {[['startDate','Start Date','','dateRange.endDate'],['endDate','End Date',dateRange.startDate,new Date().toISOString().split('T')[0]]].map(([field, label, min, max]) => (
+                <div key={field}>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
+                  <input type="date" value={dateRange[field]} min={min || undefined} max={max || undefined}
+                    onChange={e => setDateRange(p => ({ ...p, [field]: e.target.value }))}
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              ))}
             </div>
+          )}
+
+          <div className="bg-slate-50 rounded-xl p-4 text-xs text-slate-500 space-y-1">
+            <p className="font-medium text-slate-700 mb-2">How to download:</p>
+            <p>1. Click <em>Export CSV</em> below</p>
+            <p>2. Find the file in your downloads folder</p>
+            <p>3. Open with Excel or Google Sheets</p>
           </div>
 
-          <div className="flex justify-end space-x-3">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 font-medium transition-colors"
-              disabled={loading}
-            >
+          <div className="flex gap-3 pt-1">
+            <button onClick={onClose} disabled={loading}
+              className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
               Cancel
             </button>
-            <button
-              onClick={() => onExport(dateRange, includeAll)}
-              disabled={loading}
-              className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 font-medium transition-all duration-200 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
-                  Exporting...
-                </>
-              ) : (
-                <>
-                  <FaDownload className="mr-2" />
-                  Export CSV
-                </>
-              )}
+            <button onClick={() => onExport(dateRange, includeAll)} disabled={loading}
+              className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
+              {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <FaDownload className="text-xs" />}
+              {loading ? 'Exporting…' : 'Export CSV'}
             </button>
           </div>
         </div>
@@ -349,7 +205,8 @@ const CSVExportModal = ({ isOpen, onClose, onExport, loading }) => {
   );
 };
 
-// Record Details Modal Component
+// ─── Record Details Modal ─────────────────────────────────────────────────────
+
 const RecordDetailsModal = ({ isOpen, onClose, record }) => {
   if (!isOpen || !record) return null;
 
@@ -357,1004 +214,525 @@ const RecordDetailsModal = ({ isOpen, onClose, record }) => {
   const employee = record.employee || {};
   const timeStatus = getTimeBasedStatus(times.checkIn, times.checkOut);
 
+  const statusBarColors = {
+    green:  'border-emerald-200 bg-emerald-50',
+    orange: 'border-orange-200 bg-orange-50',
+    yellow: 'border-amber-200 bg-amber-50',
+    red:    'border-red-200 bg-red-50',
+    gray:   'border-slate-200 bg-slate-50',
+  };
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-2xl font-bold text-gray-900">Attendance Details</h3>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 text-2xl"
-            >
-              ×
-            </button>
-          </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-5 border-b border-slate-100">
+          <h3 className="text-lg font-semibold text-slate-900">Attendance Details</h3>
+          <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors">
+            <span className="text-xl leading-none">×</span>
+          </button>
+        </div>
 
-          {/* Time-based Status Banner */}
-          <div className={`mb-6 p-4 rounded-xl border ${
-            timeStatus.color === 'green' ? 'bg-gradient-to-r from-green-50 to-green-100 border-green-200' :
-            timeStatus.color === 'orange' ? 'bg-gradient-to-r from-orange-50 to-orange-100 border-orange-200' :
-            timeStatus.color === 'yellow' ? 'bg-gradient-to-r from-yellow-50 to-yellow-100 border-yellow-200' :
-            timeStatus.color === 'red' ? 'bg-gradient-to-r from-red-50 to-red-100 border-red-200' :
-            'bg-gradient-to-r from-gray-50 to-gray-100 border-gray-200'
-          }`}>
-            <div className="flex items-center">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center mr-3 ${
-                timeStatus.color === 'green' ? 'bg-green-100' :
-                timeStatus.color === 'orange' ? 'bg-orange-100' :
-                timeStatus.color === 'yellow' ? 'bg-yellow-100' :
-                timeStatus.color === 'red' ? 'bg-red-100' :
-                'bg-gray-100'
-              }`}>
-                {timeStatus.color === 'green' ? '✅' :
-                 timeStatus.color === 'orange' ? '⚠️' :
-                 timeStatus.color === 'yellow' ? '⏰' :
-                 timeStatus.color === 'red' ? '🚨' : '⏳'}
-              </div>
-              <div>
-                <p className="font-bold text-gray-800">Time-based Status</p>
-                <p className="text-sm text-gray-600">{timeStatus.message}</p>
-              </div>
+        <div className="p-5 space-y-5">
+          {/* Status Banner */}
+          <div className={`flex items-center gap-3 p-4 rounded-xl border ${statusBarColors[timeStatus.color] || statusBarColors.gray}`}>
+            <div className="w-8 h-8 rounded-lg bg-white/80 flex items-center justify-center flex-shrink-0">
+              <FaClock className={timeStatus.color === 'green' ? 'text-emerald-500' : timeStatus.color === 'orange' ? 'text-orange-500' : 'text-red-500'} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-800">{timeStatus.status}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{timeStatus.message}</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div className="bg-gradient-to-r from-blue-50 to-blue-100 p-4 rounded-xl border border-blue-200">
-              <h4 className="font-bold text-blue-800 mb-3">My Information</h4>
-              <div className="space-y-2">
-                <div>
-                  <span className="text-sm text-blue-600">Name:</span>
-                  <p className="font-medium">{employee.name || 'N/A'}</p>
-                </div>
-                <div>
-                  <span className="text-sm text-blue-600">Employee ID:</span>
-                  <p className="font-medium">{employee.employeeId || 'N/A'}</p>
-                </div>
-                <div>
-                  <span className="text-sm text-blue-600">Department:</span>
-                  <p className="font-medium">{employee.department || 'N/A'}</p>
-                </div>
-                <div>
-                  <span className="text-sm text-blue-600">Email:</span>
-                  <p className="font-medium">{employee.email || 'N/A'}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-r from-green-50 to-green-100 p-4 rounded-xl border border-green-200">
-              <h4 className="font-bold text-green-800 mb-3">Attendance Summary</h4>
-              <div className="space-y-2">
-                <div>
-                  <span className="text-sm text-green-600">Date:</span>
-                  <p className="font-medium">
-                    {formatDate(record.date, { 
-                      weekday: 'long', 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric' 
-                    })}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-sm text-green-600">Status:</span>
-                  <span className={`ml-2 inline-block px-2 py-1 rounded-full text-xs font-medium ${
-                    record.status === 'present' ? 'bg-gradient-to-r from-green-100 to-green-200 text-green-800 border border-green-300' :
-                    record.status === 'late' ? 'bg-gradient-to-r from-orange-100 to-orange-200 text-orange-800 border border-orange-300' :
-                    record.status === 'half-day' ? 'bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800 border border-yellow-300' :
-                    record.status === 'absent' ? 'bg-gradient-to-r from-red-100 to-red-200 text-red-800 border border-red-300' :
-                    'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800 border border-gray-300'
-                  }`}>
-                    {record.status || 'N/A'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-sm text-green-600">Total Hours:</span>
-                  <p className="font-medium">{record.totalHours?.toFixed(2) || '0.00'} hours</p>
-                </div>
-                <div>
-                  <span className="text-sm text-green-600">Late Minutes:</span>
-                  <p className="font-medium">{record.lateMinutes || 0} minutes</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div className="bg-white border border-blue-200 rounded-xl p-4 shadow-sm">
-              <h4 className="font-bold text-gray-800 mb-3 flex items-center">
-                <FaClock className="mr-2 text-blue-600" />
-                Check In Details
-              </h4>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Actual Time:</span>
-                  <span className="font-medium text-blue-700">{formatTime(record.approvedCheckIn)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Requested Time:</span>
-                  <span className="font-medium text-blue-700">{formatTime(record.requestedCheckIn)}</span>
-                </div>
-                {record.checkInRequest && (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Request Status:</span>
-                      <span className={`font-medium ${record.checkInRequest.approved === false ? 'text-yellow-600' : 'text-green-600'}`}>
-                        {record.checkInRequest.approved === false ? 'Pending' : 'Approved'}
-                      </span>
+          {/* Employee + Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[
+              {
+                title: 'Employee Info', rows: [
+                  ['Name', employee.name], ['Employee ID', employee.employeeId],
+                  ['Department', employee.department], ['Email', employee.email],
+                ]
+              },
+              {
+                title: 'Attendance Summary', rows: [
+                  ['Date', formatDate(record.date, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })],
+                  ['Status', record.status],
+                  ['Total Hours', `${record.totalHours?.toFixed(2) || '0.00'} hrs`],
+                  ['Late Minutes', `${record.lateMinutes || 0} min`],
+                ]
+              }
+            ].map(section => (
+              <div key={section.title} className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">{section.title}</p>
+                <div className="space-y-2">
+                  {section.rows.map(([label, value]) => value && (
+                    <div key={label} className="flex justify-between gap-2">
+                      <span className="text-xs text-slate-500">{label}</span>
+                      <span className="text-xs font-medium text-slate-800 text-right max-w-[180px] truncate">{value || 'N/A'}</span>
                     </div>
-                    {record.checkInRequest.remarks && (
-                      <div>
-                        <span className="text-gray-600">Remarks:</span>
-                        <p className="font-medium text-sm mt-1 text-blue-700">{record.checkInRequest.remarks}</p>
-                      </div>
-                    )}
-                  </>
-                )}
-                {/* Time-based check-in status */}
-                {times.checkIn && (
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    <span className="text-gray-600">Check-in Status:</span>
-                    <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ml-2 ${
-                      timeStatus.color === 'green' ? 'bg-green-100 text-green-800' :
-                      timeStatus.color === 'orange' ? 'bg-orange-100 text-orange-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>
-                      {timeStatus.status}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {timeStatus.status === 'Present' ? '✓ Before 9:00 AM' :
-                       timeStatus.status === 'Late' ? '⚠ Between 9:00-9:30 AM' :
-                       '✗ After 9:30 AM'}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-white border border-red-200 rounded-xl p-4 shadow-sm">
-              <h4 className="font-bold text-gray-800 mb-3 flex items-center">
-                <FaClock className="mr-2 text-red-600" />
-                Check Out Details
-              </h4>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Actual Time:</span>
-                  <span className="font-medium text-red-700">{formatTime(record.approvedCheckOut)}</span>
+                  ))}
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Requested Time:</span>
-                  <span className="font-medium text-red-700">{formatTime(record.requestedCheckOut)}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Check In / Check Out */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[
+              {
+                title: 'Check In', accent: 'text-blue-600', border: 'border-blue-100',
+                rows: [
+                  ['Actual Time', formatTime(record.approvedCheckIn)],
+                  ['Requested', formatTime(record.requestedCheckIn)],
+                  ['Status', record.checkInRequest?.approved === false ? 'Pending' : 'Approved'],
+                  ...(record.checkInRequest?.remarks ? [['Remarks', record.checkInRequest.remarks]] : []),
+                ]
+              },
+              {
+                title: 'Check Out', accent: 'text-rose-600', border: 'border-rose-100',
+                rows: [
+                  ['Actual Time', formatTime(record.approvedCheckOut)],
+                  ['Requested', formatTime(record.requestedCheckOut)],
+                  ['Status', record.checkOutRequest?.approved === false ? 'Pending' : 'Approved'],
+                  ...(record.checkOutRequest?.remarks ? [['Remarks', record.checkOutRequest.remarks]] : []),
+                ]
+              }
+            ].map(col => (
+              <div key={col.title} className={`bg-white rounded-xl border ${col.border} p-4`}>
+                <p className={`text-xs font-semibold uppercase tracking-wide mb-3 ${col.accent}`}>{col.title}</p>
+                <div className="space-y-2">
+                  {col.rows.map(([label, value]) => (
+                    <div key={label} className="flex justify-between">
+                      <span className="text-xs text-slate-500">{label}</span>
+                      <span className="text-xs font-medium text-slate-800">{value || '—'}</span>
+                    </div>
+                  ))}
                 </div>
-                {record.checkOutRequest && (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Request Status:</span>
-                      <span className={`font-medium ${record.checkOutRequest.approved === false ? 'text-yellow-600' : 'text-green-600'}`}>
-                        {record.checkOutRequest.approved === false ? 'Pending' : 'Approved'}
-                      </span>
-                    </div>
-                    {record.checkOutRequest.remarks && (
-                      <div>
-                        <span className="text-gray-600">Remarks:</span>
-                        <p className="font-medium text-sm mt-1 text-red-700">{record.checkOutRequest.remarks}</p>
-                      </div>
-                    )}
-                  </>
-                )}
-                {/* Time-based check-out status */}
-                {times.checkOut && timeStatus.checkOutStatus && (
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    <span className="text-gray-600">Check-out Status:</span>
-                    <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ml-2 ${
-                      timeStatus.checkOutColor === 'green' ? 'bg-green-100 text-green-800' :
-                      timeStatus.checkOutColor === 'yellow' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>
-                      {timeStatus.checkOutStatus}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {timeStatus.checkOutStatus === 'On Time' ? '✓ After 5:00 PM' :
-                       timeStatus.checkOutStatus === 'Early Leave' ? '⚠ Between 4:30-5:00 PM' :
-                       '✗ Before 4:30 PM'}
-                    </p>
-                  </div>
-                )}
               </div>
-            </div>
+            ))}
           </div>
 
-          <div className="bg-gradient-to-r from-gray-50 to-gray-100 p-4 rounded-xl border border-gray-200">
-            <h4 className="font-bold text-gray-800 mb-3">System Information</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-gray-600">Record ID:</span>
-                <p className="font-medium font-mono text-gray-800">{record._id || 'N/A'}</p>
-              </div>
-              <div>
-                <span className="text-gray-600">Created:</span>
-                <p className="font-medium text-gray-800">
-                  {record.createdAt ? new Date(record.createdAt).toLocaleString() : 'N/A'}
-                </p>
-              </div>
-              <div>
-                <span className="text-gray-600">Last Updated:</span>
-                <p className="font-medium text-gray-800">
-                  {record.updatedAt ? new Date(record.updatedAt).toLocaleString() : 'N/A'}
-                </p>
-              </div>
+          {/* System info */}
+          <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">System Information</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+              <div><span className="text-slate-400">Record ID</span><p className="font-mono text-slate-700 mt-0.5">{record._id || 'N/A'}</p></div>
+              <div><span className="text-slate-400">Created</span><p className="text-slate-700 mt-0.5">{record.createdAt ? new Date(record.createdAt).toLocaleString() : 'N/A'}</p></div>
+              <div><span className="text-slate-400">Updated</span><p className="text-slate-700 mt-0.5">{record.updatedAt ? new Date(record.updatedAt).toLocaleString() : 'N/A'}</p></div>
             </div>
           </div>
+        </div>
 
-          <div className="mt-8 flex justify-end">
-            <button
-              onClick={onClose}
-              className="px-6 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 font-medium transition-colors"
-            >
-              Close
-            </button>
-          </div>
+        <div className="px-5 pb-5 flex justify-end">
+          <button onClick={onClose} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors">
+            Close
+          </button>
         </div>
       </div>
     </div>
   );
 };
 
+// ─── Error Boundary ───────────────────────────────────────────────────────────
+
 class ErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error, errorInfo) {
-    console.error('🚨 Employee Attendance Error:', error, errorInfo);
-  }
-
+  constructor(props) { super(props); this.state = { hasError: false }; }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(e, i) { console.error('🚨 Attendance Error:', e, i); }
   render() {
-    if (this.state.hasError) {
-      return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-8 flex items-center justify-center">
-          <div className="max-w-2xl mx-auto bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-200 rounded-2xl p-8 text-center">
-            <div className="w-20 h-20 bg-gradient-to-r from-red-100 to-red-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <span className="text-3xl">🚨</span>
-            </div>
-            <h2 className="text-2xl font-bold text-red-600 mb-4">Attendance Error</h2>
-            <p className="text-gray-700 mb-6">Something went wrong loading attendance data.</p>
-            <button 
-              onClick={() => window.location.reload()} 
-              className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-xl hover:from-blue-600 hover:to-blue-700 font-medium"
-            >
-              🔄 Reload Page
-            </button>
+    if (this.state.hasError) return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-2xl border border-red-200 p-8 text-center max-w-sm">
+          <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center mx-auto mb-4">
+            <FaExclamationTriangle className="text-red-500 text-lg" />
           </div>
+          <h2 className="text-lg font-semibold text-slate-900 mb-2">Something went wrong</h2>
+          <p className="text-slate-500 text-sm mb-5">Failed to load attendance data.</p>
+          <button onClick={() => window.location.reload()}
+            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors">
+            Reload Page
+          </button>
         </div>
-      );
-    }
+      </div>
+    );
     return this.props.children;
   }
 }
 
+// ─── Main Content ─────────────────────────────────────────────────────────────
+
 const EmployeeAttendanceContent = () => {
   const [todayAttendance, setTodayAttendance] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [stats, setStats] = useState({
-    totalDays: 0,
-    presentDays: 0,
-    averageHours: 0
-  });
-
-  // Check if check-in/out requests are pending
-  const [pendingRequests, setPendingRequests] = useState({
-    checkIn: false,
-    checkOut: false
-  });
-
-  // Details modal state
+  const [history, setHistory]                 = useState([]);
+  const [loading, setLoading]                 = useState(false);
+  const [error, setError]                     = useState('');
+  const [stats, setStats]                     = useState({ totalDays: 0, presentDays: 0, averageHours: 0 });
+  const [pendingRequests, setPendingRequests]  = useState({ checkIn: false, checkOut: false });
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
-  const [selectedRecord, setSelectedRecord] = useState(null);
+  const [selectedRecord, setSelectedRecord]   = useState(null);
+  const [csvModalOpen, setCsvModalOpen]       = useState(false);
+  const [exporting, setExporting]             = useState(false);
 
-  // CSV Export modal state
-  const [csvModalOpen, setCsvModalOpen] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  // ── All logic unchanged ─────────────────────────────────────────────────────
 
-  // Load attendance data
   const loadAttendance = async () => {
     try {
-      setLoading(true);
-      setError('');
+      setLoading(true); setError('');
       const res = await axiosInstance.get('/attendance/my-attendance');
-      
-      // Handle different API response structures
       let data = [];
-      if (Array.isArray(res.data)) {
-        data = res.data;
-      } else if (res.data?.data && Array.isArray(res.data.data)) {
-        data = res.data.data;
-      } else if (res.data?.success && Array.isArray(res.data.data)) {
-        data = res.data.data;
-      }
-      
+      if (Array.isArray(res.data)) data = res.data;
+      else if (res.data?.data && Array.isArray(res.data.data)) data = res.data.data;
+      else if (res.data?.success && Array.isArray(res.data.data)) data = res.data.data;
+
       setHistory(data);
-      
       const today = new Date().toDateString();
-      const todayRecord = data.find(r => 
-        r.date && new Date(r.date).toDateString() === today
-      ) || null;
-      
+      const todayRecord = data.find(r => r.date && new Date(r.date).toDateString() === today) || null;
       setTodayAttendance(todayRecord);
-      
-      // Check for pending requests
+
       if (todayRecord) {
-        setPendingRequests({
-          checkIn: todayRecord.checkInRequest?.approved === false,
-          checkOut: todayRecord.checkOutRequest?.approved === false
-        });
+        setPendingRequests({ checkIn: todayRecord.checkInRequest?.approved === false, checkOut: todayRecord.checkOutRequest?.approved === false });
       } else {
         setPendingRequests({ checkIn: false, checkOut: false });
       }
-      
-      // Calculate stats using approved times
-      const presentDays = data.filter(r => 
-        r.status === 'present' || 
-        r.status === 'late' || 
-        r.status === 'half-day'
-      ).length;
-      
-      // Calculate total hours using approved check-in/out times
+
+      const presentDays = data.filter(r => ['present','late','half-day'].includes(r.status)).length;
       const totalHours = data.reduce((sum, r) => {
-        if (r.approvedCheckIn && r.approvedCheckOut) {
-          const diffMs = new Date(r.approvedCheckOut) - new Date(r.approvedCheckIn);
-          return sum + (diffMs / (1000 * 60 * 60));
-        }
+        if (r.approvedCheckIn && r.approvedCheckOut) return sum + (new Date(r.approvedCheckOut) - new Date(r.approvedCheckIn)) / 3600000;
         return sum + (r.totalHours || 0);
       }, 0);
-      
-      setStats({
-        totalDays: data.length,
-        presentDays,
-        averageHours: data.length > 0 ? totalHours / data.length : 0
-      });
-    } catch (error) {
-      console.error('🚨 Attendance load error:', error);
-      setError('Failed to load attendance data. Please try again.');
-      setHistory([]);
-      setTodayAttendance(null);
+      setStats({ totalDays: data.length, presentDays, averageHours: data.length > 0 ? totalHours / data.length : 0 });
+    } catch {
+      setError('Failed to load attendance data.'); setHistory([]); setTodayAttendance(null);
       setPendingRequests({ checkIn: false, checkOut: false });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
-  // Handle check-in
   const handleCheckIn = async () => {
-    // First check if already checked in today
     const today = new Date().toDateString();
-    const todayRecord = history.find(r => 
-      r.date && new Date(r.date).toDateString() === today
-    );
-    
-    if (todayRecord?.approvedCheckIn) {
-      alert('❌ You have already checked in today!');
-      return;
-    }
-    
-    if (todayRecord?.checkInRequest?.approved === false) {
-      alert('⏳ Your check-in request is already pending approval');
-      return;
-    }
-
+    const rec = history.find(r => r.date && new Date(r.date).toDateString() === today);
+    if (rec?.approvedCheckIn) { alert('You have already checked in today!'); return; }
+    if (rec?.checkInRequest?.approved === false) { alert('Check-in request is pending approval'); return; }
     setLoading(true);
     try {
-      await axiosInstance.post("/attendance/checkin");
-      setPendingRequests(prev => ({ ...prev, checkIn: true }));
+      await axiosInstance.post('/attendance/checkin');
+      setPendingRequests(p => ({ ...p, checkIn: true }));
       await loadAttendance();
-      alert('✅ Check-in request sent successfully! Waiting for approval.');
-    } catch (error) {
-      console.error('Check-in error:', error.response?.data);
-      
-      if (error.response?.status === 409) {
-        alert('⚠️ You already have a check-in request for today');
-      } else {
-        alert(error.response?.data?.message || 'Check-in request failed');
-      }
-    } finally {
-      setLoading(false);
-    }
+      alert('Check-in request sent! Waiting for approval.');
+    } catch (err) {
+      if (err.response?.status === 409) alert('Check-in request already submitted');
+      else alert(err.response?.data?.message || 'Check-in failed');
+    } finally { setLoading(false); }
   };
 
-  // Handle check-out
   const handleCheckOut = async () => {
     setLoading(true);
     try {
-      await axiosInstance.post("/attendance/checkout");
-      setPendingRequests(prev => ({ ...prev, checkOut: true }));
+      await axiosInstance.post('/attendance/checkout');
+      setPendingRequests(p => ({ ...p, checkOut: true }));
       await loadAttendance();
-      alert('✅ Check-out request sent successfully! Waiting for approval.');
-    } catch (error) {
-      console.error('Check-out error:', error.response?.data);
-      alert(error.response?.data?.message || 'Check-out request failed');
-    } finally {
-      setLoading(false);
-    }
+      alert('Check-out request sent! Waiting for approval.');
+    } catch (err) {
+      alert(err.response?.data?.message || 'Check-out failed');
+    } finally { setLoading(false); }
   };
 
-  // Export CSV functionality
   const handleExportCSV = async (dateRange, includeAll) => {
     setExporting(true);
     try {
       let url = '/attendance/export/my-csv';
       const params = new URLSearchParams();
-      
-      if (!includeAll) {
-        params.append('startDate', dateRange.startDate);
-        params.append('endDate', dateRange.endDate);
-      }
-      
+      if (!includeAll) { params.append('startDate', dateRange.startDate); params.append('endDate', dateRange.endDate); }
       const fullUrl = url + (params.toString() ? `?${params.toString()}` : '');
-      
-      const response = await axiosInstance.get(fullUrl, {
-        responseType: 'blob',
-        headers: {
-          'Accept': 'text/csv'
-        }
-      });
-      
+      const response = await axiosInstance.get(fullUrl, { responseType: 'blob', headers: { Accept: 'text/csv' } });
       const blob = new Blob([response.data], { type: 'text/csv' });
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      
-      const filename = includeAll 
-        ? `my_attendance_all_${new Date().toISOString().split('T')[0]}.csv`
-        : `my_attendance_${dateRange.startDate}_to_${dateRange.endDate}.csv`;
-      
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      
+      link.setAttribute('download', includeAll ? `my_attendance_all_${new Date().toISOString().split('T')[0]}.csv` : `my_attendance_${dateRange.startDate}_to_${dateRange.endDate}.csv`);
+      document.body.appendChild(link); link.click(); link.remove();
       window.URL.revokeObjectURL(downloadUrl);
       setCsvModalOpen(false);
-      
-    } catch (error) {
-      console.error('Export error:', error);
-      
-      if (error.response) {
-        if (error.response.status === 404) {
-          alert('No attendance data found for the selected period.');
-        } else {
-          alert(`Export failed: ${error.response.data.message || 'Server error'}`);
-        }
-      } else if (error.request) {
-        alert('Export failed: No response from server. Please check your connection.');
-      } else {
-        alert(`Export failed: ${error.message}`);
-      }
-    } finally {
-      setExporting(false);
-    }
+    } catch (err) {
+      if (err.response?.status === 404) alert('No data found for selected period.');
+      else alert(`Export failed: ${err.response?.data?.message || err.message}`);
+    } finally { setExporting(false); }
   };
 
-  // Open details modal
-  const openDetailsModal = (record) => {
-    setSelectedRecord(record);
-    setDetailsModalOpen(true);
-  };
+  const openDetailsModal = (record) => { setSelectedRecord(record); setDetailsModalOpen(true); };
 
-  // Get today's time display
   const getTodayDisplayTimes = () => {
     if (!todayAttendance) return { checkIn: '--:--', checkOut: '--:--' };
-    
     const times = getActualTime(todayAttendance);
-    
-    return {
-      checkIn: formatTime(times.checkIn),
-      checkOut: formatTime(times.checkOut)
-    };
+    return { checkIn: formatTime(times.checkIn), checkOut: formatTime(times.checkOut) };
   };
 
-  // Determine today's status
   const getTodayStatus = () => {
-    if (!todayAttendance) return { status: 'Not Checked In', color: 'bg-gradient-to-r from-gray-400 to-gray-500' };
-    
+    if (!todayAttendance) return { label: 'Not checked in', variant: 'default' };
     const { approvedCheckIn, approvedCheckOut, status, checkInRequest, checkOutRequest } = todayAttendance;
-    
-    if (checkInRequest?.approved === false) {
-      return { status: 'Pending Approval (Check-in)', color: 'bg-gradient-to-r from-yellow-400 to-yellow-500' };
-    }
-    
-    if (checkOutRequest?.approved === false) {
-      return { status: 'Pending Approval (Check-out)', color: 'bg-gradient-to-r from-yellow-400 to-yellow-500' };
-    }
-    
-    if (approvedCheckIn && approvedCheckOut) {
-      return { status: 'Complete', color: 'bg-gradient-to-r from-green-400 to-green-500' };
-    }
-    
-    if (approvedCheckIn && !approvedCheckOut) {
-      return { status: 'Checked In', color: 'bg-gradient-to-r from-blue-400 to-blue-500' };
-    }
-    
+    if (checkInRequest?.approved === false)  return { label: 'Check-in pending', variant: 'warning' };
+    if (checkOutRequest?.approved === false) return { label: 'Check-out pending', variant: 'warning' };
+    if (approvedCheckIn && approvedCheckOut) return { label: 'Complete', variant: 'success' };
+    if (approvedCheckIn) return { label: 'Checked in', variant: 'info' };
     switch (status) {
-      case 'present': return { status: 'Present', color: 'bg-gradient-to-r from-green-400 to-green-500' };
-      case 'late': return { status: 'Late', color: 'bg-gradient-to-r from-orange-400 to-orange-500' };
-      case 'half-day': return { status: 'Half Day', color: 'bg-gradient-to-r from-yellow-400 to-yellow-500' };
-      case 'absent': return { status: 'Absent', color: 'bg-gradient-to-r from-red-400 to-red-500' };
-      case 'pending': return { status: 'Pending', color: 'bg-gradient-to-r from-yellow-400 to-yellow-500' };
-      default: return { status: 'Not Checked In', color: 'bg-gradient-to-r from-gray-400 to-gray-500' };
+      case 'present':  return { label: 'Present',  variant: 'success' };
+      case 'late':     return { label: 'Late',     variant: 'orange' };
+      case 'half-day': return { label: 'Half Day', variant: 'warning' };
+      case 'absent':   return { label: 'Absent',   variant: 'danger' };
+      case 'pending':  return { label: 'Pending',  variant: 'warning' };
+      default:         return { label: 'Not checked in', variant: 'default' };
     }
   };
 
-  // Determine if check-in/check-out buttons should be shown
-  const canCheckIn = !todayAttendance?.approvedCheckIn && !pendingRequests.checkIn;
-  const canCheckOut = todayAttendance?.approvedCheckIn && 
-                     !todayAttendance?.approvedCheckOut && 
-                     !pendingRequests.checkOut;
-
-  // Get current time status
+  const canCheckIn  = !todayAttendance?.approvedCheckIn  && !pendingRequests.checkIn;
+  const canCheckOut = todayAttendance?.approvedCheckIn && !todayAttendance?.approvedCheckOut && !pendingRequests.checkOut;
   const currentTimeStatus = getCurrentTimeStatus(todayAttendance);
 
-  useEffect(() => {
-    loadAttendance();
-  }, []);
+  useEffect(() => { loadAttendance(); }, []);
 
-  if (loading && history.length === 0) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-600 mx-auto"></div>
-          <p className="mt-6 text-lg text-blue-700 font-medium">Loading My Attendance...</p>
-        </div>
+  if (loading && history.length === 0) return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-slate-600 font-medium">Loading attendance…</p>
       </div>
-    );
-  }
+    </div>
+  );
 
   const displayTimes = getTodayDisplayTimes();
-  const todayStatus = getTodayStatus();
+  const todayStatus  = getTodayStatus();
+
+  const statusBannerColors = {
+    green:  'bg-emerald-50 border-emerald-200 text-emerald-700',
+    blue:   'bg-blue-50 border-blue-200 text-blue-700',
+    orange: 'bg-orange-50 border-orange-200 text-orange-700',
+    yellow: 'bg-amber-50 border-amber-200 text-amber-700',
+    red:    'bg-red-50 border-red-200 text-red-700',
+  };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2 flex items-center">
-          <FaUser className="mr-3 text-blue-600" />
-          My Attendance
-        </h1>
-        <p className="text-gray-600">Track your daily attendance and work hours</p>
-      </div>
+    <div className="min-h-screen bg-slate-50">
 
-      {error && (
-        <div className="mb-6 p-4 bg-gradient-to-r from-red-50 to-pink-50 border-l-4 border-red-500 rounded-lg">
-          <div className="flex items-center">
-            <FaTimesCircle className="text-red-500 mr-3" />
-            <p className="text-red-700">{error}</p>
+      {/* ── Page Header ── */}
+      <div className="bg-white border-b border-slate-200 px-6 py-5">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
+              <FaUser className="text-blue-600 text-sm" />
+              My Attendance
+            </h1>
+            <p className="text-slate-400 text-sm mt-0.5">Track your daily attendance and work hours</p>
           </div>
-          <button 
-            onClick={loadAttendance} 
-            className="mt-3 px-4 py-2 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg text-sm font-medium"
-          >
-            Retry Loading
-          </button>
-        </div>
-      )}
-
-      {/* Current Time Status Banner */}
-      <div className={`mb-6 p-4 rounded-xl border ${
-        currentTimeStatus.color === 'green' ? 'bg-gradient-to-r from-green-50 to-green-100 border-green-200' :
-        currentTimeStatus.color === 'blue' ? 'bg-gradient-to-r from-blue-50 to-blue-100 border-blue-200' :
-        currentTimeStatus.color === 'orange' ? 'bg-gradient-to-r from-orange-50 to-orange-100 border-orange-200' :
-        currentTimeStatus.color === 'yellow' ? 'bg-gradient-to-r from-yellow-50 to-yellow-100 border-yellow-200' :
-        'bg-gradient-to-r from-red-50 to-red-100 border-red-200'
-      }`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center mr-4 ${
-              currentTimeStatus.color === 'green' ? 'bg-green-100' :
-              currentTimeStatus.color === 'blue' ? 'bg-blue-100' :
-              currentTimeStatus.color === 'orange' ? 'bg-orange-100' :
-              currentTimeStatus.color === 'yellow' ? 'bg-yellow-100' :
-              'bg-red-100'
-            }`}>
-              <span className="text-lg">{currentTimeStatus.icon}</span>
-            </div>
-            <div>
-              <p className="font-bold text-gray-800">Current Status</p>
-              <p className="text-gray-600">{currentTimeStatus.message}</p>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="text-sm font-medium text-gray-500">Standard Hours</p>
-            <p className="font-bold text-gray-800">9:00 AM - 5:00 PM</p>
-          </div>
-        </div>
-        
-        {/* Time Guidelines */}
-        <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-4 gap-2 text-xs">
-          <div className="text-center p-2 bg-green-50 rounded-lg">
-            <p className="font-bold text-green-700">Present</p>
-            <p className="text-green-600">Before 9:00 AM</p>
-          </div>
-          <div className="text-center p-2 bg-orange-50 rounded-lg">
-            <p className="font-bold text-orange-700">Late</p>
-            <p className="text-orange-600">9:00 - 9:30 AM</p>
-          </div>
-          <div className="text-center p-2 bg-red-50 rounded-lg">
-            <p className="font-bold text-red-700">Very Late</p>
-            <p className="text-red-600">After 9:30 AM</p>
-          </div>
-          <div className="text-center p-2 bg-yellow-50 rounded-lg">
-            <p className="font-bold text-yellow-700">Early Leave</p>
-            <p className="text-yellow-600">Before 5:00 PM</p>
-          </div>
+          <div className="text-sm text-slate-500">{formatDate(new Date(), { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
         </div>
       </div>
 
-      {/* Pending Requests Alert */}
-      {(pendingRequests.checkIn || pendingRequests.checkOut) && (
-        <div className="mb-6 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 border-l-4 border-yellow-500 rounded-lg">
-          <div className="flex items-center">
-            <FaExclamationTriangle className="text-yellow-500 mr-3" />
+      <div className="max-w-6xl mx-auto px-6 py-6 space-y-5">
+
+        {/* ── Error Banner ── */}
+        {error && (
+          <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm">
+            <FaTimesCircle className="text-red-500 flex-shrink-0" />
+            <span className="text-red-700 flex-1">{error}</span>
+            <button onClick={loadAttendance} className="text-xs text-red-600 underline hover:text-red-800">Retry</button>
+          </div>
+        )}
+
+        {/* ── Current Status Banner ── */}
+        <div className={`rounded-xl border px-4 py-3 flex items-center justify-between gap-4 ${statusBannerColors[currentTimeStatus.color] || statusBannerColors.blue}`}>
+          <div className="flex items-center gap-3">
+            <div className="w-2 h-2 rounded-full bg-current opacity-60 flex-shrink-0" />
+            <p className="text-sm font-medium">{currentTimeStatus.message}</p>
+          </div>
+          <div className="text-right flex-shrink-0">
+            <p className="text-xs opacity-70">Standard hours</p>
+            <p className="text-sm font-semibold">9:00 AM – 5:00 PM</p>
+          </div>
+        </div>
+
+        {/* ── Pending Requests Alert ── */}
+        {(pendingRequests.checkIn || pendingRequests.checkOut) && (
+          <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+            <FaExclamationTriangle className="text-amber-500 flex-shrink-0" />
             <div>
-              <p className="text-yellow-700 font-medium">
-                Pending Approval
-              </p>
-              <p className="text-yellow-600 text-sm mt-1">
-                {pendingRequests.checkIn && "Your check-in request is pending admin approval. "}
-                {pendingRequests.checkOut && "Your check-out request is pending admin approval."}
+              <p className="text-sm font-medium text-amber-800">Pending Approval</p>
+              <p className="text-xs text-amber-600 mt-0.5">
+                {pendingRequests.checkIn && 'Check-in request awaiting admin approval. '}
+                {pendingRequests.checkOut && 'Check-out request awaiting admin approval.'}
               </p>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Stats Cards - Bright Colors */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-gradient-to-r from-blue-100 to-blue-200 border-2 border-blue-300 rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow duration-300">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-blue-700 font-bold mb-1">Total Days</p>
-              <p className="text-4xl font-extrabold text-blue-900 drop-shadow-sm">{stats.totalDays}</p>
-              <p className="text-xs text-blue-600 mt-1">Attendance records count</p>
-            </div>
-            <div className="w-16 h-16 bg-gradient-to-r from-blue-400 to-blue-600 rounded-full flex items-center justify-center shadow-lg">
-              <FaCalendarDay className="text-white text-2xl" />
-            </div>
-          </div>
+        {/* ── KPI Cards ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <KpiCard icon={FaCalendarDay} label="Total Records"    value={stats.totalDays}                        sub="All time" iconBg="bg-blue-500" />
+          <KpiCard icon={FaUserClock}   label="Present Days"     value={stats.presentDays}                      sub={`${stats.totalDays > 0 ? ((stats.presentDays / stats.totalDays) * 100).toFixed(0) : 0}% attendance`} iconBg="bg-emerald-500" />
+          <KpiCard icon={FaClock}       label="Avg. Hours / Day" value={`${stats.averageHours.toFixed(1)}h`}    sub="Standard: 8h" iconBg="bg-violet-500" />
         </div>
-        
-        <div className="bg-gradient-to-r from-green-100 to-green-200 border-2 border-green-300 rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow duration-300">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-green-700 font-bold mb-1">Present Days</p>
-              <p className="text-4xl font-extrabold text-green-900 drop-shadow-sm">{stats.presentDays}</p>
-              <p className="text-xs text-green-600 mt-1">Days marked as present</p>
-            </div>
-            <div className="w-16 h-16 bg-gradient-to-r from-green-400 to-green-600 rounded-full flex items-center justify-center shadow-lg">
-              <FaUserClock className="text-white text-2xl" />
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-gradient-to-r from-purple-100 to-purple-200 border-2 border-purple-300 rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow duration-300">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-purple-700 font-bold mb-1">Avg. Hours/Day</p>
-              <p className="text-4xl font-extrabold text-purple-900 drop-shadow-sm">{stats.averageHours.toFixed(1)}h</p>
-              <p className="text-xs text-purple-600 mt-1">Average daily work hours</p>
-            </div>
-            <div className="w-16 h-16 bg-gradient-to-r from-purple-400 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
-              <FaClock className="text-white text-2xl" />
-            </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Today's Attendance Card */}
-      <div className="bg-gradient-to-r from-indigo-500 to-blue-600 text-white rounded-2xl p-6 mb-8 shadow-xl">
-        <div className="flex flex-col md:flex-row md:items-center justify-between">
-          <div className="mb-4 md:mb-0">
-            <h2 className="text-2xl font-bold mb-2 flex items-center">
-              <FaCalendarDay className="inline mr-3 text-blue-200" />
-              Today: {formatDate(new Date(), { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-            </h2>
-            
-            <div className="flex flex-wrap items-center gap-6 mt-4">
-              <div>
-                <p className="text-sm text-blue-200 font-medium">Check In</p>
-                <p className="text-xl font-bold">
-                  {displayTimes.checkIn}
-                </p>
-                {pendingRequests.checkIn && (
-                  <p className="text-xs text-yellow-300 mt-1">(Pending Approval)</p>
-                )}
-              </div>
-              
-              <div>
-                <p className="text-sm text-blue-200 font-medium">Check Out</p>
-                <p className="text-xl font-bold">
-                  {displayTimes.checkOut}
-                </p>
-                {pendingRequests.checkOut && (
-                  <p className="text-xs text-yellow-300 mt-1">(Pending Approval)</p>
-                )}
-              </div>
-              
-              <div>
-                <p className="text-sm text-blue-200 font-medium">Status</p>
-                <span className={`inline-block px-4 py-1.5 rounded-full text-sm font-bold ${todayStatus.color} shadow-md`}>
-                  {todayStatus.status}
-                </span>
-              </div>
-              
-              {/* Show total hours if completed */}
-              {todayAttendance?.approvedCheckIn && todayAttendance?.approvedCheckOut && (
+        {/* ── Today Card ── */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
+            <div className="flex-1">
+              <p className="text-xs text-slate-400 font-medium uppercase tracking-wide mb-3">Today's Attendance</p>
+              <div className="flex flex-wrap items-center gap-6">
+                {[['Check In', displayTimes.checkIn, pendingRequests.checkIn], ['Check Out', displayTimes.checkOut, pendingRequests.checkOut]].map(([label, time, pending]) => (
+                  <div key={label}>
+                    <p className="text-xs text-slate-400 mb-1">{label}</p>
+                    <p className="text-xl font-semibold text-slate-900">{time}</p>
+                    {pending && <p className="text-xs text-amber-500 mt-0.5">Pending approval</p>}
+                  </div>
+                ))}
                 <div>
-                  <p className="text-sm text-blue-200 font-medium">Total Hours</p>
-                  <p className="text-xl font-bold">
-                    {todayAttendance.totalHours?.toFixed(1) || 0}h
-                  </p>
+                  <p className="text-xs text-slate-400 mb-1">Status</p>
+                  <Badge variant={todayStatus.variant}>{todayStatus.label}</Badge>
+                </div>
+                {todayAttendance?.approvedCheckIn && todayAttendance?.approvedCheckOut && (
+                  <div>
+                    <p className="text-xs text-slate-400 mb-1">Hours worked</p>
+                    <p className="text-xl font-semibold text-slate-900">{todayAttendance.totalHours?.toFixed(1) || 0}h</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 min-w-[160px]">
+              {canCheckIn && !loading && (
+                <button onClick={handleCheckIn} disabled={loading}
+                  className="flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50">
+                  <FaCheckCircle className="text-xs" /> Check In
+                </button>
+              )}
+              {pendingRequests.checkIn && (
+                <div className="py-2.5 px-4 bg-amber-50 border border-amber-200 rounded-xl text-center">
+                  <p className="text-xs font-medium text-amber-700">Check-in pending</p>
+                </div>
+              )}
+              {canCheckOut && !loading && (
+                <button onClick={handleCheckOut} disabled={loading}
+                  className="flex items-center justify-center gap-2 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50">
+                  <FaTimesCircle className="text-xs" /> Check Out
+                </button>
+              )}
+              {pendingRequests.checkOut && (
+                <div className="py-2.5 px-4 bg-amber-50 border border-amber-200 rounded-xl text-center">
+                  <p className="text-xs font-medium text-amber-700">Check-out pending</p>
+                </div>
+              )}
+              {todayAttendance?.approvedCheckIn && todayAttendance?.approvedCheckOut && (
+                <div className="py-2.5 px-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
+                  <p className="text-xs font-medium text-emerald-700">Day complete · {todayAttendance.totalHours?.toFixed(1) || 0}h</p>
                 </div>
               )}
             </div>
           </div>
-          
-          <div className="flex flex-col space-y-3">
-            {canCheckIn && !loading && (
-              <button 
-                onClick={handleCheckIn}
-                disabled={loading}
-                className="flex items-center justify-center bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 px-6 py-3 rounded-xl font-bold text-white shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50"
-              >
-                <FaCheckCircle className="mr-2" />
-                Check In Now
-              </button>
-            )}
-
-            {pendingRequests.checkIn && (
-              <div className="bg-gradient-to-r from-yellow-400/30 to-yellow-500/30 border border-yellow-400/50 rounded-xl p-4">
-                <div className="flex items-center">
-                  <FaClock className="text-yellow-300 mr-2" />
-                  <p className="font-bold text-yellow-100">Check-in Pending</p>
-                </div>
-                <p className="text-sm mt-1 text-yellow-200">
-                  Waiting for admin approval
-                </p>
-              </div>
-            )}
-
-            {canCheckOut && !loading && (
-              <button 
-                onClick={handleCheckOut}
-                disabled={loading}
-                className="flex items-center justify-center bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 px-6 py-3 rounded-xl font-bold text-white shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50"
-              >
-                <FaTimesCircle className="mr-2" />
-                Check Out Now
-              </button>
-            )}
-
-            {pendingRequests.checkOut && (
-              <div className="bg-gradient-to-r from-yellow-400/30 to-yellow-500/30 border border-yellow-400/50 rounded-xl p-4">
-                <div className="flex items-center">
-                  <FaClock className="text-yellow-300 mr-2" />
-                  <p className="font-bold text-yellow-100">Check-out Pending</p>
-                </div>
-                <p className="text-sm mt-1 text-yellow-200">
-                  Waiting for admin approval
-                </p>
-              </div>
-            )}
-
-            {todayAttendance?.approvedCheckIn && todayAttendance?.approvedCheckOut && (
-              <div className="bg-gradient-to-r from-green-400/30 to-green-500/30 border border-green-400/50 rounded-xl p-4">
-                <div className="flex items-center">
-                  <FaCheckCircle className="text-green-300 mr-2" />
-                  <p className="font-bold text-green-100">Today Complete!</p>
-                </div>
-                <p className="text-sm mt-1 text-green-200">
-                  Worked: {todayAttendance.totalHours?.toFixed(1) || 0} hours
-                </p>
-              </div>
-            )}
-          </div>
         </div>
-      </div>
 
-      {/* Attendance History with Export Button */}
-      <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
-        <div className="p-6 bg-gradient-to-r from-blue-50 to-blue-100 border-b border-blue-200">
-          <div className="flex flex-col md:flex-row md:items-center justify-between">
-            <div className="flex items-center mb-4 md:mb-0">
-              <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center mr-4">
-                <FaHistory className="text-white text-xl" />
+        {/* ── Attendance History ── */}
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          {/* Table Header */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
+                <FaHistory className="text-blue-600 text-sm" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-gray-800">My Attendance History</h2>
-                <p className="text-gray-600">Your complete attendance timeline</p>
+                <p className="text-sm font-semibold text-slate-800">Attendance History</p>
+                <p className="text-xs text-slate-400">{history.length} records</p>
               </div>
             </div>
-            <div className="flex space-x-3">
-              <button 
-                onClick={() => setCsvModalOpen(true)}
-                className="flex items-center justify-center bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 px-4 py-2 rounded-xl font-bold text-white shadow-lg hover:shadow-xl transition-all duration-200"
-              >
-                <FaDownload className="mr-2" />
-                Export CSV
+            <div className="flex items-center gap-2">
+              <button onClick={() => setCsvModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+                <FaDownload className="text-xs" /> Export CSV
               </button>
-              <button 
-                onClick={loadAttendance}
-                disabled={loading}
-                className="flex items-center justify-center bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 px-4 py-2 rounded-xl font-bold text-white shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50"
-              >
-                {loading ? (
-                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
-                ) : (
-                  <>
-                    <FaChartLine className="mr-2" />
-                    Refresh Data
-                  </>
-                )}
+              <button onClick={loadAttendance} disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-medium transition-colors disabled:opacity-50">
+                {loading ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <FaChartLine className="text-xs" />}
+                Refresh
               </button>
             </div>
           </div>
-          
-          {history.length === 0 && !loading && (
-            <div className="mt-4 p-8 text-center">
-              <div className="w-20 h-20 bg-gradient-to-r from-blue-100 to-blue-200 rounded-full flex items-center justify-center mx-auto mb-4">
-                <FaHistory className="text-blue-500 text-3xl" />
+
+          {history.length === 0 && !loading ? (
+            <div className="py-16 text-center">
+              <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <FaHistory className="text-slate-400 text-lg" />
               </div>
-              <p className="text-gray-500 text-lg font-medium">No attendance records found</p>
-              <p className="text-gray-400 text-sm mt-1">Start by checking in today!</p>
+              <p className="text-slate-700 font-medium">No attendance records</p>
+              <p className="text-slate-400 text-sm mt-1">Start by checking in today!</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-slate-50/60 border-b border-slate-100">
+                    {['Date','Day','Check In','Check Out','Hours','Status','Time Status',''].map(h => (
+                      <th key={h} className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {history.map((record, index) => {
+                    const times = getActualTime(record);
+                    const isPending = record.checkInRequest?.approved === false || record.checkOutRequest?.approved === false;
+                    const timeStatus = getTimeBasedStatus(times.checkIn, times.checkOut);
+                    return (
+                      <tr key={record._id || index} className={`group hover:bg-slate-50 transition-colors ${isPending ? 'bg-amber-50/30' : ''}`}>
+                        <td className="px-4 py-3 text-sm font-medium text-slate-800 whitespace-nowrap">{formatDate(record.date)}</td>
+                        <td className="px-4 py-3 text-xs text-slate-500">{formatDate(record.date, { weekday: 'short' })}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="text-sm text-slate-800">{times.checkIn ? formatTime(times.checkIn) : '—'}</span>
+                          {record.checkInRequest?.approved === false && <span className="ml-1.5"><Badge variant="warning">Pending</Badge></span>}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="text-sm text-slate-800">{times.checkOut ? formatTime(times.checkOut) : '—'}</span>
+                          {record.checkOutRequest?.approved === false && <span className="ml-1.5"><Badge variant="warning">Pending</Badge></span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge variant={record.totalHours >= 8 ? 'success' : 'default'}>{record.totalHours?.toFixed(1) || '0.0'}h</Badge>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge variant={statusVariant(record.status)}>
+                            {record.status === 'present' ? 'Present' : record.status === 'late' ? 'Late' : record.status === 'half-day' ? 'Half Day' : record.status === 'absent' ? 'Absent' : 'Pending'}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3">
+                          {times.checkIn ? (
+                            <div className="flex flex-col gap-1">
+                              <Badge variant={timeColorVariant(timeStatus.color)}>{timeStatus.status}</Badge>
+                              {times.checkOut && timeStatus.checkOutStatus && (
+                                <Badge variant={timeColorVariant(timeStatus.checkOutColor)}>{timeStatus.checkOutStatus}</Badge>
+                              )}
+                            </div>
+                          ) : <span className="text-xs text-slate-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <button onClick={() => openDetailsModal(record)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100">
+                            <FaEye style={{ fontSize: 14 }} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
-        
-        {history.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-gradient-to-r from-gray-100 to-gray-200">
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Date</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Day</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Check In</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Check Out</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Total Hours</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Time Status</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {history.map((record, index) => {
-                  const times = getActualTime(record);
-                  const isPending = 
-                    record.checkInRequest?.approved === false || 
-                    record.checkOutRequest?.approved === false;
-                  const timeStatus = getTimeBasedStatus(times.checkIn, times.checkOut);
-                  
-                  return (
-                    <tr 
-                      key={record._id || index} 
-                      className={`hover:bg-gradient-to-r ${isPending ? 'from-yellow-50 to-yellow-100' : 'from-blue-50 to-blue-100'} transition-all duration-200`}
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
-                        {formatDate(record.date)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-700">
-                        {formatDate(record.date, { weekday: 'short' })}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {times.checkIn ? formatTime(times.checkIn) : '--:--'}
-                          {record.checkInRequest?.approved === false && (
-                            <span className="ml-2 text-xs font-bold text-yellow-600 bg-yellow-100 px-2 py-0.5 rounded-full">(Pending)</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {times.checkOut ? formatTime(times.checkOut) : '--:--'}
-                          {record.checkOutRequest?.approved === false && (
-                            <span className="ml-2 text-xs font-bold text-yellow-600 bg-yellow-100 px-2 py-0.5 rounded-full">(Pending)</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-bold text-gray-900 bg-gradient-to-r from-green-100 to-green-200 px-3 py-1 rounded-full inline-block">
-                          {record.totalHours?.toFixed(1) || '0.0'}h
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold ${
-                          record.status === 'present' ? 'bg-gradient-to-r from-green-100 to-green-200 text-green-800 border border-green-300' :
-                          record.status === 'late' ? 'bg-gradient-to-r from-orange-100 to-orange-200 text-orange-800 border border-orange-300' :
-                          record.status === 'half-day' ? 'bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800 border border-yellow-300' :
-                          record.status === 'absent' ? 'bg-gradient-to-r from-red-100 to-red-200 text-red-800 border border-red-300' :
-                          'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800 border border-gray-300'
-                        }`}>
-                          {record.status === 'present' ? 'Present' :
-                           record.status === 'late' ? 'Late' :
-                           record.status === 'half-day' ? 'Half Day' :
-                           record.status === 'absent' ? 'Absent' :
-                           'Pending'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {times.checkIn ? (
-                          <div className="flex flex-col">
-                            <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold mb-1 ${
-                              timeStatus.color === 'green' ? 'bg-green-100 text-green-800' :
-                              timeStatus.color === 'orange' ? 'bg-orange-100 text-orange-800' :
-                              'bg-red-100 text-red-800'
-                            }`}>
-                              {timeStatus.status}
-                            </span>
-                            {times.checkOut && timeStatus.checkOutStatus && (
-                              <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold ${
-                                timeStatus.checkOutColor === 'green' ? 'bg-green-100 text-green-800' :
-                                timeStatus.checkOutColor === 'yellow' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-red-100 text-red-800'
-                              }`}>
-                                {timeStatus.checkOutStatus}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 text-xs">No check-in</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center space-x-3">
-                          <button
-                            onClick={() => openDetailsModal(record)}
-                            className="text-blue-600 hover:text-blue-800 p-2 rounded-full hover:bg-gradient-to-r hover:from-blue-100 hover:to-blue-200 transition-all duration-200"
-                            title="View Details"
-                          >
-                            <FaEye size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
 
-      {/* CSV Export Modal */}
-      <CSVExportModal
-        isOpen={csvModalOpen}
-        onClose={() => setCsvModalOpen(false)}
-        onExport={handleExportCSV}
-        loading={exporting}
-      />
-
-      {/* Record Details Modal */}
-      <RecordDetailsModal
-        isOpen={detailsModalOpen}
-        onClose={() => {
-          setDetailsModalOpen(false);
-          setSelectedRecord(null);
-        }}
-        record={selectedRecord}
-      />
+      {/* Modals */}
+      <CSVExportModal isOpen={csvModalOpen} onClose={() => setCsvModalOpen(false)} onExport={handleExportCSV} loading={exporting} />
+      <RecordDetailsModal isOpen={detailsModalOpen} onClose={() => { setDetailsModalOpen(false); setSelectedRecord(null); }} record={selectedRecord} />
     </div>
   );
 };
 
-// Wrap with Error Boundary
 const EmployeeAttendance = () => (
-  <ErrorBoundary>
-    <EmployeeAttendanceContent />
-  </ErrorBoundary>
+  <ErrorBoundary><EmployeeAttendanceContent /></ErrorBoundary>
 );
 
 export default EmployeeAttendance;

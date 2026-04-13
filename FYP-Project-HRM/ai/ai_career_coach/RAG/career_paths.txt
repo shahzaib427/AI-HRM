@@ -1,0 +1,92 @@
+# CAREER PATHS IN PAKISTAN
+
+## Software Engineering
+Description: Build and maintain software applications. High demand in Pakistan.
+Skills Needed: JavaScript, Python, React, Git, DSA
+Timeline: 1-2 years
+Salary Range: Rs. 100,000 - 350,000
+Companies: Systems Limited, Techlogix, Arbisoft
+Roadmap:
+- Month 1-2: Learn HTML, CSS, JavaScript basics
+- Month 3-4: Master React.js and build projects
+- Month 5-6: Learn Node.js and database
+- Month 7-8: Build full-stack portfolio projects
+- Month 9-12: Apply for jobs and prepare for interviews
+
+## Data Science
+Description: Analyze data and build ML models. Growing field in Pakistan.
+Skills Needed: Python, SQL, Statistics, Pandas, Machine Learning
+Timeline: 1-2 years
+Salary Range: Rs. 150,000 - 400,000
+Companies: Afiniti, Motive, 10Pearls
+Roadmap:
+- Month 1-2: Python programming fundamentals
+- Month 3-4: Pandas, NumPy, Data Visualization
+- Month 5-6: Machine Learning basics (Scikit-learn)
+- Month 7-8: Deep Learning (TensorFlow/PyTorch)
+- Month 9-12: Build ML portfolio and Kaggle projects
+
+## DevOps Engineering
+Description: Manage cloud infrastructure and CI/CD pipelines.
+Skills Needed: Linux, Docker, Kubernetes, AWS, CI/CD
+Timeline: 1-2 years
+Salary Range: Rs. 120,000 - 500,000
+Companies: Motive, Careem, Systems Limited
+Roadmap:
+- Month 1-2: Linux basics and shell scripting
+- Month 3-4: Docker and containerization
+- Month 5-6: Kubernetes orchestration
+- Month 7-8: AWS cloud services
+- Month 9-12: CI/CD pipeline projects
+
+## Cloud Computing
+Description: Design and manage cloud infrastructure.
+Skills Needed: AWS/Azure, Terraform, Networking, Linux
+Timeline: 1-2 years
+Salary Range: Rs. 150,000 - 450,000
+Companies: Systems Limited, Techlogix, Afiniti
+Roadmap:
+- Month 1-2: Cloud fundamentals and AWS basics
+- Month 3-4: EC2, S3, RDS, Lambda
+- Month 5-6: Networking and security
+- Month 7-8: Infrastructure as Code (Terraform)
+- Month 9-12: Cloud architecture projects
+
+## Cybersecurity
+Description: Protect systems and data from threats.
+Skills Needed: Networking, Linux, Security tools, Ethical Hacking
+Timeline: 1-2 years
+Salary Range: Rs. 100,000 - 400,000
+Companies: Secure9, Trillium, Systems Limited
+Roadmap:
+- Month 1-2: Networking fundamentals
+- Month 3-4: Linux security basics
+- Month 5-6: Ethical hacking and penetration testing
+- Month 7-8: Security tools (Wireshark, Metasploit)
+- Month 9-12: Security certifications (Security+)
+
+## Mobile Development (Flutter)
+Description: Build cross-platform mobile applications.
+Skills Needed: Dart, Flutter, Firebase, REST APIs
+Timeline: 1-2 years
+Salary Range: Rs. 80,000 - 350,000
+Companies: Arbisoft, Devsinc, VentureDive
+Roadmap:
+- Month 1-2: Dart programming basics
+- Month 3-4: Flutter widgets and UI
+- Month 5-6: State management (Provider/BLoC)
+- Month 7-8: Firebase integration
+- Month 9-12: Publish apps to Play Store
+
+## AI/ML Engineering
+Description: Build and deploy machine learning models.
+Skills Needed: Python, TensorFlow, PyTorch, ML algorithms
+Timeline: 1-2 years
+Salary Range: Rs. 200,000 - 600,000
+Companies: Afiniti, Motive, 10Pearls
+Roadmap:
+- Month 1-2: Python for data science
+- Month 3-4: Machine learning algorithms
+- Month 5-6: Deep learning (CNN, RNN)
+- Month 7-8: Model deployment (FastAPI, Docker)
+- Month 9-12: LLMs and GenAI projects

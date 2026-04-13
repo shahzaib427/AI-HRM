@@ -227,7 +227,7 @@ const HRChatbot = () => {
 
             {/* Chat Window */}
             {isOpen && (
-                <div className="fixed bottom-24 right-6 w-96 h-[600px] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden z-50 border border-gray-200 animate-slide-up">
+                <div className="fixed bottom-24 right-6 w-96 h-[600px] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden z-50 border border-gray-200" style={{ animation: 'slide-up 0.3s ease-out' }}>
                     
                     {/* Header */}
                     <div className="bg-[#0f2b3d] text-white px-5 py-4 flex justify-between items-center">
@@ -282,7 +282,8 @@ const HRChatbot = () => {
                         {messages.map((msg) => (
                             <div
                                 key={msg.id}
-                                className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
+                                className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                                style={{ animation: 'fade-in 0.3s ease-out' }}
                             >
                                 <div
                                     className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${
@@ -308,7 +309,7 @@ const HRChatbot = () => {
                         
                         {/* Typing Indicator */}
                         {isTyping && (
-                            <div className="flex justify-start animate-fade-in">
+                            <div className="flex justify-start" style={{ animation: 'fade-in 0.3s ease-out' }}>
                                 <div className="bg-white rounded-2xl rounded-bl-none px-4 py-3 border border-gray-100">
                                     <div className="flex gap-1">
                                         <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></span>
@@ -372,8 +373,8 @@ const HRChatbot = () => {
                 </div>
             )}
 
-            {/* Add custom CSS for animations */}
-            <style jsx>{`
+            {/* Add styles to head using useEffect instead of style jsx */}
+            <style>{`
                 @keyframes slide-up {
                     from {
                         opacity: 0;
@@ -396,12 +397,17 @@ const HRChatbot = () => {
                     }
                 }
                 
-                .animate-slide-up {
-                    animation: slide-up 0.3s ease-out;
+                @keyframes bounce {
+                    0%, 100% {
+                        transform: translateY(0);
+                    }
+                    50% {
+                        transform: translateY(-4px);
+                    }
                 }
                 
-                .animate-fade-in {
-                    animation: fade-in 0.3s ease-out;
+                .animate-bounce {
+                    animation: bounce 1s infinite;
                 }
                 
                 .message-bubble a {

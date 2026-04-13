@@ -1,604 +1,808 @@
-# ai/ai_career_coach/ai_career_coach_module.py
+# ai_career_coach_module.py - COMPLETE RAG-BASED (READS ALL YOUR TXT FILES)
 import os
 import re
-from difflib import SequenceMatcher
+import json
 import logging
+from difflib import SequenceMatcher
+from datetime import datetime
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ---------------- GLOBAL DATA ---------------- #
+# ============= HELPER FUNCTION =============
 
-qa_database = []
-user_context = {}
+def normalize_profile(profile):
+    """Convert profile from any format to expected format"""
+    if not profile:
+        return {}
+    normalized = {}
+    skills = profile.get('skills', [])
+    if isinstance(skills, str):
+        try:
+            skills = json.loads(skills)
+        except:
+            skills = []
+    normalized['skills'] = skills
+    normalized['current_role'] = profile.get('current_role') or profile.get('currentRole') or ''
+    normalized['experience_years'] = profile.get('experience_years') or profile.get('experience') or 0
+    normalized['education_level'] = profile.get('education_level') or profile.get('education') or ''
+    normalized['career_goal'] = profile.get('career_goal') or profile.get('careerGoal') or ''
+    normalized['location'] = profile.get('location') or 'Lahore'
+    return normalized
 
-# ---------------- LOAD DATA ---------------- #
+# ============= RAG KNOWLEDGE BASE =============
 
-def load_qa_database():
-    """Load Q&A database from hr_docs folder"""
-    global qa_database
-    qa_database = []
+class CareerKnowledgeBase:
+    def __init__(self):
+        self.qa_database = []
+        self.skills_list = []
+        self.institutes_list = []
+        self.recommendations = []
+        self.resume_tips_list = []
+        self.freelancing_guide = ""
+        self.market_data = {}
+        self.roadmaps = {}
+        self.certifications = []
+        self.companies = []
+        self.career_questions = []
+        self.greetings = {}
+        
+        self.load_all_files()
 
-    # Use the correct path - looking for hr_docs in the parent directory
-    docs_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), "hr_docs")
-    
-    # If not found, try current directory
-    if not os.path.exists(docs_folder):
-        docs_folder = os.path.join(os.path.dirname(__file__), "hr_docs")
-    
-    # If still not found, create in current directory
-    if not os.path.exists(docs_folder):
-        docs_folder = os.path.join(os.path.dirname(__file__), "hr_docs")
-        os.makedirs(docs_folder, exist_ok=True)
-        create_sample_docs(docs_folder)
+    def load_all_files(self):
+        """Load all knowledge base text files from rag folder"""
+        rag_folder = os.path.join(os.path.dirname(__file__), "rag")
+        
+        if not os.path.exists(rag_folder):
+            os.makedirs(rag_folder, exist_ok=True)
+            print(f"📁 Created rag folder at {rag_folder}")
+            print("⚠️ Please add your .txt files to the rag folder")
+            return
 
-    print(f"Loading HR documents from: {docs_folder}")
-
-    for filename in os.listdir(docs_folder):
-        if filename.endswith('.txt'):
-            category = filename.replace('.txt', '')
-            filepath = os.path.join(docs_folder, filename)
-
+        # Load career paths (with roadmaps)
+        career_file = os.path.join(rag_folder, "career_paths.txt")
+        if os.path.exists(career_file):
             try:
-                with open(filepath, 'r', encoding='utf-8') as file:
-                    content = file.read()
-                    parse_qa_pairs(content, category)
-                print(f"✓ Loaded {category} document")
+                with open(career_file, 'r', encoding='utf-8') as f:
+                    self.parse_career_paths(f.read())
+                print(f"✅ Loaded {len(self.recommendations)} career paths")
             except Exception as e:
-                logger.error(f"Error loading {filename}: {e}")
+                logger.error(f"Error loading career_paths.txt: {e}")
 
-    print(f"✅ Loaded {len(qa_database)} Q&A pairs")
-    return qa_database
+        # Load interview questions
+        interview_file = os.path.join(rag_folder, "interview_prep.txt")
+        if os.path.exists(interview_file):
+            try:
+                with open(interview_file, 'r', encoding='utf-8') as f:
+                    self.parse_interview_questions(f.read())
+                print(f"✅ Loaded {len(self.qa_database)} interview questions")
+            except Exception as e:
+                logger.error(f"Error loading interview_prep.txt: {e}")
 
-# ---------------- PARSE DATA ---------------- #
+        # Load skills
+        skills_file = os.path.join(rag_folder, "skills_training.txt")
+        if os.path.exists(skills_file):
+            try:
+                with open(skills_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    self.parse_skills(content)
+                    self.parse_institutes(content)
+                    self.parse_roadmaps(content)
+                print(f"✅ Loaded skills and roadmaps")
+            except Exception as e:
+                logger.error(f"Error loading skills_training.txt: {e}")
 
-def parse_qa_pairs(content, category):
-    """Parse Q&A pairs from text content"""
-    lines = content.split('\n')
-    current_q = None
-    current_a = []
+        # Load resume tips
+        resume_file = os.path.join(rag_folder, "resume_cv.txt")
+        if os.path.exists(resume_file):
+            try:
+                with open(resume_file, 'r', encoding='utf-8') as f:
+                    self.parse_resume_tips(f.read())
+                print(f"✅ Loaded resume tips")
+            except Exception as e:
+                logger.error(f"Error loading resume_cv.txt: {e}")
 
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
+        # Load freelancing guide
+        freelancing_file = os.path.join(rag_folder, "freelancing.txt")
+        if os.path.exists(freelancing_file):
+            try:
+                with open(freelancing_file, 'r', encoding='utf-8') as f:
+                    self.freelancing_guide = f.read()
+                print(f"✅ Loaded freelancing guide")
+            except Exception as e:
+                logger.error(f"Error loading freelancing.txt: {e}")
 
-        if line.startswith('Q:'):
-            if current_q and current_a:
-                qa_database.append({
-                    'question': current_q.lower(),
-                    'answer': ' '.join(current_a),
-                    'category': category,
-                    'keywords': extract_keywords(current_q)
+        # Load job market data
+        job_market_file = os.path.join(rag_folder, "job_market.txt")
+        if os.path.exists(job_market_file):
+            try:
+                with open(job_market_file, 'r', encoding='utf-8') as f:
+                    self.parse_job_market(f.read())
+                print(f"✅ Loaded job market data")
+            except Exception as e:
+                logger.error(f"Error loading job_market.txt: {e}")
+
+        # Load companies
+        companies_file = os.path.join(rag_folder, "companies.txt")
+        if os.path.exists(companies_file):
+            try:
+                with open(companies_file, 'r', encoding='utf-8') as f:
+                    self.parse_companies(f.read())
+                print(f"✅ Loaded companies")
+            except Exception as e:
+                logger.error(f"Error loading companies.txt: {e}")
+
+        # Load certifications
+        certs_file = os.path.join(rag_folder, "certifications.txt")
+        if os.path.exists(certs_file):
+            try:
+                with open(certs_file, 'r', encoding='utf-8') as f:
+                    self.parse_certifications(f.read())
+                print(f"✅ Loaded certifications")
+            except Exception as e:
+                logger.error(f"Error loading certifications.txt: {e}")
+
+        # Load career questions
+        questions_file = os.path.join(rag_folder, "career_questions.txt")
+        if os.path.exists(questions_file):
+            try:
+                with open(questions_file, 'r', encoding='utf-8') as f:
+                    self.parse_career_questions(f.read())
+                print(f"✅ Loaded career questions")
+            except Exception as e:
+                logger.error(f"Error loading career_questions.txt: {e}")
+
+        # Load greetings
+        greetings_file = os.path.join(rag_folder, "greetings.txt")
+        if os.path.exists(greetings_file):
+            try:
+                with open(greetings_file, 'r', encoding='utf-8') as f:
+                    self.parse_greetings(f.read())
+                print(f"✅ Loaded greetings")
+            except Exception as e:
+                logger.error(f"Error loading greetings.txt: {e}")
+
+    def parse_career_paths(self, content):
+        """Parse career paths and roadmaps from career_paths.txt"""
+        lines = content.split('\n')
+        current = {}
+        roadmap_steps = []
+        in_roadmap = False
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            if line.startswith('##'):
+                if current and current.get('title'):
+                    if roadmap_steps:
+                        current['roadmap'] = roadmap_steps
+                    self.recommendations.append(current)
+                    # Also store in roadmaps dict
+                    self.roadmaps[current['title'].lower()] = {
+                        'title': current['title'],
+                        'duration': current.get('timeline', '1-2 years'),
+                        'steps': roadmap_steps
+                    }
+                current = {'title': line.replace('#', '').strip()}
+                roadmap_steps = []
+                in_roadmap = False
+                
+            elif line.startswith('Description:'):
+                current['description'] = line.replace('Description:', '').strip()
+            elif line.startswith('Skills Needed:'):
+                current['skills'] = line.replace('Skills Needed:', '').strip()
+            elif line.startswith('Timeline:'):
+                current['timeline'] = line.replace('Timeline:', '').strip()
+            elif line.startswith('Salary Range:'):
+                current['salary_range'] = line.replace('Salary Range:', '').strip()
+            elif line.startswith('Companies:'):
+                current['companies'] = line.replace('Companies:', '').strip()
+            elif line.startswith('Roadmap:'):
+                in_roadmap = True
+            elif in_roadmap and line.startswith('-'):
+                roadmap_steps.append(line[2:].strip())
+        
+        if current and current.get('title'):
+            if roadmap_steps:
+                current['roadmap'] = roadmap_steps
+            self.recommendations.append(current)
+            self.roadmaps[current['title'].lower()] = {
+                'title': current['title'],
+                'duration': current.get('timeline', '1-2 years'),
+                'steps': roadmap_steps
+            }
+
+    def parse_interview_questions(self, content):
+        """Parse Q&A pairs from interview_prep.txt"""
+        lines = content.split('\n')
+        current_q = None
+        current_a = []
+        current_category = "General"
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith('##'):
+                current_category = line.replace('#', '').strip()
+                continue
+            if line.startswith('Q:'):
+                if current_q and current_a:
+                    self.qa_database.append({
+                        'question': current_q, 
+                        'answer': ' '.join(current_a), 
+                        'category': current_category
+                    })
+                current_q = line[2:].strip()
+                current_a = []
+            elif line.startswith('A:') and current_q:
+                current_a.append(line[2:].strip())
+            elif current_q:
+                current_a.append(line)
+                
+        if current_q and current_a:
+            self.qa_database.append({
+                'question': current_q, 
+                'answer': ' '.join(current_a), 
+                'category': current_category
+            })
+
+    def parse_skills(self, content):
+        """Parse in-demand skills from skills_training.txt"""
+        lines = content.split('\n')
+        in_skills_section = False
+        
+        for line in lines:
+            line = line.strip()
+            if 'Most In-Demand Skills' in line:
+                in_skills_section = True
+                continue
+            if in_skills_section and line.startswith('##'):
+                break
+            if in_skills_section and line and line[0].isdigit() and '.' in line[:3]:
+                skill = re.sub(r'^\d+\.\s*', '', line)
+                skill = skill.split('(')[0].strip()
+                if skill and len(skill) > 2:
+                    self.skills_list.append(skill)
+        
+        if not self.skills_list:
+            self.skills_list = ['Python', 'JavaScript', 'React', 'Node.js', 'AI/ML', 'Cloud Computing', 'Docker', 'Data Science']
+
+    def parse_roadmaps(self, content):
+        """Parse learning roadmaps from skills_training.txt"""
+        lines = content.split('\n')
+        current_roadmap = {}
+        current_steps = []
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith('##') and ('Roadmap' in line or 'Development' in line):
+                if current_roadmap and current_roadmap.get('title'):
+                    current_roadmap['steps'] = current_steps
+                    self.roadmaps[current_roadmap['title'].lower()] = current_roadmap
+                title = line.replace('#', '').strip()
+                current_roadmap = {'title': title}
+                current_steps = []
+            elif line.startswith('Total Duration:'):
+                current_roadmap['duration'] = line.replace('Total Duration:', '').strip()
+            elif line.startswith('Month') or (line.startswith('**Month') and ':' in line):
+                current_steps.append(line)
+            elif line.startswith('-') and current_steps:
+                current_steps[-1] = current_steps[-1] + '\n   ' + line
+                
+        if current_roadmap and current_roadmap.get('title'):
+            current_roadmap['steps'] = current_steps
+            self.roadmaps[current_roadmap['title'].lower()] = current_roadmap
+
+    def parse_institutes(self, content):
+        """Parse training institutes from skills_training.txt"""
+        lines = content.split('\n')
+        in_institutes_section = False
+        
+        for line in lines:
+            line = line.strip()
+            if 'Local Pakistani:' in line or 'Local Training' in line:
+                in_institutes_section = True
+                continue
+            if in_institutes_section and line.startswith('-'):
+                name = line.replace('-', '').strip()
+                if name and len(name) > 3:
+                    self.institutes_list.append({
+                        'name': name, 
+                        'certificates': 'Yes', 
+                        'focus': 'Local (Pakistan)', 
+                        'cost': 'Free/Varies', 
+                        'skills': ['IT', 'Programming']
+                    })
+            if in_institutes_section and line.startswith('##'):
+                break
+                
+        if not self.institutes_list:
+            self.institutes_list = [
+                {'name': 'Coursera', 'certificates': 'Yes', 'focus': 'International', 'cost': 'Financial Aid', 'skills': ['Python', 'AI']},
+                {'name': 'DigiSkills Pakistan', 'certificates': 'Free', 'focus': 'Local', 'cost': 'Free', 'skills': ['Freelancing']},
+                {'name': 'PIAIC', 'certificates': 'Yes', 'focus': 'AI & Computing', 'cost': 'Free', 'skills': ['AI', 'Cloud', 'Web']}
+            ]
+
+    def parse_resume_tips(self, content):
+        """Parse resume tips from resume_cv.txt"""
+        lines = content.split('\n')
+        for line in lines:
+            line = line.strip()
+            if (line.startswith('-') or line.startswith('•')) and len(line) > 5:
+                tip = line.replace('-', '').replace('•', '').strip()
+                if tip and len(tip) > 5:
+                    self.resume_tips_list.append(tip)
+                    
+        if not self.resume_tips_list:
+            self.resume_tips_list = [
+                'Use ATS-friendly format with clear sections',
+                'Highlight achievements with metrics',
+                'Keep it concise (1-2 pages)',
+                'Include LinkedIn and GitHub profiles'
+            ]
+
+    def parse_job_market(self, content):
+        """Parse job market data from job_market.txt"""
+        lines = content.split('\n')
+        for line in lines:
+            line = line.strip()
+            if 'Salary Guide' in line and ':' in line:
+                self.market_data['salary_range'] = line.split(':')[1].strip()
+            elif 'Demand' in line and ':' in line:
+                self.market_data['demand'] = line.split(':')[1].strip()
+            elif 'Growth Rate' in line and ':' in line:
+                self.market_data['growth_rate'] = line.split(':')[1].strip()
+            elif line.startswith('-') and ('Company' in line or 'company' in line):
+                company = line.replace('-', '').strip()
+                if company:
+                    if 'companies' not in self.market_data:
+                        self.market_data['companies'] = []
+                    self.market_data['companies'].append(company)
+                    
+        if 'companies' not in self.market_data:
+            self.market_data['companies'] = ['Systems Limited', 'Techlogix', 'Afiniti']
+        if 'salary_range' not in self.market_data:
+            self.market_data['salary_range'] = 'Rs. 150,000 - 350,000'
+        if 'demand' not in self.market_data:
+            self.market_data['demand'] = 'High'
+        if 'growth_rate' not in self.market_data:
+            self.market_data['growth_rate'] = '25%'
+
+    def parse_companies(self, content):
+        """Parse companies from companies.txt"""
+        lines = content.split('\n')
+        for line in lines:
+            line = line.strip()
+            if line and not line.startswith('#') and not line.startswith('##'):
+                if '-' in line:
+                    company = line.split('-')[0].strip()
+                    if company and len(company) > 2:
+                        self.companies.append(company)
+
+    def parse_certifications(self, content):
+        """Parse certifications from certifications.txt"""
+        lines = content.split('\n')
+        for line in lines:
+            line = line.strip()
+            if line and not line.startswith('#') and not line.startswith('##'):
+                if '-' in line and 'Rs.' in line:
+                    parts = line.split('-')
+                    if len(parts) >= 2:
+                        self.certifications.append({
+                            'name': parts[0].strip(),
+                            'cost': parts[1].strip() if len(parts) > 1 else 'Varies'
+                        })
+
+    def parse_career_questions(self, content):
+        """Parse career questions from career_questions.txt"""
+        lines = content.split('\n')
+        current_q = None
+        current_a = []
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith('Q:'):
+                if current_q and current_a:
+                    self.career_questions.append({
+                        'question': current_q,
+                        'answer': ' '.join(current_a)
+                    })
+                current_q = line[2:].strip()
+                current_a = []
+            elif line.startswith('A:') and current_q:
+                current_a.append(line[2:].strip())
+            elif current_q:
+                current_a.append(line)
+                
+        if current_q and current_a:
+            self.career_questions.append({
+                'question': current_q,
+                'answer': ' '.join(current_a)
+            })
+
+    def parse_greetings(self, content):
+        """Parse greetings from greetings.txt"""
+        lines = content.split('\n')
+        current_time = datetime.now().hour
+        
+        if 5 <= current_time < 12:
+            self.greetings['time'] = 'morning'
+        elif 12 <= current_time < 17:
+            self.greetings['time'] = 'afternoon'
+        elif 17 <= current_time < 21:
+            self.greetings['time'] = 'evening'
+        else:
+            self.greetings['time'] = 'night'
+        
+        # Store all greetings
+        self.greetings['content'] = content
+
+    def get_greeting(self):
+        """Get appropriate greeting based on time"""
+        hour = datetime.now().hour
+        if 5 <= hour < 12:
+            return "🌅 Good morning! Ready to plan your career journey?"
+        elif 12 <= hour < 17:
+            return "☀️ Good afternoon! How can I help with your career goals today?"
+        elif 17 <= hour < 21:
+            return "🌆 Good evening! Let's explore career opportunities in Pakistan's tech industry."
+        else:
+            return "🌙 Hi there! Never too late to work on your career. What would you like to know?"
+
+    def get_interview_questions(self, domain="Web Development", limit=5):
+        """Get interview questions for specific domain"""
+        domain_lower = domain.lower()
+        matching_questions = []
+        
+        for qa in self.qa_database:
+            category = qa.get('category', '').lower()
+            if domain_lower in category or category in domain_lower:
+                matching_questions.append({
+                    'question': qa['question'],
+                    'answer': qa['answer']
                 })
-            current_q = line[2:].strip()
-            current_a = []
-
-        elif line.startswith('A:') and current_q:
-            current_a.append(line[2:].strip())
-
-        elif current_q:
-            current_a.append(line)
-
-    if current_q and current_a:
-        qa_database.append({
-            'question': current_q.lower(),
-            'answer': ' '.join(current_a),
-            'category': category,
-            'keywords': extract_keywords(current_q)
-        })
-
-# ---------------- NLP HELPERS ---------------- #
-
-def extract_keywords(question):
-    """Extract keywords from question"""
-    stopwords = {'where', 'how', 'what', 'when', 'why', 'do', 'i', 'my', 'the', 'a', 'an', 'is', 'are', 'am'}
-    return [w for w in question.lower().split() if w not in stopwords]
-
-def calculate_similarity(a, b):
-    """Calculate similarity between two strings"""
-    return SequenceMatcher(None, a.lower(), b.lower()).ratio()
-
-# ---------------- CORE CHAT LOGIC ---------------- #
-
-def find_best_answer(question, user_name=None):
-    """Find the best answer for a given question"""
-    question = question.lower().strip()
-    question_words = set(extract_keywords(question))
-
-    # Get last category for context
-    last_category = user_context.get(user_name, {}).get('last_category') if user_name else None
-
-    # Greetings
-    greetings = ['hi', 'hello', 'hey', 'greetings', 'good morning', 'good afternoon']
-    if question in greetings:
-        return f"Hello {user_name or 'there'}! 👋 How can I help you with career guidance or HR questions today?"
-
-    # Career-specific keywords
-    career_keywords = ['career', 'job', 'interview', 'resume', 'cv', 'salary', 'promotion', 'skills', 'training']
-    if any(keyword in question for keyword in career_keywords):
-        # Add career-specific responses
-        if 'interview' in question:
-            return "📝 **Interview Tips:**\n- Research the company thoroughly\n- Practice common interview questions\n- Prepare specific examples of your achievements\n- Dress professionally and arrive early\n- Follow up with a thank-you email"
         
-        if 'resume' in question or 'cv' in question:
-            return "📄 **Resume Tips:**\n- Keep it concise (1-2 pages)\n- Highlight achievements, not just responsibilities\n- Use action verbs (led, created, improved)\n- Tailor for each job application\n- Include relevant keywords from job description"
-        
-        if 'salary' in question:
-            return "💰 **Salary Negotiation Tips:**\n- Research market rates for your role\n- Know your worth and be confident\n- Consider the entire compensation package\n- Practice your negotiation conversation\n- Be professional and positive"
+        limit = max(3, min(limit, 10))
+        return matching_questions[:limit]
 
-    scored_answers = []
+    def get_skills(self):
+        return self.skills_list
 
-    for qa in qa_database:
-        score = 0
+    def get_institutes(self):
+        return self.institutes_list
 
-        # Exact match
-        if question == qa['question']:
-            score = 100
+    def get_recommendations(self):
+        return self.recommendations
 
-        # Keyword matching
-        common = question_words & set(qa['keywords'])
-        score += len(common) * 10
+    def get_roadmap(self, career_title):
+        career_lower = career_title.lower()
+        for key, roadmap in self.roadmaps.items():
+            if career_lower in key or key in career_lower:
+                return roadmap
+        return None
 
-        # Similarity matching
-        score += calculate_similarity(question, qa['question']) * 50
+    def get_skills_for_domain(self, domain):
+        domain_lower = domain.lower()
+        for rec in self.recommendations:
+            if domain_lower in rec.get('title', '').lower():
+                return rec.get('skills', '')
+        return None
 
-        # Category context
-        if last_category and qa['category'] == last_category:
-            score += 15
+    def get_market_data(self):
+        return self.market_data
 
-        scored_answers.append((score, qa))
+    def get_resume_tips(self):
+        return self.resume_tips_list
 
-    if scored_answers:
-        best_score, best_qa = max(scored_answers, key=lambda x: x[0])
+    def get_freelancing_guide(self):
+        return self.freelancing_guide
 
-        if best_score > 25:
-            if user_name:
-                user_context.setdefault(user_name, {})['last_category'] = best_qa['category']
-            return best_qa['answer']
+    def get_certifications(self):
+        return self.certifications
 
-    # Fallback responses based on keywords
-    if 'attendance' in question:
-        return "📅 To mark attendance, please visit: https://portal.company.com/attendance\n\nNeed help? Contact HR at hr@company.com"
+    def get_companies(self):
+        return self.companies
 
-    if 'leave' in question:
-        return "🏖️ To apply for leave:\n1. Go to https://portal.company.com/leave\n2. Select leave type\n3. Enter dates and reason\n4. Submit for approval"
 
-    if 'payroll' in question:
-        return "💰 Payroll Information:\n- Payday: Last working day of the month\n- View payslips: https://portal.company.com/payroll\n- For discrepancies, contact finance@company.com"
+# Initialize knowledge base
+knowledge_base = CareerKnowledgeBase()
 
-    if 'policy' in question:
-        return "📚 Company Policies are available at: https://portal.company.com/policies\n\nKey policies include:\n- Code of Conduct\n- Remote Work Policy\n- Leave Policy\n- Travel Policy"
 
-    # Career coaching specific responses
-    if 'career growth' in question or 'promotion' in question:
-        return "🚀 **Career Growth Tips:**\n1. Set clear career goals\n2. Seek mentorship\n3. Develop new skills continuously\n4. Take on challenging projects\n5. Document your achievements\n6. Network within and outside the organization"
-
-    if 'skills' in question:
-        return "🎯 **Skills Development:**\n- Identify skills gaps through self-assessment\n- Take online courses (Coursera, Udemy, LinkedIn Learning)\n- Attend workshops and webinars\n- Practice through side projects\n- Get certified in your field"
-
-    return "Thank you for your question. For specific HR or career queries, please contact:\n📧 hr@company.com\n📞 +92-XXX-XXXXXXX\n\nI'm here to help with common questions about attendance, leave, policies, and career development!"
-
-# ---------------- SAMPLE DATA ---------------- #
-
-def create_sample_docs(folder):
-    """Create sample documentation files"""
-    
-    # Attendance document
-    attendance_doc = """Q: Where do I mark attendance?
-A: You can mark your attendance at: https://portal.company.com/attendance
-
-Q: What time should I mark attendance?
-A: Regular office hours: 9:00 AM to 6:00 PM. Please mark attendance at start and end of day.
-
-Q: What if I forget to mark attendance?
-A: Contact your manager or HR within 24 hours to get it rectified.
-"""
-    
-    with open(os.path.join(folder, "attendance.txt"), "w", encoding='utf-8') as f:
-        f.write(attendance_doc)
-    
-    # Leave policy document
-    leave_doc = """Q: How do I apply for leave?
-A: Go to https://portal.company.com/leave and submit a leave request with proper justification.
-
-Q: How many leaves do I get?
-A: Annual leave: 20 days, Sick leave: 12 days, Casual leave: 10 days per year.
-
-Q: Can I apply for leave on short notice?
-A: Emergency leaves require manager approval. For planned leaves, apply 2 weeks in advance.
-"""
-    
-    with open(os.path.join(folder, "leave.txt"), "w", encoding='utf-8') as f:
-        f.write(leave_doc)
-    
-    # Career development document
-    career_doc = """Q: How can I advance my career?
-A: Focus on skill development, take on challenging projects, seek mentorship, and network actively.
-
-Q: What training programs are available?
-A: We offer technical certifications, leadership programs, and soft skills workshops throughout the year.
-
-Q: How often are performance reviews?
-A: Performance reviews are conducted quarterly with annual comprehensive reviews.
-"""
-    
-    with open(os.path.join(folder, "career.txt"), "w", encoding='utf-8') as f:
-        f.write(career_doc)
-    
-    print("✅ Sample HR documents created")
-
-# ---------------- MAIN PREDICT FUNCTION ---------------- #
+# ============= MAIN PREDICT FUNCTION =============
 
 def predict(data):
-    """
-    Predict career coaching responses based on user query
-    
-    Expected data formats:
-    1. Simple chat: {'message': 'How to apply for leave?', 'user_name': 'john'}
-    2. With session: {'message': 'Hello', 'user_name': 'john', 'session_id': '123'}
-    3. Get stats: {'action': 'get_stats'}
-    4. Clear context: {'action': 'clear_context', 'user_name': 'john'}
-    5. Get recommendations: {'action': 'get_recommendations', 'user_id': '123'}
-    6. Analyze skill gap: {'action': 'analyze_skill_gap', 'target_role': 'Tech Lead', 'current_skills': [...]}
-    7. Get market insights: {'action': 'get_market_insights', 'role': 'Software Engineer'}
-    8. Get chat history: {'action': 'get_chat_history', 'user_id': '123'}
-    
-    Returns: {
-        'status': 'success',
-        'answer': '...',
-        'context': {...}
-    }
-    """
     try:
         action = data.get('action', 'chat')
-        
-        # ============= CHAT HANDLER =============
-        if action == 'chat':
-            message = data.get('message', '').strip()
-            user_name = data.get('user_name', '')
-            session_id = data.get('session_id')
-            
-            if not message:
-                return {
-                    'status': 'error',
-                    'message': 'No message provided'
-                }
-            
-            # Generate answer
-            answer = find_best_answer(message, user_name or session_id)
-            
-            # Get conversation context
-            context = {
-                'last_question': message,
-                'timestamp': __import__('datetime').datetime.now().isoformat()
-            }
-            
-            if user_name or session_id:
-                context['user'] = user_name or session_id
-                context['last_category'] = user_context.get(user_name or session_id, {}).get('last_category')
-            
-            return {
-                'status': 'success',
-                'answer': answer,
-                'context': context,
-                'qa_pairs_loaded': len(qa_database)
-            }
-        
+
+        # ============= GET INTERVIEW QUESTIONS =============
+        if action == 'get_interview_questions':
+            domain = data.get('domain', 'Web Development')
+            limit = data.get('limit', 5)
+            questions = knowledge_base.get_interview_questions(domain, limit)
+            return {'status': 'success', 'domain': domain, 'questions': questions, 'total': len(questions)}
+
         # ============= GET RECOMMENDATIONS =============
         elif action == 'get_recommendations':
-            """Return career path recommendations"""
-            user_id = data.get('user_id', '')
-            
-            recommendations = [
-                {
-                    'id': 1,
-                    'title': 'Senior Software Engineer',
-                    'description': 'Lead technical projects and mentor junior developers. Focus on system architecture and team leadership.',
+            recommendations = knowledge_base.get_recommendations()
+            formatted = []
+            for i, rec in enumerate(recommendations):
+                steps = rec.get('skills', '').split(', ') if rec.get('skills') else []
+                formatted.append({
+                    'id': i + 1,
+                    'title': rec.get('title', ''),
+                    'description': rec.get('description', ''),
                     'confidence': 85,
-                    'timeline': '1-2 years',
-                    'steps': [
-                        'Master system design patterns and architecture',
-                        'Lead 2-3 major projects from planning to delivery',
-                        'Get cloud certification (AWS/Azure)',
-                        'Mentor 2-3 junior developers',
-                        'Contribute to technical decision making'
-                    ],
-                    'salary_range': 'Rs. 350,000 - 500,000'
-                },
-                {
-                    'id': 2,
-                    'title': 'Tech Lead',
-                    'description': 'Lead development teams, drive technical architecture, and manage project delivery.',
-                    'confidence': 70,
-                    'timeline': '2-3 years',
-                    'steps': [
-                        'Develop leadership and management skills',
-                        'Learn Agile/Scrum project management',
-                        'Contribute to open source projects',
-                        'Build professional network in tech community',
-                        'Take on cross-functional team projects'
-                    ],
-                    'salary_range': 'Rs. 500,000 - 800,000'
-                },
-                {
-                    'id': 3,
-                    'title': 'AI/ML Engineer',
-                    'description': 'Specialize in artificial intelligence and machine learning. Focus on building intelligent systems.',
-                    'confidence': 65,
-                    'timeline': '2-3 years',
-                    'steps': [
-                        'Complete AI/ML specialization courses (Coursera/DeepLearning.ai)',
-                        'Build ML portfolio projects (3-5 projects)',
-                        'Master Python data science stack (NumPy, Pandas, Scikit-learn)',
-                        'Get certified in TensorFlow or PyTorch',
-                        'Participate in Kaggle competitions'
-                    ],
-                    'salary_range': 'Rs. 400,000 - 700,000'
-                }
-            ]
-            
-            return {
-                'status': 'success',
-                'data': {
-                    'recommendations': recommendations
-                }
-            }
-        
-        # ============= ANALYZE SKILL GAP =============
-        elif action == 'analyze_skill_gap':
-            """Analyze skill gap for target role"""
-            target_role = data.get('target_role', 'Tech Lead')
-            current_skills = data.get('current_skills', [])
-            
-            # Define skill requirements for different roles
-            role_requirements = {
-                'Tech Lead': {
-                    'skills': {
-                        'System Design': {'target': 85, 'importance': 'High'},
-                        'Cloud Architecture': {'target': 80, 'importance': 'High'},
-                        'Team Leadership': {'target': 85, 'importance': 'Medium'},
-                        'Project Management': {'target': 75, 'importance': 'Medium'},
-                        'Code Review': {'target': 90, 'importance': 'High'},
-                        'Technical Documentation': {'target': 80, 'importance': 'Medium'}
+                    'timeline': rec.get('timeline', '1-2 years'),
+                    'steps': steps,
+                    'salary_range': rec.get('salary_range', ''),
+                    'companies': rec.get('companies', '')
+                })
+            return {'status': 'success', 'recommendations': formatted}
+
+        # ============= GET IN-DEMAND SKILLS =============
+        elif action == 'get_in_demand_skills':
+            skills = knowledge_base.get_skills()
+            return {'status': 'success', 'skills': skills}
+
+        # ============= GET TRAINING INSTITUTES =============
+        elif action == 'get_training_institutes':
+            institutes = knowledge_base.get_institutes()
+            return {'status': 'success', 'institutes': institutes}
+
+        # ============= CHAT HANDLER =============
+        elif action == 'chat':
+            message = data.get('message', '').strip().lower()
+            user_name = data.get('user_name', 'there')
+
+            if not message:
+                greeting = knowledge_base.get_greeting()
+                return {
+                    'status': 'success',
+                    'ai_response': {
+                        'text': f"{greeting}\n\nI'm your AI Career Coach for Pakistan's tech industry.\n\nAsk me about:\n• Career paths\n• Skills\n• Roadmaps\n• Resume tips\n• Freelancing\n• Salary guides\n• Interview prep\n\nWhat would you like to know?",
+                        'timestamp': datetime.now().isoformat()
                     },
-                    'resources': [
-                        'System Design Interview by Alex Xu',
-                        'AWS Solutions Architect Certification',
-                        'Leading Teams by Google',
-                        'Agile Project Management Courses'
-                    ]
-                },
-                'Senior Software Engineer': {
-                    'skills': {
-                        'System Design': {'target': 80, 'importance': 'High'},
-                        'Advanced Algorithms': {'target': 85, 'importance': 'High'},
-                        'Performance Optimization': {'target': 80, 'importance': 'High'},
-                        'Testing Strategies': {'target': 75, 'importance': 'Medium'},
-                        'API Design': {'target': 85, 'importance': 'High'}
-                    },
-                    'resources': [
-                        'Designing Data-Intensive Applications',
-                        'Cracking the Coding Interview',
-                        'Clean Code by Robert Martin',
-                        'System Design Interview Guide'
-                    ]
-                },
-                'AI/ML Engineer': {
-                    'skills': {
-                        'Machine Learning': {'target': 85, 'importance': 'High'},
-                        'Deep Learning': {'target': 80, 'importance': 'High'},
-                        'Python': {'target': 90, 'importance': 'High'},
-                        'Data Engineering': {'target': 75, 'importance': 'Medium'},
-                        'Statistics': {'target': 80, 'importance': 'High'}
-                    },
-                    'resources': [
-                        'Deep Learning Specialization (Andrew Ng)',
-                        'Fast.ai Courses',
-                        'Hands-On Machine Learning',
-                        'Kaggle Competitions'
-                    ]
+                    'suggested_questions': [],
+                    'intent': 'welcome'
                 }
-            }
-            
-            # Get requirements for target role
-            requirements = role_requirements.get(target_role, role_requirements['Tech Lead'])
-            skill_gaps = []
-            
-            # Calculate skill gaps
-            for skill, req in requirements['skills'].items():
-                # Simulate current skill level based on matching with current skills
-                current_level = 30  # Default low
-                for current_skill in current_skills:
-                    if skill.lower() in current_skill.lower() or current_skill.lower() in skill.lower():
-                        current_level = 60  # Some knowledge
+
+            # ========== INTENT 1: INTERVIEW ==========
+            interview_words = ['interview', 'prepare for interview', 'interview tips', 'interview prep', 'job interview', 'interview preparation']
+            if any(word in message for word in interview_words):
+                return {
+                    'status': 'success',
+                    'ai_response': {
+                        'text': "🎯 Here are interview preparation tips. Check the sidebar for details!",
+                        'timestamp': datetime.now().isoformat()
+                    },
+                    'suggested_questions': [],
+                    'intent': 'show_interview',
+                    'data': {
+                        'tips': "Research the company thoroughly\nPractice common technical questions\nUse STAR method for behavioral questions\nPrepare questions to ask the interviewer\nDress professionally and be on time"
+                    }
+                }
+
+            # ========== INTENT 2: RESUME ==========
+            resume_words = ['resume', 'cv', 'resume tips', 'cv tips', 'resume help', 'make resume', 'build resume']
+            if any(word in message for word in resume_words):
+                tips = knowledge_base.get_resume_tips()
+                return {
+                    'status': 'success',
+                    'ai_response': {
+                        'text': "📄 Here are resume tips for the Pakistani job market. Check the sidebar for details!",
+                        'timestamp': datetime.now().isoformat()
+                    },
+                    'suggested_questions': [],
+                    'intent': 'show_resume',
+                    'data': {'tips': tips}
+                }
+
+            # ========== INTENT 3: FREELANCING ==========
+            freelance_words = ['freelance', 'freelancing', 'upwork', 'fiverr', 'remote work', 'work from home']
+            if any(word in message for word in freelance_words):
+                guide = knowledge_base.get_freelancing_guide()
+                return {
+                    'status': 'success',
+                    'ai_response': {
+                        'text': "💼 Here's the freelancing guide for Pakistan. Check the sidebar for details!",
+                        'timestamp': datetime.now().isoformat()
+                    },
+                    'suggested_questions': [],
+                    'intent': 'show_freelancing',
+                    'data': {'guide': guide[:1500] if guide else "Freelancing guide content"}
+                }
+
+            # ========== INTENT 4: SALARY ==========
+            salary_words = ['salary', 'pay', 'earning', 'how much', 'compensation', 'salary guide', 'package', 'income']
+            if any(word in message for word in salary_words):
+                market_data = knowledge_base.get_market_data()
+                return {
+                    'status': 'success',
+                    'ai_response': {
+                        'text': "💰 Here's the salary guide for the Pakistani tech industry. Check the sidebar for details!",
+                        'timestamp': datetime.now().isoformat()
+                    },
+                    'suggested_questions': [],
+                    'intent': 'show_salary',
+                    'data': {'salary': market_data}
+                }
+
+            # ========== INTENT 5: ROADMAP ==========
+            roadmap_words = ['roadmap', 'road map', 'learning path', 'how to become', 'path to become', 'become a', 'how to learn', 'study path', 'learning roadmap', 'guide to become', 'show me roadmap', 'show roadmap']
+            if any(word in message for word in roadmap_words):
+                career_mapping = {
+                    'mern': 'mern stack',
+                    'mern stack': 'mern stack',
+                    'web development': 'web development',
+                    'web developer': 'web development',
+                    'software engineering': 'software engineering',
+                    'software engineer': 'software engineering',
+                    'data science': 'data science',
+                    'data scientist': 'data science',
+                    'ai/ml': 'ai/ml engineering',
+                    'ai engineer': 'ai/ml engineering',
+                    'ml engineer': 'ai/ml engineering',
+                    'machine learning': 'ai/ml engineering',
+                    'devops': 'devops engineering',
+                    'cloud computing': 'cloud computing',
+                    'cloud engineer': 'cloud computing',
+                    'flutter': 'flutter mobile development',
+                    'cybersecurity': 'cybersecurity',
+                    'security': 'cybersecurity',
+                    'full stack': 'web development',
+                    'frontend': 'web development',
+                    'backend': 'web development',
+                    'python': 'python development',
+                    'django': 'python development',
+                    'react': 'web development',
+                    'node': 'web development'
+                }
+                
+                detected_career = None
+                message_lower = message.lower()
+                
+                for key, mapped_career in career_mapping.items():
+                    if key in message_lower:
+                        detected_career = mapped_career
                         break
                 
-                gap = req['target'] - current_level
-                if gap > 20:  # Only show significant gaps
-                    skill_gaps.append({
-                        'skill': skill,
-                        'current': current_level,
-                        'target': req['target'],
-                        'importance': req['importance'],
-                        'gap': gap,
-                        'resources': requirements['resources'][:2]
-                    })
-            
-            # Sort by importance (High first)
-            importance_order = {'High': 0, 'Medium': 1, 'Low': 2}
-            skill_gaps.sort(key=lambda x: importance_order[x['importance']])
-            
-            return {
-                'status': 'success',
-                'data': {
-                    'skill_gaps': skill_gaps,
-                    'target_role': target_role,
-                    'recommended_resources': requirements['resources']
-                }
-            }
-        
-        # ============= GET MARKET INSIGHTS =============
-        elif action == 'get_market_insights':
-            """Get market insights for Pakistan tech industry"""
-            role = data.get('role', 'Software Engineer')
-            
-            # Pakistan-specific market data
-            market_data = {
-                'Software Engineer': {
-                    'salary_range': 'Rs. 150,000 - 350,000',
-                    'demand': 'Very High',
-                    'growth_rate': '25%',
-                    'companies': ['Systems Limited', 'Techlogix', 'Contour Software', 'Arbisoft', 'Devsinc'],
-                    'job_openings': '500+',
-                    'remote_opportunities': 'High'
-                },
-                'Senior Software Engineer': {
-                    'salary_range': 'Rs. 250,000 - 500,000',
-                    'demand': 'High',
-                    'growth_rate': '20%',
-                    'companies': ['Systems Limited', 'Techlogix', 'Afiniti', 'Careem', 'Motive'],
-                    'job_openings': '300+',
-                    'remote_opportunities': 'High'
-                },
-                'Tech Lead': {
-                    'salary_range': 'Rs. 400,000 - 800,000',
-                    'demand': 'High',
-                    'growth_rate': '30%',
-                    'companies': ['Afiniti', 'Careem', 'Motive', 'Systems Limited', 'Devsinc'],
-                    'job_openings': '150+',
-                    'remote_opportunities': 'Medium'
-                },
-                'AI/ML Engineer': {
-                    'salary_range': 'Rs. 300,000 - 700,000',
-                    'demand': 'Very High',
-                    'growth_rate': '40%',
-                    'companies': ['Afiniti', 'Motive', 'Nayatel', '10Pearls', 'Contour Software'],
-                    'job_openings': '200+',
-                    'remote_opportunities': 'High'
-                }
-            }
-            
-            # Find matching role
-            matched_role = None
-            for key in market_data.keys():
-                if role.lower() in key.lower() or key.lower() in role.lower():
-                    matched_role = key
-                    break
-            
-            response_data = market_data.get(matched_role, {
-                'salary_range': 'Rs. 200,000 - 500,000',
-                'demand': 'High',
-                'growth_rate': '25%',
-                'companies': ['Systems Limited', 'Techlogix', 'Arbisoft'],
-                'job_openings': 'Varies by role',
-                'remote_opportunities': 'High'
-            })
-            
-            # Add market trends
-            response_data['market_trends'] = [
-                'Increasing demand for cloud and AI skills',
-                'Remote work becoming standard',
-                'Focus on product-based companies',
-                'Rise of tech hubs in Karachi, Lahore, Islamabad'
-            ]
-            
-            return {
-                'status': 'success',
-                'data': response_data
-            }
-        
-        # ============= GET CHAT HISTORY =============
-        elif action == 'get_chat_history':
-            """Get chat history for user"""
-            user_id = data.get('user_id', '')
-            
-            # Return empty history for now (can be implemented with database)
-            return {
-                'status': 'success',
-                'data': {
-                    'messages': []
-                }
-            }
-        
-        # ============= EXISTING HANDLERS =============
-        elif action == 'clear_context':
-            user_name = data.get('user_name')
-            session_id = data.get('session_id')
-            user_key = user_name or session_id
-            
-            if user_key and user_key in user_context:
-                del user_context[user_key]
+                if not detected_career:
+                    for roadmap_key in knowledge_base.roadmaps.keys():
+                        if roadmap_key in message_lower or message_lower in roadmap_key:
+                            detected_career = roadmap_key
+                            break
+                
+                if detected_career:
+                    roadmap = knowledge_base.get_roadmap(detected_career)
+                    if roadmap and roadmap.get('steps'):
+                        return {
+                            'status': 'success',
+                            'ai_response': {
+                                'text': f"🗺️ Here's the learning roadmap for {detected_career.title()}. Check the sidebar for details!",
+                                'timestamp': datetime.now().isoformat()
+                            },
+                            'suggested_questions': [],
+                            'intent': 'show_roadmap',
+                            'data': {'career': detected_career, 'roadmap': roadmap}
+                        }
+                    else:
+                        return {
+                            'status': 'success',
+                            'ai_response': {
+                                'text': f"🗺️ Here's a learning roadmap for {detected_career.title()}:\n\n• Learn fundamentals (2-3 months)\n• Build projects (2-3 months)\n• Get certified (1-2 months)\n• Apply for jobs (1 month)\n\nWant me to create a detailed monthly plan?",
+                                'timestamp': datetime.now().isoformat()
+                            },
+                            'suggested_questions': [],
+                            'intent': 'show_roadmap',
+                            'data': {
+                                'career': detected_career,
+                                'roadmap': {
+                                    'title': detected_career.title(),
+                                    'duration': '6-8 months',
+                                    'steps': [
+                                        'Learn fundamentals (2-3 months)',
+                                        'Build projects (2-3 months)',
+                                        'Get certified (1-2 months)',
+                                        'Apply for jobs (1 month)'
+                                    ]
+                                }
+                            }
+                        }
+                else:
+                    return {
+                        'status': 'success',
+                        'ai_response': {
+                            'text': "Which career roadmap would you like to see? I have detailed roadmaps for:\n• Software Engineering\n• Web Development\n• Data Science\n• DevOps\n• Cloud Computing\n• AI/ML\n• Flutter Development\n• Cybersecurity\n• Python Development\n• MERN Stack\n\nJust ask like 'Show me roadmap for Data Science'",
+                            'timestamp': datetime.now().isoformat()
+                        },
+                        'suggested_questions': [],
+                        'intent': 'roadmap_prompt'
+                    }
+
+            # ========== INTENT 6: SKILLS ==========
+            skill_words = ['skill', 'skills', 'what to learn', 'important skills', 'hot skills', 'trending skills', 'which skills', 'best skills', 'skills to learn', 'skills needed', 'what skills', 'in-demand']
+            if any(word in message for word in skill_words):
+                domains = ['web development', 'data science', 'ai/ml', 'cloud', 'devops', 'python', 'javascript', 'react', 'flutter', 'cybersecurity', 'mern', 'frontend', 'backend']
+                detected_domain = None
+                for domain in domains:
+                    if domain in message:
+                        detected_domain = domain
+                        break
+
+                if detected_domain:
+                    skills = knowledge_base.get_skills_for_domain(detected_domain)
+                    if skills:
+                        return {
+                            'status': 'success',
+                            'ai_response': {
+                                'text': f"📚 Here are the important skills for {detected_domain.title()}. Check the sidebar for details!",
+                                'timestamp': datetime.now().isoformat()
+                            },
+                            'suggested_questions': [],
+                            'intent': 'show_skills',
+                            'data': {'domain': detected_domain, 'skills': skills}
+                        }
+
+                all_skills = knowledge_base.get_skills()
                 return {
                     'status': 'success',
-                    'message': 'Context cleared successfully'
+                    'ai_response': {
+                        'text': "📚 Here are the most in-demand skills in Pakistan. Check the sidebar for details!",
+                        'timestamp': datetime.now().isoformat()
+                    },
+                    'suggested_questions': [],
+                    'intent': 'show_skills',
+                    'data': {'domain': 'Tech Industry', 'skills': ', '.join(all_skills[:15])}
                 }
-            else:
-                return {
-                    'status': 'success',
-                    'message': 'No context to clear'
-                }
-        
-        elif action == 'get_stats':
+
+            # ========== INTENT 7: CAREER RECOMMENDATIONS ==========
+            career_words = ['career', 'carrer', 'carrear', 'which career', 'what career', 'recommend career', 'best career', 'career option', 'career choice', 'career should', 'choose career', 'career for me', 'job', 'profession', 'field']
+            if any(word in message for word in career_words):
+                recommendations = knowledge_base.get_recommendations()
+                if recommendations:
+                    return {
+                        'status': 'success',
+                        'ai_response': {
+                            'text': "📋 Here are the top career paths in Pakistan's tech industry. Check the sidebar for details!",
+                            'timestamp': datetime.now().isoformat()
+                        },
+                        'suggested_questions': [],
+                        'intent': 'show_recommendations',
+                        'data': {'recommendations': recommendations}
+                    }
+
+            # ========== FALLBACK ==========
             return {
                 'status': 'success',
-                'data': {
-                    'qa_pairs': len(qa_database),
-                    'active_sessions': len(user_context),
-                    'categories': list(set(qa['category'] for qa in qa_database))
-                }
+                'ai_response': {
+                    'text': "I can help you with:\n\n• **Career recommendations** - Ask 'Which career should I choose?'\n• **Skills information** - Ask 'What skills are important to learn?'\n• **Learning roadmaps** - Ask 'Show me roadmap for MERN Stack'\n• **Resume tips** - Ask 'Give me resume tips'\n• **Salary guides** - Ask 'What is the salary?'\n• **Freelancing** - Ask 'How to start freelancing?'\n• **Interview prep** - Ask 'How to prepare for interview?'\n\nWhat would you like to know?",
+                    'timestamp': datetime.now().isoformat()
+                },
+                'suggested_questions': [],
+                'intent': 'fallback'
             }
-        
-        elif action == 'reload_data':
-            load_qa_database()
-            return {
-                'status': 'success',
-                'message': f'Reloaded {len(qa_database)} Q&A pairs'
-            }
-        
+
+        # ============= HEALTH CHECK =============
         elif action == 'health':
             return {
                 'status': 'success',
-                'qa_pairs': len(qa_database)
+                'questions_loaded': len(knowledge_base.qa_database),
+                'skills_loaded': len(knowledge_base.skills_list),
+                'careers_loaded': len(knowledge_base.recommendations),
+                'roadmaps_loaded': len(knowledge_base.roadmaps),
+                'institutes_loaded': len(knowledge_base.institutes_list)
             }
-        
+
         else:
-            return {
-                'status': 'error',
-                'message': f'Unknown action: {action}'
-            }
-            
+            return {'status': 'error', 'message': f'Unknown action: {action}'}
+
     except Exception as e:
         logger.error(f"Prediction error: {e}")
-        return {
-            'status': 'error',
-            'message': str(e)
-        }
-
-# ---------------- INITIALIZATION ---------------- #
-
-# Load the Q&A database when module is imported
-load_qa_database()
-
-# ---------------- FOR TESTING ---------------- #
-
-if __name__ == "__main__":
-    # Test the predict function
-    test_data = {
-        'action': 'chat',
-        'message': 'How do I apply for leave?',
-        'user_name': 'test_user'
-    }
-    result = predict(test_data)
-    print("Test Result:")
-    print(result)
-    
-    # Test stats
-    stats = predict({'action': 'get_stats'})
-    print("\nStats:")
-    print(stats)
-    
-    # Test recommendations
-    recs = predict({'action': 'get_recommendations'})
-    print("\nRecommendations:")
-    print(recs)
+        return {'status': 'error', 'message': str(e)}
