@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import axiosInstance from "@/utils/axiosInstance.js";
 import { useAuth } from "@/contexts/AuthContext.jsx";
 import { 
@@ -7,7 +7,7 @@ import {
   FaGlobe, FaDollarSign, FaUniversity, FaGraduationCap, FaFileAlt, 
   FaCamera, FaSave, FaTimes, FaPlus, FaTrash, FaCheckCircle,
   FaExclamationTriangle, FaInfoCircle, FaUsers, FaUserTie,
-  FaUserShield, FaUserGraduate
+  FaUserShield, FaUserGraduate, FaUpload, FaSpinner
 } from 'react-icons/fa';
 
 // KPI Card Component
@@ -40,11 +40,196 @@ const Badge = ({ children, variant = 'default' }) => {
   return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${v[variant]}`}>{children}</span>;
 };
 
+// Profile Picture Modal Component
+const ProfilePictureModal = ({ isOpen, onClose, currentPhoto, onSave }) => {
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedFile(null);
+      setPreview(currentPhoto);
+      setError('');
+    }
+  }, [isOpen, currentPhoto]);
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setError('Please select a valid image file (JPEG, PNG, GIF, or WEBP)');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('File size must be less than 5MB');
+      return;
+    }
+
+    setSelectedFile(file);
+    setError('');
+    
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPreview(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile) {
+      setError('Please select a file first');
+      return;
+    }
+
+    setUploading(true);
+    setError('');
+
+    const formData = new FormData();
+    formData.append('profilePicture', selectedFile);
+
+    try {
+      const response = await axiosInstance.post('/employees/upload-profile-picture', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (response.data.success) {
+        const photoUrl = response.data.data.profilePicture;
+        onSave(photoUrl);
+        onClose();
+      } else {
+        setError(response.data.message || 'Upload failed');
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      setError(err.response?.data?.message || 'Failed to upload profile picture');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    if (!window.confirm('Are you sure you want to remove your profile picture?')) return;
+
+    setUploading(true);
+    try {
+      const response = await axiosInstance.delete('/employees/profile-picture');
+      if (response.data.success) {
+        onSave(null);
+        onClose();
+      } else {
+        setError(response.data.message || 'Failed to remove profile picture');
+      }
+    } catch (err) {
+      console.error('Remove error:', err);
+      setError(err.response?.data?.message || 'Failed to remove profile picture');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-semibold text-gray-900">Update Profile Picture</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl transition-colors">×</button>
+        </div>
+
+        <div className="space-y-4">
+          {/* Preview */}
+          <div className="flex justify-center">
+            <div className="relative">
+              <img
+                src={preview || `https://ui-avatars.com/api/?name=User&background=4f46e5&color=fff&size=200`}
+                alt="Profile Preview"
+                className="w-40 h-40 rounded-full object-cover border-4 border-indigo-100"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute bottom-0 right-0 bg-indigo-600 text-white p-2 rounded-full hover:bg-indigo-700 transition-colors shadow-lg"
+              >
+                <FaCamera className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* File Input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+
+          {/* Error Message */}
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          )}
+
+          {/* Info Text */}
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <p className="text-xs text-gray-500">
+              <FaInfoCircle className="inline mr-1" />
+              Supported formats: JPEG, PNG, GIF, WEBP. Max size: 5MB
+            </p>
+          </div>
+
+          {/* Buttons */}
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={handleRemove}
+              disabled={uploading || !currentPhoto}
+              className="flex-1 py-2.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              Remove
+            </button>
+            <button
+              onClick={handleUpload}
+              disabled={uploading || !selectedFile}
+              className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {uploading ? (
+                <>
+                  <FaSpinner className="animate-spin w-4 h-4" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <FaUpload className="w-4 h-4" />
+                  Upload
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const EmployeeProfile = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [showPictureModal, setShowPictureModal] = useState(false);
   const [stats, setStats] = useState({
     attendanceRate: 0,
     leavesUsed: 0,
@@ -323,6 +508,14 @@ const EmployeeProfile = () => {
     }));
   };
 
+  const handleProfilePictureUpdate = (newPhotoUrl) => {
+    setProfile(prev => ({ ...prev, profilePicture: newPhotoUrl }));
+    // Also update the user context if needed
+    if (user) {
+      user.profilePicture = newPhotoUrl;
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setError('');
@@ -439,10 +632,10 @@ const EmployeeProfile = () => {
           <KpiCard icon={FaCheckCircle} label="Attendance Rate" value={`${stats.attendanceRate}%`} sub="This year" iconBg="bg-purple-500" />
         </div>
 
-        {/* Profile Header */}
+        {/* Profile Header with Picture Upload */}
         <div className="bg-white shadow-lg rounded-2xl p-8">
           <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
-            <div className="relative">
+            <div className="relative group">
               <img
                 src={profile.profilePicture 
                   ? (profile.profilePicture.startsWith('http') 
@@ -455,6 +648,13 @@ const EmployeeProfile = () => {
                   e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name || 'Employee')}&background=4f46e5&color=fff&size=200`;
                 }}
               />
+              <button
+                onClick={() => setShowPictureModal(true)}
+                className="absolute bottom-0 right-0 bg-indigo-600 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-lg hover:bg-indigo-700"
+                title="Change Profile Picture"
+              >
+                <FaCamera className="w-4 h-4" />
+              </button>
             </div>
             <div className="flex-1 text-center md:text-left">
               <h1 className="text-3xl font-bold text-gray-900">{profile.name || 'Employee'}</h1>
@@ -660,6 +860,14 @@ const EmployeeProfile = () => {
           </button>
         </div>
       </div>
+
+      {/* Profile Picture Modal */}
+      <ProfilePictureModal
+        isOpen={showPictureModal}
+        onClose={() => setShowPictureModal(false)}
+        currentPhoto={profile.profilePicture}
+        onSave={handleProfilePictureUpdate}
+      />
     </div>
   );
 };

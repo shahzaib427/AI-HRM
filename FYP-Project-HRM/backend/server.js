@@ -21,17 +21,18 @@ const app = express();
 
 // ===== CREATE UPLOADS FOLDER =====
 const createUploadsDir = () => {
-  const uploadsDir = path.join(__dirname, 'uploads');
-  const messagesDir = path.join(__dirname, 'uploads', 'messages');
+  const dirs = [
+    path.join(__dirname, 'uploads'),
+    path.join(__dirname, 'uploads', 'messages'),
+    path.join(__dirname, 'uploads', 'resumes'),
+  ];
   
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-    console.log('✅ Uploads directory created:', uploadsDir);
-  }
-  if (!fs.existsSync(messagesDir)) {
-    fs.mkdirSync(messagesDir, { recursive: true });
-    console.log('✅ Messages upload directory created:', messagesDir);
-  }
+  dirs.forEach(dir => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+      console.log('✅ Created directory:', dir);
+    }
+  });
 };
 
 createUploadsDir();

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import {
   Send as SendIcon, AttachFile as AttachFileIcon, Delete as DeleteIcon,
   Person as PersonIcon, DoneAll as DoneAllIcon, History as HistoryIcon,
@@ -12,6 +11,8 @@ import {
 } from '@mui/icons-material';
 import { CircularProgress } from '@mui/material';
 import { FaEnvelope, FaUsers, FaClock, FaCheckCircle, FaUserPlus, FaChartLine } from 'react-icons/fa';
+// ✅ FIX 1A: import axiosInstance for authenticated API calls
+import axiosInstance from '../../utils/axiosInstance';
 
 // ─── UI Primitives ────────────────────────────────────────────────────────────
 
@@ -31,10 +32,9 @@ const Badge = ({ children, variant = 'default' }) => {
 };
 
 const AvatarInitials = ({ name = 'U' }) => {
-  return <div className={`w-9 h-9 bg-gray-100 text-gray-700 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0`}>{name.charAt(0).toUpperCase()}</div>;
+  return <div className="w-9 h-9 bg-gray-100 text-gray-700 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0">{name.charAt(0).toUpperCase()}</div>;
 };
 
-// KPI Card Component
 const KpiCard = ({ icon: Icon, label, value, sub, iconBg }) => (
   <div className="bg-white rounded-xl border border-gray-100 p-5 hover:shadow-md transition-all duration-200">
     <div className="flex items-center justify-between">
@@ -89,10 +89,10 @@ const CATEGORIES = [
 ];
 
 const PRIORITIES = [
-  { value: 'low',    label: 'Low',    variant: 'low' },
-  { value: 'normal', label: 'Normal', variant: 'normal' },
-  { value: 'high',   label: 'High',   variant: 'high' },
-  { value: 'urgent', label: 'Urgent', variant: 'urgent' },
+  { value: 'low',    label: 'Low' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'high',   label: 'High' },
+  { value: 'urgent', label: 'Urgent' },
 ];
 
 const DEFAULT_TEMPLATES = [
@@ -108,6 +108,7 @@ const DEFAULT_TEMPLATES = [
 ];
 
 const STEPS = ['Recipient', 'Details', 'Message', 'Review'];
+// API_URL kept only for fetchCurrentUser endpoint-discovery loop
 const API_URL = 'http://localhost:5000';
 
 // ─── Success Dialog ───────────────────────────────────────────────────────────
@@ -123,7 +124,6 @@ const SuccessDialog = ({ open, message, onViewMessages, onSendAnother }) => {
         </div>
         <h3 className="text-lg font-semibold text-gray-900 mb-1">Message Sent!</h3>
         <p className="text-gray-500 text-sm mb-5">Your message has been delivered securely.</p>
-
         {message && (
           <div className="bg-gray-50 rounded-lg p-4 mb-5 text-left text-sm space-y-2">
             {[['Recipient', message.recipient], ['Subject', message.subject], ['Sent on', `${message.date} at ${message.time}`], ['Reference', message.reference]].map(([k, v]) => v && (
@@ -134,7 +134,6 @@ const SuccessDialog = ({ open, message, onViewMessages, onSendAnother }) => {
             ))}
           </div>
         )}
-
         <div className="flex gap-3">
           <button onClick={onViewMessages} className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
             <HistoryIcon style={{ fontSize: 16 }} /> View Messages
@@ -160,41 +159,38 @@ const EMPTY_FORM = {
   priority: 'normal',
   attachments: [],
   templateId: '',
-  ccRecipients: [],
-  bccRecipients: [],
   confidential: false,
   readReceipt: false,
   urgent: false,
   followUp: false,
-  tags: [],
 };
 
 const AdminComposeMessage = () => {
   const navigate = useNavigate();
 
-  const [loading, setLoading] = useState(false);
-  const [userLoading, setUserLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [user, setUser] = useState(null);
-  const [allUsers, setAllUsers] = useState([]);
-  const [activeStep, setActiveStep] = useState(0);
+  const [loading, setLoading]                     = useState(false);
+  const [userLoading, setUserLoading]             = useState(true);
+  const [error, setError]                         = useState('');
+  const [user, setUser]                           = useState(null);
+  const [allUsers, setAllUsers]                   = useState([]);
+  const [activeStep, setActiveStep]               = useState(0);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
-  const [lastSentMessage, setLastSentMessage] = useState(null);
-  const [drafts, setDrafts] = useState([]);
-  const [templates, setTemplates] = useState([]);
-  const [activeTab, setActiveTab] = useState('compose');
-  const [characterCount, setCharacterCount] = useState(0);
+  const [lastSentMessage, setLastSentMessage]     = useState(null);
+  const [drafts, setDrafts]                       = useState([]);
+  const [templates, setTemplates]                 = useState([]);
+  const [activeTab, setActiveTab]                 = useState('compose');
+  const [characterCount, setCharacterCount]       = useState(0);
   const [saveAsDraftConfirm, setSaveAsDraftConfirm] = useState(false);
-  const [formData, setFormData] = useState(EMPTY_FORM);
-  const [fieldErrors, setFieldErrors] = useState({});
+  const [formData, setFormData]                   = useState(EMPTY_FORM);
+  const [fieldErrors, setFieldErrors]             = useState({});
   const [stats, setStats] = useState({
     totalEmployees: 0,
     draftsCount: 0,
     templatesCount: 0,
-    recentMessages: 0
+    recentMessages: 0,
   });
 
-  // Fetch current user
+  // ── Fetch current user ──────────────────────────────────────────────────────
   const fetchCurrentUser = useCallback(async () => {
     setUserLoading(true);
     try {
@@ -204,10 +200,18 @@ const AdminComposeMessage = () => {
 
       const token = localStorage.getItem('token');
       if (token && (!userData || !userData._id)) {
-        const endpoints = [`${API_URL}/api/auth/me`, `${API_URL}/api/users/me`, `${API_URL}/api/employee/profile`, `${API_URL}/api/profile`];
+        const endpoints = [
+          `${API_URL}/api/auth/me`,
+          `${API_URL}/api/users/me`,
+          `${API_URL}/api/employee/profile`,
+          `${API_URL}/api/profile`,
+        ];
         for (const endpoint of endpoints) {
           try {
-            const response = await axios.get(endpoint, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, timeout: 2000 });
+            const response = await axios.get(endpoint, {
+              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+              timeout: 2000,
+            });
             if (response.data) {
               userData = response.data.user || response.data.data || response.data;
               localStorage.setItem('currentUser', JSON.stringify(userData));
@@ -226,7 +230,6 @@ const AdminComposeMessage = () => {
           department: 'Administration',
           employeeId: `ADMIN${String(Date.now()).slice(-6)}`,
           position: 'Administrator',
-          joinDate: new Date().toISOString().split('T')[0]
         };
         localStorage.setItem('currentUser', JSON.stringify(userData));
       }
@@ -249,14 +252,9 @@ const AdminComposeMessage = () => {
       localStorage.setItem('currentUser', JSON.stringify(formattedUser));
     } catch {
       const fallback = {
-        _id: 'fallback-user',
-        name: 'Admin',
-        email: 'admin@company.com',
-        role: 'admin',
-        department: 'Administration',
-        employeeId: 'ADMIN001',
-        position: 'Administrator',
-        joinDate: '2024-01-01'
+        _id: 'fallback-user', name: 'Admin', email: 'admin@company.com',
+        role: 'admin', department: 'Administration', employeeId: 'ADMIN001',
+        position: 'Administrator', joinDate: '2024-01-01',
       };
       setUser(fallback);
       localStorage.setItem('currentUser', JSON.stringify(fallback));
@@ -265,7 +263,7 @@ const AdminComposeMessage = () => {
     }
   }, []);
 
-  // Fetch all users (employees)
+  // ✅ FIX 1C: use axiosInstance instead of bare axios
   const fetchAllUsers = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -279,10 +277,8 @@ const AdminComposeMessage = () => {
         setStats(prev => ({ ...prev, totalEmployees: mockUsers.length }));
         return;
       }
-      const response = await axios.get(`${API_URL}/api/messages/users/list`, {
-        headers: { Authorization: `Bearer ${token}` },
-        timeout: 5000
-      });
+      // ✅ FIX: axiosInstance handles auth headers automatically
+      const response = await axiosInstance.get('/messages/users/list');
       if (response.data.success && response.data.data) {
         setAllUsers(response.data.data);
         setStats(prev => ({ ...prev, totalEmployees: response.data.data.length }));
@@ -307,9 +303,7 @@ const AdminComposeMessage = () => {
         setStats(prev => ({ ...prev, draftsCount: recent.length }));
         localStorage.setItem('adminMessageDrafts', JSON.stringify(recent));
       }
-    } catch {
-      setDrafts([]);
-    }
+    } catch { setDrafts([]); }
   };
 
   const loadTemplates = () => {
@@ -327,24 +321,14 @@ const AdminComposeMessage = () => {
 
   const saveDraft = () => {
     try {
-      if (!formData.subject.trim() && !formData.message.trim()) {
-        toast.warning('No content to save');
-        return;
-      }
-      const newDraft = {
-        id: Date.now(),
-        ...formData,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
+      if (!formData.subject.trim() && !formData.message.trim()) { toast.warning('No content to save'); return; }
+      const newDraft = { id: Date.now(), ...formData, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
       const updated = [newDraft, ...drafts.slice(0, 19)];
       setDrafts(updated);
       setStats(prev => ({ ...prev, draftsCount: updated.length }));
       localStorage.setItem('adminMessageDrafts', JSON.stringify(updated));
       toast.success('Draft saved');
-    } catch {
-      toast.error('Failed to save draft');
-    }
+    } catch { toast.error('Failed to save draft'); }
   };
 
   const loadDraft = (draft) => {
@@ -363,18 +347,11 @@ const AdminComposeMessage = () => {
   };
 
   const applyTemplate = (template) => {
-    setFormData(prev => ({
-      ...prev,
-      subject: template.subject,
-      message: template.message,
-      category: template.category
-    }));
+    setFormData(prev => ({ ...prev, subject: template.subject, message: template.message, category: template.category }));
     setActiveTab('compose');
     toast.success(`"${template.name}" applied`);
     const updated = templates.map(t =>
-      t.id === template.id
-        ? { ...t, usageCount: (t.usageCount || 0) + 1, lastUsed: new Date().toISOString() }
-        : t
+      t.id === template.id ? { ...t, usageCount: (t.usageCount || 0) + 1, lastUsed: new Date().toISOString() } : t
     );
     setTemplates(updated);
     localStorage.setItem('adminMessageTemplates', JSON.stringify(updated));
@@ -382,14 +359,8 @@ const AdminComposeMessage = () => {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    if (type === 'checkbox') {
-      setFormData(prev => ({ ...prev, [name]: checked }));
-      return;
-    }
-    if (name === 'recipientType') {
-      setFormData(prev => ({ ...prev, recipientType: value, recipient: '', recipientId: '' }));
-      return;
-    }
+    if (type === 'checkbox') { setFormData(prev => ({ ...prev, [name]: checked })); return; }
+    if (name === 'recipientType') { setFormData(prev => ({ ...prev, recipientType: value, recipient: '', recipientId: '' })); return; }
     if (name === 'recipientId') {
       const opt = getRecipientOptions().find(o => o.value === value);
       setFormData(prev => ({ ...prev, recipient: opt?.label || '', recipientId: value }));
@@ -401,18 +372,12 @@ const AdminComposeMessage = () => {
   const handleFileUpload = (e) => {
     const files = Array.from(e.target.files);
     const oversized = files.filter(f => f.size > 10 * 1024 * 1024);
-    if (oversized.length) {
-      toast.error(`Files exceed 10MB: ${oversized.map(f => f.name).join(', ')}`);
-      return;
-    }
+    if (oversized.length) { toast.error(`Files exceed 10MB: ${oversized.map(f => f.name).join(', ')}`); return; }
     const attachments = files.map(file => ({
-      file,
-      id: Math.random().toString(36).substr(2, 9),
-      name: file.name,
-      size: (file.size / 1024 / 1024).toFixed(2),
-      type: file.type.split('/')[1]?.toUpperCase() || 'FILE',
+      file, id: Math.random().toString(36).substr(2, 9), name: file.name,
+      size: (file.size / 1024 / 1024).toFixed(2), type: file.type.split('/')[1]?.toUpperCase() || 'FILE',
       uploadedAt: new Date().toISOString(),
-      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null
+      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
     }));
     setFormData(prev => ({ ...prev, attachments: [...prev.attachments, ...attachments] }));
     toast.success(`${files.length} file(s) added`);
@@ -424,7 +389,7 @@ const AdminComposeMessage = () => {
       attachments: prev.attachments.filter(item => {
         if (item.id === id && item.preview) URL.revokeObjectURL(item.preview);
         return item.id !== id;
-      })
+      }),
     }));
   };
 
@@ -439,14 +404,11 @@ const AdminComposeMessage = () => {
     return Object.keys(errs).length === 0 ? null : 'Please fix the errors above';
   };
 
+  // ✅ FIX 1B: use axiosInstance — no manual auth header needed
   const handleSubmit = async (e) => {
     e.preventDefault();
     const err = validateForm();
-    if (err) {
-      toast.error(err);
-      setError(err);
-      return;
-    }
+    if (err) { toast.error(err); setError(err); return; }
     setLoading(true);
     setError('');
     try {
@@ -456,12 +418,10 @@ const AdminComposeMessage = () => {
         message: formData.message,
         category: formData.category || 'general',
         priority: formData.priority || 'normal',
-        recipientType: 'individual'
+        recipientType: 'individual',
       };
 
-      const response = await axios.post(`${API_URL}/api/messages/send`, messageData, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' },
-      });
+      const response = await axiosInstance.post('/messages/send', messageData);
 
       toast.success('Message sent!');
       if (response.data.success) {
@@ -470,7 +430,7 @@ const AdminComposeMessage = () => {
           subject: formData.subject,
           date: new Date().toLocaleDateString(),
           time: new Date().toLocaleTimeString(),
-          reference: response.data.data?.id || `MSG-${Date.now()}`
+          reference: response.data.data?.id || `MSG-${Date.now()}`,
         });
         setShowSuccessDialog(true);
         setFormData(EMPTY_FORM);
@@ -493,14 +453,8 @@ const AdminComposeMessage = () => {
   }));
 
   const handleNextStep = () => {
-    if (activeStep === 0 && !formData.recipientId) {
-      toast.error('Please select a recipient');
-      return;
-    }
-    if (activeStep === 1 && !formData.category) {
-      toast.error('Please select a category');
-      return;
-    }
+    if (activeStep === 0 && !formData.recipientId) { toast.error('Please select a recipient'); return; }
+    if (activeStep === 1 && !formData.category) { toast.error('Please select a category'); return; }
     setActiveStep(prev => Math.min(prev + 1, 3));
   };
 
@@ -511,42 +465,34 @@ const AdminComposeMessage = () => {
     fetchAllUsers();
     loadDrafts();
     loadTemplates();
-    return () => formData.attachments.forEach(item => {
-      if (item.preview) URL.revokeObjectURL(item.preview);
-    });
+    return () => formData.attachments.forEach(item => { if (item.preview) URL.revokeObjectURL(item.preview); });
   }, []);
 
-  useEffect(() => {
-    setCharacterCount(formData.message.length);
-  }, [formData.message]);
+  useEffect(() => { setCharacterCount(formData.message.length); }, [formData.message]);
 
   useEffect(() => {
     if ((formData.subject || formData.message) && !loading) {
-      const timer = setTimeout(() => {
-        if (formData.subject || formData.message) saveDraft();
-      }, 30000);
+      const timer = setTimeout(() => { if (formData.subject || formData.message) saveDraft(); }, 30000);
       return () => clearTimeout(timer);
     }
   }, [formData.subject, formData.message]);
 
-  if (userLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-10 h-10 border-4 border-gray-100 border-t-gray-900 rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-gray-600 text-sm">Loading your profile…</p>
-        </div>
+  if (userLoading) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-10 h-10 border-4 border-gray-100 border-t-gray-900 rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-gray-600 text-sm">Loading your profile…</p>
       </div>
-    );
-  }
+    </div>
+  );
 
   const recipientOptions = getRecipientOptions();
 
   const TABS = [
-    { id: 'compose',   icon: SendIcon,      label: 'Compose' },
-    { id: 'templates', icon: TemplateIcon,  label: 'Templates' },
-    { id: 'drafts',    icon: DraftsIcon,    label: `Drafts${drafts.length ? ` (${drafts.length})` : ''}` },
-    { id: 'ai',        icon: SmartToyIcon,  label: 'AI Assistant' },
+    { id: 'compose',   icon: SendIcon,     label: 'Compose' },
+    { id: 'templates', icon: TemplateIcon, label: 'Templates' },
+    { id: 'drafts',    icon: DraftsIcon,   label: `Drafts${drafts.length ? ` (${drafts.length})` : ''}` },
+    { id: 'ai',        icon: SmartToyIcon, label: 'AI Assistant' },
   ];
 
   return (
@@ -599,7 +545,7 @@ const AdminComposeMessage = () => {
             ))}
           </div>
 
-          {/* Compose Tab */}
+          {/* ── Compose Tab ── */}
           {activeTab === 'compose' && (
             <div className="p-5">
               {/* Step Progress */}
@@ -682,12 +628,7 @@ const AdminComposeMessage = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <FormLabel required>Category</FormLabel>
-                        <select
-                          name="category"
-                          value={formData.category}
-                          onChange={handleChange}
-                          className={inputCls(fieldErrors.category)}
-                        >
+                        <select name="category" value={formData.category} onChange={handleChange} className={inputCls(fieldErrors.category)}>
                           {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                         </select>
                       </div>
@@ -695,48 +636,27 @@ const AdminComposeMessage = () => {
                         <FormLabel>Priority</FormLabel>
                         <div className="flex gap-2 flex-wrap">
                           {PRIORITIES.map(p => (
-                            <button
-                              type="button"
-                              key={p.value}
+                            <button type="button" key={p.value}
                               onClick={() => setFormData(prev => ({ ...prev, priority: p.value }))}
-                              className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all ${formData.priority === p.value ? 'border-gray-900 bg-gray-50 text-gray-900' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
-                            >
+                              className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all ${formData.priority === p.value ? 'border-gray-900 bg-gray-50 text-gray-900' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
                               {p.label}
                             </button>
                           ))}
                         </div>
                       </div>
                     </div>
-
                     <div>
                       <FormLabel required>Subject</FormLabel>
-                      <input
-                        type="text"
-                        name="subject"
-                        value={formData.subject}
-                        onChange={handleChange}
-                        placeholder="Brief, descriptive subject line"
-                        className={inputCls(fieldErrors.subject)}
-                      />
+                      <input type="text" name="subject" value={formData.subject} onChange={handleChange}
+                        placeholder="Brief, descriptive subject line" className={inputCls(fieldErrors.subject)} />
                       {fieldErrors.subject && <p className="text-xs text-red-500 mt-1">{fieldErrors.subject}</p>}
                     </div>
-
-                    {/* Options */}
                     <div>
                       <p className="text-sm font-medium text-gray-700 mb-3">Message options</p>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         {[['confidential', 'Confidential'], ['readReceipt', 'Read Receipt'], ['urgent', 'Urgent'], ['followUp', 'Follow-up']].map(([field, label]) => (
-                          <label
-                            key={field}
-                            className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${formData[field] ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:bg-gray-50'}`}
-                          >
-                            <input
-                              type="checkbox"
-                              name={field}
-                              checked={formData[field]}
-                              onChange={handleChange}
-                              className="rounded border-gray-300 text-gray-900 focus:ring-gray-500"
-                            />
+                          <label key={field} className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${formData[field] ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                            <input type="checkbox" name={field} checked={formData[field]} onChange={handleChange} className="rounded border-gray-300 text-gray-900 focus:ring-gray-500" />
                             <span className="text-xs font-medium text-gray-700">{label}</span>
                           </label>
                         ))}
@@ -751,14 +671,9 @@ const AdminComposeMessage = () => {
                     <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Write your message</p>
                     <div>
                       <FormLabel required>Message body</FormLabel>
-                      <textarea
-                        name="message"
-                        value={formData.message}
-                        onChange={handleChange}
-                        rows={9}
+                      <textarea name="message" value={formData.message} onChange={handleChange} rows={9}
                         placeholder={`Dear Employee,\n\nPlease type your message here...\n\nBest regards,\n${user?.name || 'Admin Team'}`}
-                        className={`${inputCls(fieldErrors.message)} resize-none`}
-                      />
+                        className={`${inputCls(fieldErrors.message)} resize-none`} />
                       <div className="flex justify-between mt-1.5">
                         {fieldErrors.message
                           ? <p className="text-xs text-red-500">{fieldErrors.message}</p>
@@ -767,23 +682,12 @@ const AdminComposeMessage = () => {
                         <span className={`text-xs ${characterCount < 10 ? 'text-red-400' : 'text-gray-400'}`}>{characterCount} chars</span>
                       </div>
                     </div>
-
-                    {/* Attachments */}
                     <div>
                       <FormLabel>Attachments</FormLabel>
                       <label htmlFor="file-upload" className="flex items-center gap-2 w-fit px-4 py-2.5 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors">
-                        <AttachFileIcon style={{ fontSize: 16 }} />
-                        Add files
+                        <AttachFileIcon style={{ fontSize: 16 }} /> Add files
                       </label>
-                      <input
-                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx,.txt,.ppt,.pptx"
-                        style={{ display: 'none' }}
-                        id="file-upload"
-                        multiple
-                        type="file"
-                        onChange={handleFileUpload}
-                      />
-
+                      <input accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx,.txt,.ppt,.pptx" style={{ display: 'none' }} id="file-upload" multiple type="file" onChange={handleFileUpload} />
                       {formData.attachments.length > 0 && (
                         <div className="mt-3 space-y-2">
                           {formData.attachments.map(item => (
@@ -795,11 +699,7 @@ const AdminComposeMessage = () => {
                                   <p className="text-xs text-gray-400">{item.size} MB · {item.type}</p>
                                 </div>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => removeAttachment(item.id)}
-                                className="p-1 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-lg transition-colors flex-shrink-0"
-                              >
+                              <button type="button" onClick={() => removeAttachment(item.id)} className="p-1 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-lg transition-colors flex-shrink-0">
                                 <DeleteIcon style={{ fontSize: 15 }} />
                               </button>
                             </div>
@@ -824,7 +724,6 @@ const AdminComposeMessage = () => {
                         </div>
                       ))}
                     </div>
-
                     {formData.subject && (
                       <div>
                         <p className="text-xs text-gray-400 mb-2">Message preview</p>
@@ -833,7 +732,6 @@ const AdminComposeMessage = () => {
                         </div>
                       </div>
                     )}
-
                     {(formData.confidential || formData.urgent || formData.readReceipt || formData.followUp) && (
                       <div className="flex flex-wrap gap-2">
                         {formData.confidential && <Badge variant="warning">Confidential</Badge>}
@@ -847,38 +745,25 @@ const AdminComposeMessage = () => {
 
                 {/* Navigation */}
                 <div className="flex items-center justify-between mt-6 pt-5 border-t border-gray-100">
-                  <button
-                    type="button"
-                    onClick={activeStep > 0 ? handlePrevStep : () => navigate(-1)}
-                    className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                  >
+                  <button type="button" onClick={activeStep > 0 ? handlePrevStep : () => navigate(-1)}
+                    className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
                     {activeStep > 0 ? '← Back' : 'Cancel'}
                   </button>
-
                   <div className="flex items-center gap-2">
                     {activeStep === 3 && (
-                      <button
-                        type="button"
-                        onClick={() => setSaveAsDraftConfirm(true)}
-                        className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                      >
+                      <button type="button" onClick={() => setSaveAsDraftConfirm(true)}
+                        className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
                         <DraftsIcon style={{ fontSize: 15 }} /> Save draft
                       </button>
                     )}
                     {activeStep < 3 ? (
-                      <button
-                        type="button"
-                        onClick={handleNextStep}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors"
-                      >
+                      <button type="button" onClick={handleNextStep}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors">
                         Continue →
                       </button>
                     ) : (
-                      <button
-                        type="submit"
-                        disabled={loading}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                      >
+                      <button type="submit" disabled={loading}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
                         {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <SendIcon style={{ fontSize: 15 }} />}
                         {loading ? 'Sending…' : 'Send Message'}
                       </button>
@@ -889,7 +774,7 @@ const AdminComposeMessage = () => {
             </div>
           )}
 
-          {/* Templates Tab */}
+          {/* ── Templates Tab ── */}
           {activeTab === 'templates' && (
             <div className="p-5">
               <p className="text-sm font-semibold text-gray-800 mb-4">Message Templates</p>
@@ -906,10 +791,8 @@ const AdminComposeMessage = () => {
                     <p className="text-xs text-gray-500 mb-1 font-medium">Subject</p>
                     <p className="text-xs text-gray-700 mb-3 truncate">{template.subject}</p>
                     <p className="text-xs text-gray-500 line-clamp-3 mb-3">{template.message.substring(0, 120)}…</p>
-                    <button
-                      onClick={() => applyTemplate(template)}
-                      className="w-full flex items-center justify-center gap-1.5 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-xs font-medium transition-colors"
-                    >
+                    <button onClick={() => applyTemplate(template)}
+                      className="w-full flex items-center justify-center gap-1.5 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-xs font-medium transition-colors">
                       <FileCopyIcon style={{ fontSize: 13 }} /> Use Template
                     </button>
                   </div>
@@ -918,7 +801,7 @@ const AdminComposeMessage = () => {
             </div>
           )}
 
-          {/* Drafts Tab */}
+          {/* ── Drafts Tab ── */}
           {activeTab === 'drafts' && (
             <div className="p-5">
               <p className="text-sm font-semibold text-gray-800 mb-4">Saved Drafts ({drafts.length})</p>
@@ -939,14 +822,10 @@ const AdminComposeMessage = () => {
                     <div key={draft.id} className="flex items-start justify-between border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-gray-800 truncate">{draft.subject || 'Untitled Draft'}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          To: {draft.recipient || 'No recipient'} · {new Date(draft.updatedAt).toLocaleDateString()}
-                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">To: {draft.recipient || 'No recipient'} · {new Date(draft.updatedAt).toLocaleDateString()}</p>
                       </div>
                       <div className="flex items-center gap-1.5 ml-3 flex-shrink-0">
-                        <button onClick={() => loadDraft(draft)} className="px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg hover:bg-gray-800 transition-colors">
-                          Edit
-                        </button>
+                        <button onClick={() => loadDraft(draft)} className="px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg hover:bg-gray-800 transition-colors">Edit</button>
                         <button onClick={() => deleteDraft(draft.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
                           <DeleteIcon style={{ fontSize: 15 }} />
                         </button>
@@ -958,7 +837,7 @@ const AdminComposeMessage = () => {
             </div>
           )}
 
-          {/* AI Tab */}
+          {/* ── AI Tab ── */}
           {activeTab === 'ai' && (
             <div className="p-5">
               <p className="text-sm font-semibold text-gray-800 mb-4">AI Writing Assistant</p>
@@ -973,9 +852,7 @@ const AdminComposeMessage = () => {
                     </div>
                     <p className="text-sm font-semibold text-gray-800 mb-1">{card.title}</p>
                     <p className="text-xs text-gray-500 mb-4">{card.sub}</p>
-                    <button className="w-full py-2 bg-gray-900 hover:bg-gray-800 text-white text-xs font-medium rounded-lg transition-colors">
-                      {card.btn}
-                    </button>
+                    <button className="w-full py-2 bg-gray-900 hover:bg-gray-800 text-white text-xs font-medium rounded-lg transition-colors">{card.btn}</button>
                   </div>
                 ))}
               </div>
@@ -997,12 +874,8 @@ const AdminComposeMessage = () => {
             <h3 className="text-base font-semibold text-gray-900 mb-2">Save as draft?</h3>
             <p className="text-sm text-gray-500 mb-5">You can continue editing this message later.</p>
             <div className="flex gap-3">
-              <button onClick={() => setSaveAsDraftConfirm(false)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-                Cancel
-              </button>
-              <button onClick={() => { saveDraft(); setSaveAsDraftConfirm(false); }} className="flex-1 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors">
-                Save Draft
-              </button>
+              <button onClick={() => setSaveAsDraftConfirm(false)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">Cancel</button>
+              <button onClick={() => { saveDraft(); setSaveAsDraftConfirm(false); }} className="flex-1 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors">Save Draft</button>
             </div>
           </div>
         </div>

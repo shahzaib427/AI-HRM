@@ -62,16 +62,6 @@ const KpiCard = ({ icon: Icon, label, value, sub, iconBg }) => (
   </div>
 );
 
-const IconBtn = ({ icon: Icon, onClick, title, className = '' }) => (
-  <button
-    onClick={onClick}
-    title={title}
-    className={`p-1.5 rounded-md transition-colors ${className}`}
-  >
-    <Icon style={{ fontSize: 16 }} />
-  </button>
-);
-
 const EmptyState = ({ icon: Icon, title, subtitle, action }) => (
   <div className="flex flex-col items-center justify-center py-20 text-center">
     <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mb-4">
@@ -96,15 +86,8 @@ const ConfirmDialog = ({ open, onClose, onConfirm, loading, count = 1, permanent
         </div>
         <h3 className="text-slate-900 font-semibold text-lg mb-1">Delete {count > 1 ? `${count} messages` : 'message'}?</h3>
         <p className="text-slate-500 text-sm mb-6">This action cannot be undone.</p>
-        {permanent && (
-          <div className="mb-4 p-3 bg-red-50 rounded-lg border border-red-200">
-            <p className="text-xs text-red-600 font-medium">⚠️ Warning: This will permanently delete these messages.</p>
-          </div>
-        )}
         <div className="flex gap-3">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">
-            Cancel
-          </button>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">Cancel</button>
           <button onClick={onConfirm} disabled={loading} className="flex-1 py-2.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-medium transition-colors disabled:opacity-50">
             {loading ? 'Deleting…' : 'Delete'}
           </button>
@@ -118,13 +101,6 @@ const ConfirmDialog = ({ open, onClose, onConfirm, loading, count = 1, permanent
 
 const MessageDrawer = ({ message, open, onClose, onReply, onAssign }) => {
   if (!open || !message) return null;
-  
-  const getPriorityColor = (priority) => {
-    if (priority === 'high' || priority === 'urgent') return 'danger';
-    if (priority === 'medium') return 'warning';
-    return 'default';
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
@@ -135,9 +111,7 @@ const MessageDrawer = ({ message, open, onClose, onReply, onAssign }) => {
             <h3 className="text-slate-900 font-semibold text-base truncate">{message.subject || 'No Subject'}</h3>
             <div className="flex items-center gap-2 mt-2">
               <Badge variant={message.status === 'read' ? 'default' : 'primary'}>{message.status || 'sent'}</Badge>
-              {message.priority === 'high' || message.priority === 'urgent' ? (
-                <Badge variant="danger">{message.priority}</Badge>
-              ) : null}
+              {(message.priority === 'high' || message.priority === 'urgent') && <Badge variant="danger">{message.priority}</Badge>}
               {message.confidential && <Badge variant="warning">Confidential</Badge>}
             </div>
           </div>
@@ -145,7 +119,6 @@ const MessageDrawer = ({ message, open, onClose, onReply, onAssign }) => {
             <CloseIcon style={{ fontSize: 20 }} />
           </button>
         </div>
-
         {/* Sender strip */}
         <div className="flex items-center gap-3 px-5 py-4 bg-slate-50 border-b border-slate-100">
           <Avatar name={message.sender?.name || 'U'} size="md" />
@@ -159,7 +132,6 @@ const MessageDrawer = ({ message, open, onClose, onReply, onAssign }) => {
             </span>
           )}
         </div>
-
         {/* Assigned To */}
         {message.assignedTo && (
           <div className="px-5 py-3 bg-indigo-50 border-b border-indigo-100 flex items-center gap-2">
@@ -167,31 +139,21 @@ const MessageDrawer = ({ message, open, onClose, onReply, onAssign }) => {
             <span className="text-xs text-indigo-700">Assigned to: {message.assignedTo.name}</span>
           </div>
         )}
-
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-5">
           <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">{message.message}</p>
         </div>
-
         {/* Actions */}
         <div className="p-5 border-t border-slate-100 flex gap-3">
-          <button
-            onClick={() => { onReply(message._id); onClose(); }}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            <FaReply className="text-xs" />
-            Reply
+          <button onClick={() => { onReply(message._id); onClose(); }}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors">
+            <FaReply className="text-xs" /> Reply
           </button>
-          <button
-            onClick={() => { onAssign(message._id); onClose(); }}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg transition-colors"
-          >
-            <PersonAddIcon style={{ fontSize: 16 }} />
-            Assign
+          <button onClick={() => { onAssign(message._id); onClose(); }}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg transition-colors">
+            <PersonAddIcon style={{ fontSize: 16 }} /> Assign
           </button>
-          <button onClick={onClose} className="px-4 py-2.5 border border-slate-200 rounded-lg text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">
-            Close
-          </button>
+          <button onClick={onClose} className="px-4 py-2.5 border border-slate-200 rounded-lg text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">Close</button>
         </div>
       </div>
     </div>
@@ -201,12 +163,12 @@ const MessageDrawer = ({ message, open, onClose, onReply, onAssign }) => {
 // ─── Tab Bar ──────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 0, label: 'All', icon: InboxIcon, count: 'total' },
-  { id: 1, label: 'New', icon: EmailIcon, count: 'new' },
-  { id: 2, label: 'In Progress', icon: AssignIcon, count: 'inProgress' },
-  { id: 3, label: 'Urgent', icon: PriorityHighIcon, count: 'urgent' },
-  { id: 4, label: 'My Cases', icon: PersonAddIcon, count: 'assignedToMe' },
-  { id: 5, label: 'Resolved', icon: CheckCircleIcon, count: 'resolved' },
+  { id: 0, label: 'All',         icon: InboxIcon,       count: 'total' },
+  { id: 1, label: 'New',         icon: EmailIcon,       count: 'new' },
+  { id: 2, label: 'In Progress', icon: AssignIcon,      count: 'inProgress' },
+  { id: 3, label: 'Urgent',      icon: PriorityHighIcon, count: 'urgent' },
+  { id: 4, label: 'My Cases',    icon: PersonAddIcon,   count: 'assignedToMe' },
+  { id: 5, label: 'Resolved',    icon: CheckCircleIcon, count: 'resolved' },
 ];
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -214,26 +176,21 @@ const TABS = [
 const MessageDashboard = () => {
   const navigate = useNavigate();
 
-  const [messages, setMessages] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [stats, setStats] = useState(null);
+  const [messages, setMessages]           = useState([]);
+  const [loading, setLoading]             = useState(true);
+  const [refreshing, setRefreshing]       = useState(false);
+  const [stats, setStats]                 = useState(null);
   const [filters, setFilters] = useState({
-    status: '',
-    priority: '',
-    category: '',
-    assignedToMe: false,
-    search: '',
-    timeRange: 'today'
+    status: '', priority: '', category: '', assignedToMe: false, search: '', timeRange: 'today',
   });
-  const [pagination, setPagination] = useState({ page: 0, limit: 20, total: 0 });
+  const [pagination, setPagination]       = useState({ page: 0, limit: 20, total: 0 });
   const [selectedMessages, setSelectedMessages] = useState([]);
-  const [tabValue, setTabValue] = useState(0);
-  const [deleteDialog, setDeleteDialog] = useState({ open: false, messageId: null, permanent: false });
+  const [tabValue, setTabValue]           = useState(0);
+  const [deleteDialog, setDeleteDialog]   = useState({ open: false, messageId: null, permanent: false });
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const [viewDialog, setViewDialog] = useState(false);
+  const [viewDialog, setViewDialog]       = useState(false);
   const [selectedMessage, setSelectedMessage] = useState(null);
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters]     = useState(false);
 
   const getCurrentUser = () => {
     try {
@@ -244,27 +201,23 @@ const MessageDashboard = () => {
 
   const currentUser = getCurrentUser();
 
-  // Fetch messages
+  // ── Fetch messages ──────────────────────────────────────────────────────────
   const fetchMessages = useCallback(async () => {
     try {
       setLoading(true);
-      const params = {
-        page: pagination.page + 1,
-        limit: pagination.limit,
-        ...filters
-      };
-
+      const params = { page: pagination.page + 1, limit: pagination.limit, ...filters };
       const response = await axiosInstance.get('/messages', { params });
-      
+
       const filteredMessages = (response.data.data || []).filter(msg => msg.status !== 'deleted');
       setMessages(filteredMessages);
-      setPagination(prev => ({
-        ...prev,
-        total: response.data.total || filteredMessages.length || 0
-      }));
-      
-      if (response.data.stats) setStats(response.data.stats);
-      else calculateLocalStats(filteredMessages);
+      setPagination(prev => ({ ...prev, total: response.data.total || filteredMessages.length || 0 }));
+
+      // ✅ Use stats from response if available (they now come in the correct shape)
+      if (response.data.stats) {
+        setStats(response.data.stats);
+      } else {
+        calculateLocalStats(filteredMessages);
+      }
     } catch (error) {
       console.error('Error fetching messages:', error);
       toast.error('Failed to load messages');
@@ -278,33 +231,37 @@ const MessageDashboard = () => {
   const fetchStats = async () => {
     try {
       const response = await axiosInstance.get('/messages/stats');
+      // Stats now return correct shape: { totals: { total, new, inProgress, ... }, performance: { assignedToMe } }
       setStats(response.data.data);
     } catch (error) {
       console.error('Error fetching stats:', error);
-      calculateLocalStats(messages);
     }
   };
 
   const calculateLocalStats = (messageList = messages) => {
-    const activeMessages = messageList.filter(msg => msg.status !== 'deleted');
-    const total = activeMessages.length;
-    const newMessages = activeMessages.filter(m => m.status === 'new' || m.status === 'sent').length;
-    const urgent = activeMessages.filter(m => m.priority === 'urgent').length;
-    const resolved = activeMessages.filter(m => m.status === 'resolved' || m.status === 'closed').length;
-    const inProgress = activeMessages.filter(m => m.status === 'in-progress').length;
-    const assignedToMe = currentUser ? 
-      activeMessages.filter(m => m.assignedTo?.id === currentUser._id || m.assignedTo?._id === currentUser._id).length : 0;
-
-    setStats({
-      totals: { total, new: newMessages, urgent, resolved, inProgress },
-      performance: { assignedToMe }
-    });
+    const active = messageList.filter(msg => msg.status !== 'deleted');
+    const total = active.length;
+    const newMsgs = active.filter(m => m.status === 'new' || m.status === 'sent').length;
+    const urgent = active.filter(m => m.priority === 'urgent').length;
+    const resolved = active.filter(m => m.status === 'resolved' || m.status === 'closed').length;
+    const inProgress = active.filter(m => m.status === 'in-progress').length;
+    const assignedToMe = currentUser
+      ? active.filter(m => m.assignedTo?._id?.toString() === currentUser._id?.toString() || m.assignedTo?.id?.toString() === currentUser._id?.toString()).length
+      : 0;
+    setStats({ totals: { total, new: newMsgs, urgent, resolved, inProgress }, performance: { assignedToMe } });
   };
 
+  // ✅ FIX 4A: separated into two effects — debounced on filters+page, once on mount for stats
   useEffect(() => {
-    fetchMessages();
+    const timer = setTimeout(() => {
+      fetchMessages();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [filters, pagination.page]);
+
+  useEffect(() => {
     fetchStats();
-  }, [pagination.page]);
+  }, []);
 
   useEffect(() => {
     const tabFilters = {
@@ -313,9 +270,8 @@ const MessageDashboard = () => {
       2: { status: 'in-progress' },
       3: { priority: 'urgent' },
       4: { assignedToMe: true },
-      5: { status: 'resolved' }
+      5: { status: 'resolved' },
     };
-    
     if (tabValue !== 0) {
       setFilters(prev => ({ ...prev, ...tabFilters[tabValue] }));
     } else {
@@ -324,7 +280,8 @@ const MessageDashboard = () => {
     setPagination(prev => ({ ...prev, page: 0 }));
   }, [tabValue]);
 
-  // Event Handlers
+  // ── Event Handlers ──────────────────────────────────────────────────────────
+
   const handleFilterChange = (name, value) => {
     setFilters(prev => ({ ...prev, [name]: value }));
     setPagination(prev => ({ ...prev, page: 0 }));
@@ -336,17 +293,11 @@ const MessageDashboard = () => {
   };
 
   const handleSelectMessage = (id) => {
-    setSelectedMessages(prev =>
-      prev.includes(id) ? prev.filter(msgId => msgId !== id) : [...prev, id]
-    );
+    setSelectedMessages(prev => prev.includes(id) ? prev.filter(msgId => msgId !== id) : [...prev, id]);
   };
 
   const handleSelectAll = () => {
-    if (selectedMessages.length === messages.length) {
-      setSelectedMessages([]);
-    } else {
-      setSelectedMessages(messages.map(msg => msg._id));
-    }
+    setSelectedMessages(selectedMessages.length === messages.length ? [] : messages.map(msg => msg._id));
   };
 
   const handleRefresh = () => {
@@ -363,13 +314,8 @@ const MessageDashboard = () => {
 
   const handleCloseView = () => { setViewDialog(false); setSelectedMessage(null); };
 
-  const handleReplyMessage = (messageId) => {
-    navigate(`/admin/messages/${messageId}/reply`);
-  };
-
-  const handleAssignMessage = (messageId) => {
-    navigate(`/admin/messages/${messageId}/assign`);
-  };
+  const handleReplyMessage = (messageId) => navigate(`/admin/messages/${messageId}/reply`);
+  const handleAssignMessage = (messageId) => navigate(`/admin/messages/${messageId}/assign`);
 
   const handleDelete = async (messageId) => {
     try {
@@ -379,7 +325,6 @@ const MessageDashboard = () => {
       await fetchMessages();
       await fetchStats();
     } catch (error) {
-      console.error('Delete error:', error);
       toast.error('Delete failed');
     } finally {
       setDeleteDialog({ open: false, messageId: null, permanent: false });
@@ -391,20 +336,12 @@ const MessageDashboard = () => {
     if (selectedMessages.length === 0) return;
     try {
       setLoading(true);
-      let successCount = 0;
-      for (const messageId of selectedMessages) {
-        try {
-          await axiosInstance.delete(`/messages/${messageId}`);
-          successCount++;
-        } catch (error) {
-          console.warn('Bulk delete error:', error);
-        }
-      }
+      await axiosInstance.post('/messages/bulk-delete', { messageIds: selectedMessages });
       await fetchMessages();
       await fetchStats();
       setSelectedMessages([]);
       setBulkDeleteOpen(false);
-      toast.success(`Deleted ${successCount}/${selectedMessages.length} messages`);
+      toast.success(`Deleted ${selectedMessages.length} messages`);
     } catch (error) {
       toast.error('Bulk delete failed');
     } finally {
@@ -416,40 +353,23 @@ const MessageDashboard = () => {
   const handleAnalytics = () => navigate('/admin/messages/stats');
 
   const handleClearFilters = () => {
-    setFilters({
-      status: '', priority: '', category: '', assignedToMe: false, search: '', timeRange: 'today'
-    });
+    setFilters({ status: '', priority: '', category: '', assignedToMe: false, search: '', timeRange: 'today' });
     setTabValue(0);
     setPagination(prev => ({ ...prev, page: 0 }));
   };
 
   const getStatusBadge = (status) => {
-    const variants = {
-      'new': 'warning',
-      'sent': 'info',
-      'read': 'default',
-      'in-progress': 'primary',
-      'resolved': 'success',
-      'closed': 'default'
-    };
+    const variants = { 'new': 'warning', 'sent': 'info', 'read': 'default', 'in-progress': 'primary', 'resolved': 'success', 'closed': 'default' };
     return <Badge variant={variants[status] || 'default'}>{status || 'unknown'}</Badge>;
   };
 
   const getPriorityBadge = (priority) => {
-    const variants = {
-      'urgent': 'danger',
-      'high': 'warning',
-      'normal': 'info',
-      'low': 'success'
-    };
+    const variants = { 'urgent': 'danger', 'high': 'warning', 'normal': 'info', 'low': 'success' };
     return <Badge variant={variants[priority] || 'default'}>{priority || 'normal'}</Badge>;
   };
 
   const filteredMessages = messages;
-  const paginatedMessages = filteredMessages.slice(
-    pagination.page * pagination.limit,
-    (pagination.page + 1) * pagination.limit
-  );
+  const paginatedMessages = filteredMessages.slice(pagination.page * pagination.limit, (pagination.page + 1) * pagination.limit);
   const totalPages = Math.ceil(filteredMessages.length / pagination.limit);
 
   if (loading && messages.length === 0) return (
@@ -474,19 +394,13 @@ const MessageDashboard = () => {
             <p className="text-slate-400 text-sm mt-0.5">Manage all employee messages, replies, and communications</p>
           </div>
           <div className="flex gap-3">
-            <button
-              onClick={handleAnalytics}
-              className="inline-flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
-            >
-              <FaChartLine className="text-xs" />
-              Analytics
+            <button onClick={handleAnalytics}
+              className="inline-flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
+              <FaChartLine className="text-xs" /> Analytics
             </button>
-            <button
-              onClick={handleCompose}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
-            >
-              <FaPaperPlane className="text-xs" />
-              Compose
+            <button onClick={handleCompose}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm">
+              <FaPaperPlane className="text-xs" /> Compose
             </button>
           </div>
         </div>
@@ -495,12 +409,12 @@ const MessageDashboard = () => {
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {/* KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
-          <KpiCard icon={InboxIcon} label="Total Messages" value={stats?.totals?.total || 0} sub={`${stats?.totals?.new || 0} new`} iconBg="bg-indigo-500" />
-          <KpiCard icon={EmailIcon} label="New" value={stats?.totals?.new || 0} sub="Unread messages" iconBg="bg-amber-500" />
-          <KpiCard icon={AssignIcon} label="In Progress" value={stats?.totals?.inProgress || 0} sub="Being handled" iconBg="bg-blue-500" />
-          <KpiCard icon={PriorityHighIcon} label="Urgent" value={stats?.totals?.urgent || 0} sub="High priority" iconBg="bg-red-500" />
-          <KpiCard icon={PersonAddIcon} label="My Cases" value={stats?.performance?.assignedToMe || 0} sub="Assigned to you" iconBg="bg-purple-500" />
-          <KpiCard icon={CheckCircleIcon} label="Resolved" value={stats?.totals?.resolved || 0} sub="Completed" iconBg="bg-emerald-500" />
+          <KpiCard icon={InboxIcon}       label="Total Messages" value={stats?.totals?.total || 0}           sub={`${stats?.totals?.new || 0} new`}         iconBg="bg-indigo-500" />
+          <KpiCard icon={EmailIcon}       label="New"            value={stats?.totals?.new || 0}             sub="Unread messages"                           iconBg="bg-amber-500" />
+          <KpiCard icon={AssignIcon}      label="In Progress"    value={stats?.totals?.inProgress || 0}      sub="Being handled"                             iconBg="bg-blue-500" />
+          <KpiCard icon={PriorityHighIcon} label="Urgent"        value={stats?.totals?.urgent || 0}          sub="High priority"                             iconBg="bg-red-500" />
+          <KpiCard icon={PersonAddIcon}   label="My Cases"       value={stats?.performance?.assignedToMe || 0} sub="Assigned to you"                        iconBg="bg-purple-500" />
+          <KpiCard icon={CheckCircleIcon} label="Resolved"       value={stats?.totals?.resolved || 0}        sub="Completed"                                 iconBg="bg-emerald-500" />
         </div>
 
         {/* Tabs */}
@@ -508,15 +422,8 @@ const MessageDashboard = () => {
           <div className="border-b border-slate-100">
             <div className="flex overflow-x-auto">
               {TABS.map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setTabValue(tab.id)}
-                  className={`flex items-center gap-2 px-5 py-3.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
-                    tabValue === tab.id
-                      ? 'border-indigo-600 text-indigo-600'
-                      : 'border-transparent text-slate-500 hover:text-slate-700'
-                  }`}
-                >
+                <button key={tab.id} onClick={() => setTabValue(tab.id)}
+                  className={`flex items-center gap-2 px-5 py-3.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap ${tabValue === tab.id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
                   <tab.icon style={{ fontSize: 16 }} />
                   {tab.label}
                   {stats?.totals?.[tab.count] > 0 && tabValue !== tab.id && (
@@ -530,47 +437,32 @@ const MessageDashboard = () => {
           </div>
         </div>
 
-        {/* Filters Section */}
+        {/* Filters */}
         <div className="bg-white rounded-lg border border-slate-200 p-5">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="relative flex-1">
               <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" style={{ fontSize: 18 }} />
-              <input
-                type="text"
-                placeholder="Search by subject, sender, or message..."
-                value={filters.search}
-                onChange={handleSearchChange}
-                className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
-              />
+              <input type="text" placeholder="Search by subject, sender, or message..."
+                value={filters.search} onChange={handleSearchChange}
+                className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors" />
             </div>
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className="inline-flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
-            >
-              <FaFilter className="text-xs" />
-              Filters
+            <button onClick={() => setShowFilters(!showFilters)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
+              <FaFilter className="text-xs" /> Filters
             </button>
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="inline-flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
-            >
-              <FaSync className={`text-xs ${refreshing ? 'animate-spin' : ''}`} />
-              Refresh
+            <button onClick={handleRefresh} disabled={refreshing}
+              className="inline-flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50">
+              <FaSync className={`text-xs ${refreshing ? 'animate-spin' : ''}`} /> Refresh
             </button>
           </div>
 
-          {/* Advanced Filters */}
           {showFilters && (
             <div className="border-t border-slate-100 pt-5 mt-5">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">Status</label>
-                  <select
-                    value={filters.status}
-                    onChange={(e) => handleFilterChange('status', e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  >
+                  <select value={filters.status} onChange={e => handleFilterChange('status', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
                     <option value="">All Status</option>
                     <option value="new">New</option>
                     <option value="in-progress">In Progress</option>
@@ -580,11 +472,8 @@ const MessageDashboard = () => {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">Priority</label>
-                  <select
-                    value={filters.priority}
-                    onChange={(e) => handleFilterChange('priority', e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  >
+                  <select value={filters.priority} onChange={e => handleFilterChange('priority', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
                     <option value="">All Priority</option>
                     <option value="urgent">Urgent</option>
                     <option value="high">High</option>
@@ -594,11 +483,8 @@ const MessageDashboard = () => {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">Category</label>
-                  <select
-                    value={filters.category}
-                    onChange={(e) => handleFilterChange('category', e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  >
+                  <select value={filters.category} onChange={e => handleFilterChange('category', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
                     <option value="">All Categories</option>
                     <option value="leave">Leave Request</option>
                     <option value="payroll">Payroll</option>
@@ -609,10 +495,8 @@ const MessageDashboard = () => {
                   </select>
                 </div>
                 <div className="flex items-end">
-                  <button
-                    onClick={handleClearFilters}
-                    className="w-full px-3 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors"
-                  >
+                  <button onClick={handleClearFilters}
+                    className="w-full px-3 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors">
                     Clear Filters
                   </button>
                 </div>
@@ -626,10 +510,12 @@ const MessageDashboard = () => {
           <div className="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3 animate-fade-in">
             <span className="text-indigo-700 text-sm font-medium">{selectedMessages.length} message(s) selected</span>
             <div className="flex gap-2">
-              <button onClick={() => setBulkDeleteOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-medium rounded-lg transition-colors">
+              <button onClick={() => setBulkDeleteOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-medium rounded-lg transition-colors">
                 <FaTrash className="text-xs" /> Delete
               </button>
-              <button onClick={() => setSelectedMessages([])} className="px-3 py-1.5 border border-indigo-300 text-indigo-700 text-xs font-medium rounded-lg hover:bg-indigo-100 transition-colors">
+              <button onClick={() => setSelectedMessages([])}
+                className="px-3 py-1.5 border border-indigo-300 text-indigo-700 text-xs font-medium rounded-lg hover:bg-indigo-100 transition-colors">
                 Clear
               </button>
             </div>
@@ -649,9 +535,7 @@ const MessageDashboard = () => {
                   <p className="text-xs text-slate-500">{filteredMessages.length} total messages</p>
                 </div>
               </div>
-              <div className="text-sm text-slate-500">
-                Page {pagination.page + 1} of {totalPages || 1}
-              </div>
+              <div className="text-sm text-slate-500">Page {pagination.page + 1} of {totalPages || 1}</div>
             </div>
           </div>
 
@@ -672,12 +556,7 @@ const MessageDashboard = () => {
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/60">
                     <th className="pl-4 pr-3 py-3 w-10">
-                      <input
-                        type="checkbox"
-                        checked={selectedMessages.length === filteredMessages.length && filteredMessages.length > 0}
-                        onChange={handleSelectAll}
-                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                      />
+                      <input type="checkbox" checked={selectedMessages.length === filteredMessages.length && filteredMessages.length > 0} onChange={handleSelectAll} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                     </th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Ref #</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Subject & Sender</th>
@@ -690,19 +569,12 @@ const MessageDashboard = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {paginatedMessages.map((message) => (
-                    <tr
-                      key={message._id}
+                  {paginatedMessages.map(message => (
+                    <tr key={message._id}
                       className={`group hover:bg-slate-50 transition-colors cursor-pointer ${selectedMessages.includes(message._id) ? 'bg-indigo-50/40' : ''} ${message.status === 'new' ? 'bg-amber-50/20' : ''}`}
-                      onClick={() => handleViewMessage(message._id)}
-                    >
-                      <td className="pl-4 pr-3 py-3.5" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selectedMessages.includes(message._id)}
-                          onChange={() => handleSelectMessage(message._id)}
-                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                        />
+                      onClick={() => handleViewMessage(message._id)}>
+                      <td className="pl-4 pr-3 py-3.5" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={selectedMessages.includes(message._id)} onChange={() => handleSelectMessage(message._id)} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                       </td>
                       <td className="px-3 py-3.5">
                         <span className="text-xs font-mono font-medium text-indigo-600">
@@ -713,24 +585,14 @@ const MessageDashboard = () => {
                         <div className="flex items-center gap-2">
                           <Avatar name={message.sender?.name || 'U'} size="sm" />
                           <div>
-                            <p className={`text-sm ${message.status === 'new' ? 'font-semibold text-slate-900' : 'font-medium text-slate-700'} truncate max-w-xs`}>
-                              {message.subject || 'No Subject'}
-                            </p>
-                            <p className="text-xs text-slate-400 truncate max-w-xs">
-                              From: {message.sender?.name || 'Unknown'} · {message.sender?.employeeId || 'N/A'}
-                            </p>
+                            <p className={`text-sm ${message.status === 'new' ? 'font-semibold text-slate-900' : 'font-medium text-slate-700'} truncate max-w-xs`}>{message.subject || 'No Subject'}</p>
+                            <p className="text-xs text-slate-400 truncate max-w-xs">From: {message.sender?.name || 'Unknown'} · {message.sender?.employeeId || 'N/A'}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-3 py-3.5">
-                        <Badge variant="default">{message.category || 'general'}</Badge>
-                      </td>
-                      <td className="px-3 py-3.5">
-                        {getStatusBadge(message.status)}
-                      </td>
-                      <td className="px-3 py-3.5">
-                        {getPriorityBadge(message.priority)}
-                      </td>
+                      <td className="px-3 py-3.5"><Badge variant="default">{message.category || 'general'}</Badge></td>
+                      <td className="px-3 py-3.5">{getStatusBadge(message.status)}</td>
+                      <td className="px-3 py-3.5">{getPriorityBadge(message.priority)}</td>
                       <td className="px-3 py-3.5">
                         {message.assignedTo ? (
                           <div className="flex items-center gap-1">
@@ -742,31 +604,17 @@ const MessageDashboard = () => {
                         )}
                       </td>
                       <td className="px-3 py-3.5">
-                        <span className="text-xs text-slate-400">
-                          {message.createdAt ? format(new Date(message.createdAt), 'MMM dd, hh:mm a') : '—'}
-                        </span>
+                        <span className="text-xs text-slate-400">{message.createdAt ? format(new Date(message.createdAt), 'MMM dd, hh:mm a') : '—'}</span>
                       </td>
-                      <td className="px-3 py-3.5 pr-4" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-3 py-3.5 pr-4" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-0.5">
-                          <button
-                            onClick={() => handleViewMessage(message._id)}
-                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                            title="View"
-                          >
+                          <button onClick={() => handleViewMessage(message._id)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="View">
                             <FaEye className="text-xs" />
                           </button>
-                          <button
-                            onClick={() => handleReplyMessage(message._id)}
-                            className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors"
-                            title="Reply"
-                          >
+                          <button onClick={() => handleReplyMessage(message._id)} className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="Reply">
                             <FaReply className="text-xs" />
                           </button>
-                          <button
-                            onClick={() => setDeleteDialog({ open: true, messageId: message._id, permanent: false })}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete"
-                          >
+                          <button onClick={() => setDeleteDialog({ open: true, messageId: message._id, permanent: false })} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
                             <FaTrash className="text-xs" />
                           </button>
                         </div>
@@ -785,19 +633,13 @@ const MessageDashboard = () => {
                 {pagination.page * pagination.limit + 1}–{Math.min((pagination.page + 1) * pagination.limit, filteredMessages.length)} of {filteredMessages.length}
               </span>
               <div className="flex gap-2">
-                <button
-                  onClick={() => setPagination(p => ({ ...p, page: Math.max(0, p.page - 1) }))}
-                  disabled={pagination.page === 0}
-                  className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
+                <button onClick={() => setPagination(p => ({ ...p, page: Math.max(0, p.page - 1) }))} disabled={pagination.page === 0}
+                  className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-colors">
                   Previous
                 </button>
                 <span className="px-3 py-1.5 text-sm text-slate-600">{pagination.page + 1} / {totalPages}</span>
-                <button
-                  onClick={() => setPagination(p => ({ ...p, page: Math.min(totalPages - 1, p.page + 1) }))}
-                  disabled={pagination.page >= totalPages - 1}
-                  className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
+                <button onClick={() => setPagination(p => ({ ...p, page: Math.min(totalPages - 1, p.page + 1) }))} disabled={pagination.page >= totalPages - 1}
+                  className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-colors">
                   Next
                 </button>
               </div>
@@ -807,57 +649,21 @@ const MessageDashboard = () => {
       </div>
 
       {/* Compose FAB */}
-      <button
-        onClick={handleCompose}
-        title="Compose new message"
-        className="fixed bottom-6 right-6 w-14 h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center"
-      >
+      <button onClick={handleCompose} title="Compose new message"
+        className="fixed bottom-6 right-6 w-14 h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center">
         <FaPaperPlane style={{ fontSize: 18 }} />
       </button>
 
       {/* Dialogs */}
-      <ConfirmDialog
-        open={deleteDialog.open}
-        onClose={() => setDeleteDialog({ open: false, messageId: null, permanent: false })}
-        onConfirm={() => handleDelete(deleteDialog.messageId)}
-        loading={loading}
-      />
+      <ConfirmDialog open={deleteDialog.open} onClose={() => setDeleteDialog({ open: false, messageId: null, permanent: false })} onConfirm={() => handleDelete(deleteDialog.messageId)} loading={loading} />
+      <ConfirmDialog open={bulkDeleteOpen} onClose={() => setBulkDeleteOpen(false)} onConfirm={handleBulkDelete} loading={loading} count={selectedMessages.length} />
+      <MessageDrawer message={selectedMessage} open={viewDialog} onClose={handleCloseView} onReply={handleReplyMessage} onAssign={handleAssignMessage} />
 
-      <ConfirmDialog
-        open={bulkDeleteOpen}
-        onClose={() => setBulkDeleteOpen(false)}
-        onConfirm={handleBulkDelete}
-        loading={loading}
-        count={selectedMessages.length}
-      />
-
-      <MessageDrawer
-        message={selectedMessage}
-        open={viewDialog}
-        onClose={handleCloseView}
-        onReply={handleReplyMessage}
-        onAssign={handleAssignMessage}
-      />
-
-      {/* CSS Animations */}
       <style>{`
-        @keyframes slide-in-right {
-          from { opacity: 0; transform: translateX(100%); }
-          to { opacity: 1; transform: translateX(0); }
-        }
-        
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateY(-10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .animate-slide-in-right {
-          animation: slide-in-right 0.3s ease-out;
-        }
-        
-        .animate-fade-in {
-          animation: fade-in 0.2s ease-out;
-        }
+        @keyframes slide-in-right { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes fade-in { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-slide-in-right { animation: slide-in-right 0.3s ease-out; }
+        .animate-fade-in { animation: fade-in 0.2s ease-out; }
       `}</style>
     </div>
   );

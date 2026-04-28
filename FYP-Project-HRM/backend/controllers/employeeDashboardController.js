@@ -7,7 +7,7 @@ const asyncHandler = require('express-async-handler');
 // Get employee-specific dashboard stats
 exports.getEmployeeStats = asyncHandler(async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
     
     // Get user details
     const user = await User.findById(userId).select('name email department position leaveBalance joiningDate');
@@ -138,7 +138,7 @@ exports.getEmployeeStats = asyncHandler(async (req, res) => {
 // Get upcoming events
 exports.getUpcomingEvents = asyncHandler(async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
     
     // Get upcoming leaves (next 30 days)
     const thirtyDaysFromNow = new Date();
@@ -210,7 +210,7 @@ exports.getUpcomingEvents = asyncHandler(async (req, res) => {
 // Get employee activities
 exports.getEmployeeActivities = asyncHandler(async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
     
     // Get recent leave requests
     const recentLeaves = await Leave.find({
@@ -254,7 +254,7 @@ exports.getEmployeeActivities = asyncHandler(async (req, res) => {
 // Get team members
 exports.getTeamMembers = asyncHandler(async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
     
     // Get current user's department
     const user = await User.findById(userId).select('department');
@@ -303,7 +303,7 @@ exports.getTeamMembers = asyncHandler(async (req, res) => {
 // Get performance metrics
 exports.getPerformanceMetrics = asyncHandler(async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
     
     // Mock performance metrics - replace with actual calculations
     const metrics = [

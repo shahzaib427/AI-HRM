@@ -3,15 +3,19 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import {
   Send as SendIcon, AttachFile as AttachFileIcon, Delete as DeleteIcon,
-  Person as PersonIcon, DoneAll as DoneAllIcon, History as HistoryIcon,
+  DoneAll as DoneAllIcon, History as HistoryIcon,
   Drafts as DraftsIcon, SmartToy as SmartToyIcon, AutoFixHigh as AutoFixHighIcon,
   Psychology as PsychologyIcon, FileCopy as FileCopyIcon,
-  DriveFileRenameOutline as TemplateIcon, Close as CloseIcon,
+  DriveFileRenameOutline as TemplateIcon,
+  // ✅ FIX 2B: WarningIcon was used in JSX but never imported — added here
+  Warning as WarningIcon,
 } from '@mui/icons-material';
 import { CircularProgress } from '@mui/material';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { FaEnvelope, FaUsers, FaClock, FaCheckCircle, FaUserPlus, FaChartLine, FaBuilding, FaGlobe } from 'react-icons/fa';
+import { FaUsers, FaCheckCircle, FaBuilding } from 'react-icons/fa';
+// ✅ FIX 2A: import axiosInstance for authenticated API calls
+import axiosInstance from '../../utils/axiosInstance';
 
 // ─── UI Primitives ────────────────────────────────────────────────────────────
 
@@ -30,11 +34,12 @@ const Badge = ({ children, variant = 'default' }) => {
   return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${v[variant] || v.default}`}>{children}</span>;
 };
 
-const AvatarInitials = ({ name = 'U' }) => {
-  return <div className={`w-9 h-9 bg-gray-100 text-gray-700 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0`}>{name.charAt(0).toUpperCase()}</div>;
-};
+const AvatarInitials = ({ name = 'U' }) => (
+  <div className="w-9 h-9 bg-gray-100 text-gray-700 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0">
+    {name.charAt(0).toUpperCase()}
+  </div>
+);
 
-// KPI Card Component
 const KpiCard = ({ icon: Icon, label, value, sub, iconBg }) => (
   <div className="bg-white rounded-xl border border-gray-100 p-5 hover:shadow-md transition-all duration-200">
     <div className="flex items-center justify-between">
@@ -69,7 +74,8 @@ const FormLabel = ({ children, required }) => (
   </label>
 );
 
-const inputCls = (err) => `w-full text-sm border ${err ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-gray-200 focus:border-gray-400'} rounded-lg px-3.5 py-2.5 focus:outline-none focus:ring-2 bg-white text-gray-800 placeholder-gray-400 transition-colors`;
+const inputCls = (err) =>
+  `w-full text-sm border ${err ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-gray-200 focus:border-gray-400'} rounded-lg px-3.5 py-2.5 focus:outline-none focus:ring-2 bg-white text-gray-800 placeholder-gray-400 transition-colors`;
 
 // ─── Static data ──────────────────────────────────────────────────────────────
 
@@ -91,20 +97,21 @@ const CATEGORIES = [
 ];
 
 const PRIORITIES = [
-  { value: 'low',    label: 'Low',    variant: 'low' },
-  { value: 'normal', label: 'Normal', variant: 'normal' },
-  { value: 'high',   label: 'High',   variant: 'high' },
-  { value: 'urgent', label: 'Urgent', variant: 'urgent' },
+  { value: 'low',    label: 'Low' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'high',   label: 'High' },
+  { value: 'urgent', label: 'Urgent' },
 ];
 
 const RECIPIENT_TYPES = [
-  { value: 'individual', label: 'Individual', icon: '👤', description: 'Send to a single employee' },
-  { value: 'multiple', label: 'Multiple', icon: '👥', description: 'Send to multiple employees' },
-  { value: 'department', label: 'Department', icon: '🏢', description: 'Send to entire department' },
-  { value: 'all', label: 'All Employees', icon: '🌍', description: 'Send to all employees' },
+  { value: 'individual', label: 'Individual',    icon: '👤', description: 'Send to a single employee' },
+  { value: 'multiple',   label: 'Multiple',      icon: '👥', description: 'Send to multiple employees' },
+  { value: 'department', label: 'Department',    icon: '🏢', description: 'Send to entire department' },
+  { value: 'all',        label: 'All Employees', icon: '🌍', description: 'Send to all employees' },
 ];
 
 const STEPS = ['Recipient', 'Details', 'Message', 'Review'];
+// API_URL kept only for fetchCurrentUser endpoint-discovery loop
 const API_URL = 'http://localhost:5000';
 
 // ─── Success Dialog ───────────────────────────────────────────────────────────
@@ -120,7 +127,6 @@ const SuccessDialog = ({ open, message, onViewMessages, onSendAnother }) => {
         </div>
         <h3 className="text-lg font-semibold text-gray-900 mb-1">Message Sent!</h3>
         <p className="text-gray-500 text-sm mb-5">Your message has been delivered securely.</p>
-
         {message && (
           <div className="bg-gray-50 rounded-lg p-4 mb-5 text-left text-sm space-y-2">
             {[['Recipient', message.recipient], ['Subject', message.subject], ['Sent on', `${message.date} at ${message.time}`], ['Reference', message.reference]].map(([k, v]) => v && (
@@ -131,7 +137,6 @@ const SuccessDialog = ({ open, message, onViewMessages, onSendAnother }) => {
             ))}
           </div>
         )}
-
         <div className="flex gap-3">
           <button onClick={onViewMessages} className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
             <HistoryIcon style={{ fontSize: 16 }} /> View Messages
@@ -149,49 +154,40 @@ const SuccessDialog = ({ open, message, onViewMessages, onSendAnother }) => {
 
 const EMPTY_FORM = {
   recipientType: 'individual',
-  recipient: '',
-  recipientId: '',
-  subject: '',
-  message: '',
-  category: 'general',
-  priority: 'normal',
+  recipient: '', recipientId: '',
+  subject: '', message: '',
+  category: 'general', priority: 'normal',
   attachments: [],
-  confidential: false,
-  readReceipt: false,
-  urgent: false,
-  followUp: false,
+  confidential: false, readReceipt: false, urgent: false, followUp: false,
 };
 
 const HRComposeMessage = () => {
   const navigate = useNavigate();
 
-  const [loading, setLoading] = useState(false);
-  const [userLoading, setUserLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [user, setUser] = useState(null);
-  const [allUsers, setAllUsers] = useState([]);
-  const [departments, setDepartments] = useState([]);
-  const [activeStep, setActiveStep] = useState(0);
+  const [loading, setLoading]                     = useState(false);
+  const [userLoading, setUserLoading]             = useState(true);
+  const [error, setError]                         = useState('');
+  const [user, setUser]                           = useState(null);
+  const [allUsers, setAllUsers]                   = useState([]);
+  const [departments, setDepartments]             = useState([]);
+  const [activeStep, setActiveStep]               = useState(0);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
-  const [lastSentMessage, setLastSentMessage] = useState(null);
-  const [drafts, setDrafts] = useState([]);
-  const [templates, setTemplates] = useState([]);
-  const [activeTab, setActiveTab] = useState('compose');
-  const [characterCount, setCharacterCount] = useState(0);
+  const [lastSentMessage, setLastSentMessage]     = useState(null);
+  const [drafts, setDrafts]                       = useState([]);
+  const [templates, setTemplates]                 = useState([]);
+  const [activeTab, setActiveTab]                 = useState('compose');
+  const [characterCount, setCharacterCount]       = useState(0);
   const [saveAsDraftConfirm, setSaveAsDraftConfirm] = useState(false);
-  const [formData, setFormData] = useState(EMPTY_FORM);
-  const [fieldErrors, setFieldErrors] = useState({});
-  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [formData, setFormData]                   = useState(EMPTY_FORM);
+  const [fieldErrors, setFieldErrors]             = useState({});
+  const [selectedUsers, setSelectedUsers]         = useState([]);
   const [selectedDepartment, setSelectedDepartment] = useState('');
   const [stats, setStats] = useState({
-    totalEmployees: 0,
-    departmentsCount: 0,
-    draftsCount: 0,
-    templatesCount: 0,
-    messagesSent: 0
+    totalEmployees: 0, departmentsCount: 0,
+    draftsCount: 0, messagesSent: 0,
   });
 
-  // Fetch current user
+  // ── Fetch current user ──────────────────────────────────────────────────────
   const fetchCurrentUser = useCallback(async () => {
     setUserLoading(true);
     try {
@@ -204,35 +200,25 @@ const HRComposeMessage = () => {
         const endpoints = [`${API_URL}/api/auth/me`, `${API_URL}/api/users/me`, `${API_URL}/api/employee/profile`, `${API_URL}/api/profile`];
         for (const endpoint of endpoints) {
           try {
-            const response = await axios.get(endpoint, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, timeout: 2000 });
+            const response = await axios.get(endpoint, { headers: { Authorization: `Bearer ${token}` }, timeout: 2000 });
             if (response.data) { userData = response.data.user || response.data.data || response.data; localStorage.setItem('currentUser', JSON.stringify(userData)); break; }
           } catch { /* try next */ }
         }
       }
 
       if (!userData) {
-        userData = {
-          _id: `user-${Date.now()}`,
-          name: 'HR User',
-          email: 'hr@company.com',
-          role: 'hr',
-          department: 'Human Resources',
-          employeeId: `HR${String(Date.now()).slice(-6)}`,
-          position: 'HR Manager',
-          joinDate: new Date().toISOString().split('T')[0]
-        };
+        userData = { _id: `user-${Date.now()}`, name: 'HR User', email: 'hr@company.com', role: 'hr', department: 'Human Resources', employeeId: `HR${String(Date.now()).slice(-6)}`, position: 'HR Manager' };
         localStorage.setItem('currentUser', JSON.stringify(userData));
       }
 
       const formattedUser = {
         _id: userData._id || userData.id || `user-${Date.now()}`,
-        name: userData.name || userData.fullName || 'HR User',
+        name: userData.name || 'HR User',
         email: userData.email || 'hr@company.com',
         role: userData.role || 'hr',
         department: userData.department || 'Human Resources',
         employeeId: userData.employeeId || `HR${String(Date.now()).slice(-6)}`,
-        position: userData.position || userData.jobTitle || 'HR Manager',
-        avatar: userData.avatar || userData.profilePicture || null,
+        position: userData.position || 'HR Manager',
         joinDate: userData.joinDate || new Date().toISOString().split('T')[0],
         phone: userData.phone || 'N/A',
         location: userData.location || 'Head Office',
@@ -241,24 +227,13 @@ const HRComposeMessage = () => {
       setUser(formattedUser);
       localStorage.setItem('currentUser', JSON.stringify(formattedUser));
     } catch {
-      const fallback = {
-        _id: 'fallback-user',
-        name: 'HR User',
-        email: 'hr@company.com',
-        role: 'hr',
-        department: 'Human Resources',
-        employeeId: 'HR001',
-        position: 'HR Manager',
-        joinDate: '2024-01-01'
-      };
+      const fallback = { _id: 'fallback-user', name: 'HR User', email: 'hr@company.com', role: 'hr', department: 'Human Resources', employeeId: 'HR001', position: 'HR Manager', joinDate: '2024-01-01' };
       setUser(fallback);
       localStorage.setItem('currentUser', JSON.stringify(fallback));
-    } finally {
-      setUserLoading(false);
-    }
+    } finally { setUserLoading(false); }
   }, []);
 
-  // Fetch all users
+  // ✅ FIX 2D: use axiosInstance instead of bare axios
   const fetchAllUsers = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -271,23 +246,20 @@ const HRComposeMessage = () => {
         ];
         setAllUsers(mockUsers);
         setStats(prev => ({ ...prev, totalEmployees: mockUsers.length }));
-        
         const deptSet = new Set(mockUsers.map(u => u.department).filter(Boolean));
         setDepartments(Array.from(deptSet));
         setStats(prev => ({ ...prev, departmentsCount: deptSet.size }));
         return;
       }
-      const response = await axios.get(`${API_URL}/api/messages/employee/users/list`, { headers: { Authorization: `Bearer ${token}` }, timeout: 5000 });
+      // ✅ FIX: axiosInstance handles auth automatically
+      const response = await axiosInstance.get('/messages/employee/users/list');
       if (response.data.success && response.data.data) {
         setAllUsers(response.data.data);
         setStats(prev => ({ ...prev, totalEmployees: response.data.data.length }));
-        
         const deptSet = new Set(response.data.data.map(u => u.department).filter(Boolean));
         setDepartments(Array.from(deptSet));
         setStats(prev => ({ ...prev, departmentsCount: deptSet.size }));
-      } else {
-        setAllUsers([]);
-      }
+      } else { setAllUsers([]); }
     } catch (error) {
       console.error('Error fetching users:', error);
       setAllUsers([]);
@@ -314,15 +286,13 @@ const HRComposeMessage = () => {
       const templatesData = saved ? JSON.parse(saved) : [];
       setTemplates(templatesData);
       setStats(prev => ({ ...prev, templatesCount: templatesData.length }));
-    } catch { 
-      setTemplates([]);
-    }
+    } catch { setTemplates([]); }
   };
 
   const saveDraft = () => {
     try {
       if (!formData.subject.trim() && !formData.message.trim()) { toast.warning('No content to save'); return; }
-      const newDraft = { id: Date.now(), ...formData, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), recipientType: formData.recipientType, selectedUsers, selectedDepartment };
+      const newDraft = { id: Date.now(), ...formData, selectedUsers, selectedDepartment, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
       const updated = [newDraft, ...drafts.slice(0, 19)];
       setDrafts(updated);
       setStats(prev => ({ ...prev, draftsCount: updated.length }));
@@ -335,8 +305,7 @@ const HRComposeMessage = () => {
     setFormData({ ...draft, attachments: draft.attachments || [] });
     if (draft.selectedUsers) setSelectedUsers(draft.selectedUsers);
     if (draft.selectedDepartment) setSelectedDepartment(draft.selectedDepartment);
-    setActiveStep(0);
-    setActiveTab('compose');
+    setActiveStep(0); setActiveTab('compose');
     toast.success('Draft loaded');
   };
 
@@ -350,14 +319,10 @@ const HRComposeMessage = () => {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    if (type === 'checkbox') {
-      setFormData(prev => ({ ...prev, [name]: checked }));
-      return;
-    }
+    if (type === 'checkbox') { setFormData(prev => ({ ...prev, [name]: checked })); return; }
     if (name === 'recipientType') {
       setFormData(prev => ({ ...prev, recipientType: value, recipient: '', recipientId: '' }));
-      setSelectedUsers([]);
-      setSelectedDepartment('');
+      setSelectedUsers([]); setSelectedDepartment('');
       return;
     }
     if (name === 'recipientId') {
@@ -369,26 +334,31 @@ const HRComposeMessage = () => {
   };
 
   const handleMultipleUserSelect = (userId) => {
-    setSelectedUsers(prev => {
-      if (prev.includes(userId)) {
-        return prev.filter(id => id !== userId);
-      } else {
-        return [...prev, userId];
-      }
-    });
+    setSelectedUsers(prev => prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]);
   };
 
   const handleFileUpload = (e) => {
     const files = Array.from(e.target.files);
     const oversized = files.filter(f => f.size > 10 * 1024 * 1024);
     if (oversized.length) { toast.error(`Files exceed 10MB: ${oversized.map(f => f.name).join(', ')}`); return; }
-    const attachments = files.map(file => ({ file, id: Math.random().toString(36).substr(2, 9), name: file.name, size: (file.size / 1024 / 1024).toFixed(2), type: file.type.split('/')[1]?.toUpperCase() || 'FILE', uploadedAt: new Date().toISOString(), preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null }));
+    const attachments = files.map(file => ({
+      file, id: Math.random().toString(36).substr(2, 9), name: file.name,
+      size: (file.size / 1024 / 1024).toFixed(2), type: file.type.split('/')[1]?.toUpperCase() || 'FILE',
+      uploadedAt: new Date().toISOString(),
+      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+    }));
     setFormData(prev => ({ ...prev, attachments: [...prev.attachments, ...attachments] }));
     toast.success(`${files.length} file(s) added`);
   };
 
   const removeAttachment = (id) => {
-    setFormData(prev => ({ ...prev, attachments: prev.attachments.filter(item => { if (item.id === id && item.preview) URL.revokeObjectURL(item.preview); return item.id !== id; }) }));
+    setFormData(prev => ({
+      ...prev,
+      attachments: prev.attachments.filter(item => {
+        if (item.id === id && item.preview) URL.revokeObjectURL(item.preview);
+        return item.id !== id;
+      }),
+    }));
   };
 
   const validateForm = () => {
@@ -396,18 +366,10 @@ const HRComposeMessage = () => {
     if (!formData.subject.trim()) errs.subject = 'Subject is required';
     if (!formData.message.trim()) errs.message = 'Message is required';
     if (formData.message.length < 10) errs.message = 'Message too short (min 10 characters)';
-    
-    if (formData.recipientType === 'individual' && !formData.recipientId) {
-      errs.recipientId = 'Please select a recipient';
-    }
-    if (formData.recipientType === 'multiple' && selectedUsers.length === 0) {
-      errs.recipientId = 'Please select at least one recipient';
-    }
-    if (formData.recipientType === 'department' && !selectedDepartment) {
-      errs.department = 'Please select a department';
-    }
+    if (formData.recipientType === 'individual' && !formData.recipientId) errs.recipientId = 'Please select a recipient';
+    if (formData.recipientType === 'multiple' && selectedUsers.length === 0) errs.recipientId = 'Please select at least one recipient';
+    if (formData.recipientType === 'department' && !selectedDepartment) errs.department = 'Please select a department';
     if (!formData.category) errs.category = 'Please select a category';
-    
     setFieldErrors(errs);
     return Object.keys(errs).length === 0 ? null : 'Please fix the errors above';
   };
@@ -424,64 +386,39 @@ const HRComposeMessage = () => {
 
   const getRecipientDisplay = () => {
     switch (formData.recipientType) {
-      case 'individual':
-        return allUsers.find(u => u._id === formData.recipientId)?.name || 'Not selected';
-      case 'multiple':
-        return `${selectedUsers.length} recipient${selectedUsers.length !== 1 ? 's' : ''}`;
-      case 'department':
-        return selectedDepartment ? `${selectedDepartment} Department` : 'Not selected';
-      case 'all':
-        return 'All Employees';
-      default:
-        return 'Not selected';
+      case 'individual': return allUsers.find(u => u._id === formData.recipientId)?.name || 'Not selected';
+      case 'multiple': return `${selectedUsers.length} recipient${selectedUsers.length !== 1 ? 's' : ''}`;
+      case 'department': return selectedDepartment ? `${selectedDepartment} Department` : 'Not selected';
+      case 'all': return 'All Employees';
+      default: return 'Not selected';
     }
   };
 
+  // ✅ FIX 2C: use axiosInstance instead of bare axios
   const handleSubmit = async (e) => {
     e.preventDefault();
     const err = validateForm();
-    if (err) {
-      toast.error(err);
-      setError(err);
-      return;
-    }
-    setLoading(true);
-    setError('');
-    
+    if (err) { toast.error(err); setError(err); return; }
+    setLoading(true); setError('');
     try {
-      let recipientIds = [];
-      
-      switch (formData.recipientType) {
-        case 'individual':
-          recipientIds = [formData.recipientId];
-          break;
-        case 'multiple':
-          recipientIds = selectedUsers;
-          break;
-        case 'department':
-          recipientIds = allUsers.filter(u => u.department === selectedDepartment).map(u => u._id);
-          break;
-        case 'all':
-          recipientIds = allUsers.filter(u => u.role !== 'admin' && u.role !== 'hr').map(u => u._id);
-          break;
-        default:
-          recipientIds = [formData.recipientId];
-      }
-      
       const messageData = {
-        recipientIds: recipientIds,
         recipientType: formData.recipientType,
         subject: formData.subject,
         message: formData.message,
         category: formData.category || 'general',
         priority: formData.priority || 'normal',
-        confidential: formData.confidential || false
+        confidential: formData.confidential || false,
       };
-      
-      const response = await axios.post(`${API_URL}/api/messages/send`, messageData, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' },
-      });
-      
+
+      // Attach recipient info based on type
+      if (formData.recipientType === 'individual') messageData.recipientId = formData.recipientId;
+      else if (formData.recipientType === 'multiple') messageData.recipientIds = selectedUsers;
+      else if (formData.recipientType === 'department') messageData.department = selectedDepartment;
+      // 'all' needs no extra field
+
+      // ✅ FIX: axiosInstance handles auth headers automatically
+      const response = await axiosInstance.post('/messages/send', messageData);
+
       toast.success('Message sent!');
       if (response.data.success) {
         setLastSentMessage({
@@ -489,50 +426,31 @@ const HRComposeMessage = () => {
           subject: formData.subject,
           date: new Date().toLocaleDateString(),
           time: new Date().toLocaleTimeString(),
-          reference: response.data.data?.id || `MSG-${Date.now()}`
+          reference: response.data.data?.id || `MSG-${Date.now()}`,
         });
         setShowSuccessDialog(true);
         setFormData(EMPTY_FORM);
-        setSelectedUsers([]);
-        setSelectedDepartment('');
+        setSelectedUsers([]); setSelectedDepartment('');
         setStats(prev => ({ ...prev, messagesSent: prev.messagesSent + 1 }));
       }
     } catch (err) {
       const msg = err.response?.data?.message || err.response?.data?.error || 'Failed to send message';
-      setError(msg);
-      toast.error(msg);
-    } finally {
-      setLoading(false);
-    }
+      setError(msg); toast.error(msg);
+    } finally { setLoading(false); }
   };
 
   const handleNextStep = () => {
-    if (activeStep === 0 && formData.recipientType === 'individual' && !formData.recipientId) {
-      toast.error('Please select a recipient');
-      return;
-    }
-    if (activeStep === 0 && formData.recipientType === 'multiple' && selectedUsers.length === 0) {
-      toast.error('Please select at least one recipient');
-      return;
-    }
-    if (activeStep === 0 && formData.recipientType === 'department' && !selectedDepartment) {
-      toast.error('Please select a department');
-      return;
-    }
-    if (activeStep === 1 && !formData.category) {
-      toast.error('Please select a category');
-      return;
-    }
+    if (activeStep === 0 && formData.recipientType === 'individual' && !formData.recipientId) { toast.error('Please select a recipient'); return; }
+    if (activeStep === 0 && formData.recipientType === 'multiple' && selectedUsers.length === 0) { toast.error('Please select at least one recipient'); return; }
+    if (activeStep === 0 && formData.recipientType === 'department' && !selectedDepartment) { toast.error('Please select a department'); return; }
+    if (activeStep === 1 && !formData.category) { toast.error('Please select a category'); return; }
     setActiveStep(prev => Math.min(prev + 1, 3));
   };
 
   const handlePrevStep = () => setActiveStep(prev => Math.max(prev - 1, 0));
 
   useEffect(() => {
-    fetchCurrentUser();
-    fetchAllUsers();
-    loadDrafts();
-    loadTemplates();
+    fetchCurrentUser(); fetchAllUsers(); loadDrafts(); loadTemplates();
     return () => formData.attachments.forEach(item => { if (item.preview) URL.revokeObjectURL(item.preview); });
   }, []);
 
@@ -555,15 +473,14 @@ const HRComposeMessage = () => {
   );
 
   const TABS = [
-    { id: 'compose',   icon: SendIcon,      label: 'Compose' },
-    { id: 'templates', icon: TemplateIcon,  label: 'Templates' },
-    { id: 'drafts',    icon: DraftsIcon,    label: `Drafts${drafts.length ? ` (${drafts.length})` : ''}` },
-    { id: 'ai',        icon: SmartToyIcon,  label: 'AI Assistant' },
+    { id: 'compose',   icon: SendIcon,     label: 'Compose' },
+    { id: 'templates', icon: TemplateIcon, label: 'Templates' },
+    { id: 'drafts',    icon: DraftsIcon,   label: `Drafts${drafts.length ? ` (${drafts.length})` : ''}` },
+    { id: 'ai',        icon: SmartToyIcon, label: 'AI Assistant' },
   ];
 
   return (
     <div className="min-h-screen bg-gray-50">
-
       {/* Page Header */}
       <div className="bg-white border-b border-gray-100 px-6 py-5">
         <div className="max-w-7xl mx-auto">
@@ -589,7 +506,6 @@ const HRComposeMessage = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-
         {/* KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard icon={FaUsers} label="Total Employees" value={stats.totalEmployees} sub="Available recipients" iconBg="bg-indigo-500" />
@@ -602,18 +518,15 @@ const HRComposeMessage = () => {
         <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
           <div className="flex border-b border-gray-100 overflow-x-auto">
             {TABS.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${activeTab === tab.id ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-              >
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-3.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${activeTab === tab.id ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                 <tab.icon style={{ fontSize: 15 }} />
                 {tab.label}
               </button>
             ))}
           </div>
 
-          {/* Compose Tab */}
+          {/* ── Compose Tab ── */}
           {activeTab === 'compose' && (
             <div className="p-5">
               {/* Step Progress */}
@@ -621,14 +534,11 @@ const HRComposeMessage = () => {
                 {STEPS.map((label, i) => (
                   <React.Fragment key={label}>
                     <StepDot label={label} index={i} active={i === activeStep} completed={i < activeStep} />
-                    {i < STEPS.length - 1 && (
-                      <div className={`flex-1 h-px min-w-[20px] ${i < activeStep ? 'bg-gray-900' : 'bg-gray-200'}`} />
-                    )}
+                    {i < STEPS.length - 1 && <div className={`flex-1 h-px min-w-[20px] ${i < activeStep ? 'bg-gray-900' : 'bg-gray-200'}`} />}
                   </React.Fragment>
                 ))}
               </div>
 
-              {/* Error Banner */}
               {error && (
                 <div className="flex items-center gap-3 bg-red-50 border border-red-100 rounded-lg px-4 py-3 mb-4 text-sm">
                   <span className="text-red-600 flex-1">{error}</span>
@@ -637,29 +547,15 @@ const HRComposeMessage = () => {
               )}
 
               <form onSubmit={handleSubmit}>
-
                 {/* Step 0: Recipient */}
                 {activeStep === 0 && (
                   <div className="space-y-4">
                     <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Select who to message</p>
-                    
-                    {/* Recipient Type Selection */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       {RECIPIENT_TYPES.map(option => (
-                        <button
-                          type="button"
-                          key={option.value}
-                          onClick={() => {
-                            setFormData(prev => ({ ...prev, recipientType: option.value, recipient: '', recipientId: '' }));
-                            setSelectedUsers([]);
-                            setSelectedDepartment('');
-                          }}
-                          className={`p-3 rounded-lg border text-center transition-all ${
-                            formData.recipientType === option.value
-                              ? 'border-gray-900 bg-gray-50 text-gray-900'
-                              : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-600'
-                          }`}
-                        >
+                        <button type="button" key={option.value}
+                          onClick={() => { setFormData(prev => ({ ...prev, recipientType: option.value, recipient: '', recipientId: '' })); setSelectedUsers([]); setSelectedDepartment(''); }}
+                          className={`p-3 rounded-lg border text-center transition-all ${formData.recipientType === option.value ? 'border-gray-900 bg-gray-50 text-gray-900' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-600'}`}>
                           <div className="text-2xl mb-1">{option.icon}</div>
                           <p className="text-xs font-medium">{option.label}</p>
                           <p className="text-[10px] text-gray-400 mt-1">{option.description}</p>
@@ -667,49 +563,30 @@ const HRComposeMessage = () => {
                       ))}
                     </div>
 
-                    {/* Individual Selection */}
+                    {/* Individual */}
                     {formData.recipientType === 'individual' && (
                       <div className="mt-4">
                         <FormLabel required>Select Employee</FormLabel>
-                        <select
-                          name="recipientId"
-                          value={formData.recipientId}
-                          onChange={handleChange}
-                          className={inputCls(fieldErrors.recipientId)}
-                        >
+                        <select name="recipientId" value={formData.recipientId} onChange={handleChange} className={inputCls(fieldErrors.recipientId)}>
                           <option value="">Choose an employee…</option>
-                          {allUsers.map(user => (
-                            <option key={user._id} value={user._id}>
-                              {user.name} - {user.department || 'N/A'} ({user.employeeId})
-                            </option>
-                          ))}
+                          {allUsers.map(u => <option key={u._id} value={u._id}>{u.name} - {u.department || 'N/A'} ({u.employeeId})</option>)}
                         </select>
                         {fieldErrors.recipientId && <p className="text-xs text-red-500 mt-1">{fieldErrors.recipientId}</p>}
                       </div>
                     )}
 
-                    {/* Multiple Selection */}
+                    {/* Multiple */}
                     {formData.recipientType === 'multiple' && (
                       <div className="mt-4">
                         <FormLabel required>Select Employees</FormLabel>
                         <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto">
-                          {allUsers.map(user => (
-                            <label
-                              key={user._id}
-                              className={`flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0 ${
-                                selectedUsers.includes(user._id) ? 'bg-indigo-50' : ''
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={selectedUsers.includes(user._id)}
-                                onChange={() => handleMultipleUserSelect(user._id)}
-                                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                              />
-                              <AvatarInitials name={user.name} />
+                          {allUsers.map(u => (
+                            <label key={u._id} className={`flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0 ${selectedUsers.includes(u._id) ? 'bg-indigo-50' : ''}`}>
+                              <input type="checkbox" checked={selectedUsers.includes(u._id)} onChange={() => handleMultipleUserSelect(u._id)} className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                              <AvatarInitials name={u.name} />
                               <div className="flex-1">
-                                <p className="text-sm font-medium text-gray-800">{user.name}</p>
-                                <p className="text-xs text-gray-500">{user.department || 'N/A'} • {user.employeeId}</p>
+                                <p className="text-sm font-medium text-gray-800">{u.name}</p>
+                                <p className="text-xs text-gray-500">{u.department || 'N/A'} • {u.employeeId}</p>
                               </div>
                             </label>
                           ))}
@@ -719,46 +596,37 @@ const HRComposeMessage = () => {
                       </div>
                     )}
 
-                    {/* Department Selection */}
+                    {/* Department */}
                     {formData.recipientType === 'department' && (
                       <div className="mt-4">
                         <FormLabel required>Select Department</FormLabel>
-                        <select
-                          value={selectedDepartment}
-                          onChange={(e) => setSelectedDepartment(e.target.value)}
-                          className={inputCls(fieldErrors.department)}
-                        >
+                        <select value={selectedDepartment} onChange={e => setSelectedDepartment(e.target.value)} className={inputCls(fieldErrors.department)}>
                           <option value="">Choose a department…</option>
                           {departments.map(dept => {
                             const count = allUsers.filter(u => u.department === dept).length;
-                            return (
-                              <option key={dept} value={dept}>
-                                {dept} ({count} {count === 1 ? 'employee' : 'employees'})
-                              </option>
-                            );
+                            return <option key={dept} value={dept}>{dept} ({count} {count === 1 ? 'employee' : 'employees'})</option>;
                           })}
                         </select>
                         {fieldErrors.department && <p className="text-xs text-red-500 mt-1">{fieldErrors.department}</p>}
                       </div>
                     )}
 
-                    {/* All Employees Info */}
+                    {/* All Employees warning */}
                     {formData.recipientType === 'all' && (
                       <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
                         <div className="flex items-start gap-3">
-                          <WarningIcon className="text-amber-500" />
+                          {/* ✅ FIX 2B: WarningIcon now imported so this renders correctly */}
+                          <WarningIcon className="text-amber-500 flex-shrink-0 mt-0.5" style={{ fontSize: 18 }} />
                           <div>
                             <p className="text-sm font-medium text-amber-800">Send to All Employees</p>
                             <p className="text-xs text-amber-700 mt-1">
-                              This message will be sent to all {allUsers.filter(u => u.role !== 'admin' && u.role !== 'hr').length} employees.
-                              Use this option carefully for company-wide announcements.
+                              This message will be sent to all {allUsers.filter(u => u.role !== 'admin' && u.role !== 'hr').length} employees. Use carefully for company-wide announcements.
                             </p>
                           </div>
                         </div>
                       </div>
                     )}
 
-                    {/* Recipient Summary */}
                     {getRecipientCount() > 0 && formData.recipientType !== 'individual' && (
                       <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
                         <p className="text-xs text-gray-500">Recipient Summary</p>
@@ -777,12 +645,7 @@ const HRComposeMessage = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <FormLabel required>Category</FormLabel>
-                        <select
-                          name="category"
-                          value={formData.category}
-                          onChange={handleChange}
-                          className={inputCls(fieldErrors.category)}
-                        >
+                        <select name="category" value={formData.category} onChange={handleChange} className={inputCls(fieldErrors.category)}>
                           {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                         </select>
                       </div>
@@ -790,41 +653,24 @@ const HRComposeMessage = () => {
                         <FormLabel>Priority</FormLabel>
                         <div className="flex gap-2 flex-wrap">
                           {PRIORITIES.map(p => (
-                            <button
-                              type="button"
-                              key={p.value}
+                            <button type="button" key={p.value}
                               onClick={() => setFormData(prev => ({ ...prev, priority: p.value }))}
-                              className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all ${
-                                formData.priority === p.value
-                                  ? 'border-gray-900 bg-gray-50 text-gray-900'
-                                  : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                              }`}
-                            >
+                              className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all ${formData.priority === p.value ? 'border-gray-900 bg-gray-50 text-gray-900' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
                               {p.label}
                             </button>
                           ))}
                         </div>
                       </div>
                     </div>
-
                     <div>
                       <FormLabel required>Subject</FormLabel>
-                      <input
-                        type="text"
-                        name="subject"
-                        value={formData.subject}
-                        onChange={handleChange}
-                        placeholder="Brief, descriptive subject line"
-                        className={inputCls(fieldErrors.subject)}
-                      />
+                      <input type="text" name="subject" value={formData.subject} onChange={handleChange} placeholder="Brief, descriptive subject line" className={inputCls(fieldErrors.subject)} />
                       {fieldErrors.subject && <p className="text-xs text-red-500 mt-1">{fieldErrors.subject}</p>}
                     </div>
-
-                    {/* Options */}
                     <div>
                       <p className="text-sm font-medium text-gray-700 mb-3">Message options</p>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        {[['confidential','Confidential'],['readReceipt','Read Receipt'],['urgent','Urgent'],['followUp','Follow-up']].map(([field, label]) => (
+                        {[['confidential', 'Confidential'], ['readReceipt', 'Read Receipt'], ['urgent', 'Urgent'], ['followUp', 'Follow-up']].map(([field, label]) => (
                           <label key={field} className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${formData[field] ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:bg-gray-50'}`}>
                             <input type="checkbox" name={field} checked={formData[field]} onChange={handleChange} className="rounded border-gray-300 text-gray-900 focus:ring-gray-500" />
                             <span className="text-xs font-medium text-gray-700">{label}</span>
@@ -841,32 +687,20 @@ const HRComposeMessage = () => {
                     <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Write your message</p>
                     <div>
                       <FormLabel required>Message body</FormLabel>
-                      <textarea
-                        name="message"
-                        value={formData.message}
-                        onChange={handleChange}
-                        rows={9}
+                      <textarea name="message" value={formData.message} onChange={handleChange} rows={9}
                         placeholder="Type your message here…"
-                        className={`${inputCls(fieldErrors.message)} resize-none`}
-                      />
+                        className={`${inputCls(fieldErrors.message)} resize-none`} />
                       <div className="flex justify-between mt-1.5">
-                        {fieldErrors.message
-                          ? <p className="text-xs text-red-500">{fieldErrors.message}</p>
-                          : <span className="text-xs text-gray-400">{formData.message.split(/\s+/).filter(w => w.length > 0).length} words</span>
-                        }
+                        {fieldErrors.message ? <p className="text-xs text-red-500">{fieldErrors.message}</p> : <span className="text-xs text-gray-400">{formData.message.split(/\s+/).filter(w => w.length > 0).length} words</span>}
                         <span className={`text-xs ${characterCount < 10 ? 'text-red-400' : 'text-gray-400'}`}>{characterCount} chars</span>
                       </div>
                     </div>
-
-                    {/* Attachments */}
                     <div>
                       <FormLabel>Attachments</FormLabel>
-                      <label htmlFor="file-upload" className="flex items-center gap-2 w-fit px-4 py-2.5 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors">
-                        <AttachFileIcon style={{ fontSize: 16 }} />
-                        Add files
+                      <label htmlFor="hr-file-upload" className="flex items-center gap-2 w-fit px-4 py-2.5 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors">
+                        <AttachFileIcon style={{ fontSize: 16 }} /> Add files
                       </label>
-                      <input accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx,.txt,.ppt,.pptx" style={{ display: 'none' }} id="file-upload" multiple type="file" onChange={handleFileUpload} />
-
+                      <input accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx,.txt,.ppt,.pptx" style={{ display: 'none' }} id="hr-file-upload" multiple type="file" onChange={handleFileUpload} />
                       {formData.attachments.length > 0 && (
                         <div className="mt-3 space-y-2">
                           {formData.attachments.map(item => (
@@ -894,23 +728,14 @@ const HRComposeMessage = () => {
                   <div className="space-y-4">
                     <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Review before sending</p>
                     <div className="bg-gray-50 rounded-lg border border-gray-200 divide-y divide-gray-100">
-                      {[
-                        ['To', getRecipientDisplay()],
-                        ['From', user?.name || 'HR'],
-                        ['Subject', formData.subject],
-                        ['Category', formData.category],
-                        ['Priority', formData.priority],
-                      ].map(([k, v]) => (
+                      {[['To', getRecipientDisplay()], ['From', user?.name || 'HR'], ['Subject', formData.subject], ['Category', formData.category], ['Priority', formData.priority]].map(([k, v]) => (
                         <div key={k} className="flex items-center gap-4 px-4 py-3">
                           <span className="text-xs text-gray-400 w-20 flex-shrink-0">{k}</span>
-                          <span className="text-sm text-gray-800 font-medium">
-                            {k === 'Priority' ? <Badge variant={formData.priority}>{v}</Badge> : v}
-                          </span>
+                          <span className="text-sm text-gray-800 font-medium">{k === 'Priority' ? <Badge variant={formData.priority}>{v}</Badge> : v}</span>
                         </div>
                       ))}
                     </div>
-
-                    {formData.subject && (
+                    {formData.message && (
                       <div>
                         <p className="text-xs text-gray-400 mb-2">Message preview</p>
                         <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -918,7 +743,6 @@ const HRComposeMessage = () => {
                         </div>
                       </div>
                     )}
-
                     {(formData.confidential || formData.urgent || formData.readReceipt || formData.followUp) && (
                       <div className="flex flex-wrap gap-2">
                         {formData.confidential && <Badge variant="warning">Confidential</Badge>}
@@ -932,14 +756,10 @@ const HRComposeMessage = () => {
 
                 {/* Navigation */}
                 <div className="flex items-center justify-between mt-6 pt-5 border-t border-gray-100">
-                  <button
-                    type="button"
-                    onClick={activeStep > 0 ? handlePrevStep : () => navigate(-1)}
-                    className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                  >
+                  <button type="button" onClick={activeStep > 0 ? handlePrevStep : () => navigate(-1)}
+                    className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
                     {activeStep > 0 ? '← Back' : 'Cancel'}
                   </button>
-
                   <div className="flex items-center gap-2">
                     {activeStep === 3 && (
                       <button type="button" onClick={() => setSaveAsDraftConfirm(true)}
@@ -965,7 +785,7 @@ const HRComposeMessage = () => {
             </div>
           )}
 
-          {/* Templates Tab */}
+          {/* ── Templates Tab ── */}
           {activeTab === 'templates' && (
             <div className="p-5">
               <p className="text-sm font-semibold text-gray-800 mb-4">Message Templates</p>
@@ -991,11 +811,8 @@ const HRComposeMessage = () => {
                       <p className="text-xs text-gray-500 mb-1 font-medium">Subject</p>
                       <p className="text-xs text-gray-700 mb-3 truncate">{template.subject}</p>
                       <p className="text-xs text-gray-500 line-clamp-3 mb-3">{template.message.substring(0, 120)}…</p>
-                      <button onClick={() => {
-                        setFormData(prev => ({ ...prev, subject: template.subject, message: template.message, category: template.category }));
-                        setActiveTab('compose');
-                        toast.success(`"${template.name}" applied`);
-                      }} className="w-full flex items-center justify-center gap-1.5 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-xs font-medium transition-colors">
+                      <button onClick={() => { setFormData(prev => ({ ...prev, subject: template.subject, message: template.message, category: template.category })); setActiveTab('compose'); toast.success(`"${template.name}" applied`); }}
+                        className="w-full flex items-center justify-center gap-1.5 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-xs font-medium transition-colors">
                         <FileCopyIcon style={{ fontSize: 13 }} /> Use Template
                       </button>
                     </div>
@@ -1005,7 +822,7 @@ const HRComposeMessage = () => {
             </div>
           )}
 
-          {/* Drafts Tab */}
+          {/* ── Drafts Tab ── */}
           {activeTab === 'drafts' && (
             <div className="p-5">
               <p className="text-sm font-semibold text-gray-800 mb-4">Saved Drafts ({drafts.length})</p>
@@ -1016,9 +833,7 @@ const HRComposeMessage = () => {
                   </div>
                   <p className="text-gray-600 text-sm font-medium">No drafts yet</p>
                   <p className="text-gray-400 text-xs mt-1 mb-4">Your saved drafts will appear here</p>
-                  <button onClick={() => setActiveTab('compose')} className="px-4 py-2 bg-gray-900 text-white text-sm rounded-lg hover:bg-gray-800 transition-colors">
-                    Compose Message
-                  </button>
+                  <button onClick={() => setActiveTab('compose')} className="px-4 py-2 bg-gray-900 text-white text-sm rounded-lg hover:bg-gray-800 transition-colors">Compose Message</button>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -1027,15 +842,11 @@ const HRComposeMessage = () => {
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-gray-800 truncate">{draft.subject || 'Untitled Draft'}</p>
                         <p className="text-xs text-gray-400 mt-0.5">
-                          To: {draft.recipientType === 'individual' ? draft.recipient : 
-                                draft.recipientType === 'multiple' ? `${draft.selectedUsers?.length || 0} recipients` :
-                                draft.recipientType === 'department' ? draft.selectedDepartment : 'All Employees'} · {new Date(draft.updatedAt).toLocaleDateString()}
+                          To: {draft.recipientType === 'individual' ? draft.recipient : draft.recipientType === 'multiple' ? `${draft.selectedUsers?.length || 0} recipients` : draft.recipientType === 'department' ? draft.selectedDepartment : 'All Employees'} · {new Date(draft.updatedAt).toLocaleDateString()}
                         </p>
                       </div>
                       <div className="flex items-center gap-1.5 ml-3 flex-shrink-0">
-                        <button onClick={() => loadDraft(draft)} className="px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg hover:bg-gray-800 transition-colors">
-                          Edit
-                        </button>
+                        <button onClick={() => loadDraft(draft)} className="px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg hover:bg-gray-800 transition-colors">Edit</button>
                         <button onClick={() => deleteDraft(draft.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
                           <DeleteIcon style={{ fontSize: 15 }} />
                         </button>
@@ -1047,14 +858,14 @@ const HRComposeMessage = () => {
             </div>
           )}
 
-          {/* AI Tab */}
+          {/* ── AI Tab ── */}
           {activeTab === 'ai' && (
             <div className="p-5">
               <p className="text-sm font-semibold text-gray-800 mb-4">AI Writing Assistant</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
                   { icon: AutoFixHighIcon, title: 'Smart Suggestions', sub: 'AI-powered improvements for clarity and tone.', btn: 'Generate Suggestions' },
-                  { icon: PsychologyIcon,  title: 'Tone Analysis',     sub: 'Analyze if your message sounds professional.', btn: 'Analyze Tone' },
+                  { icon: PsychologyIcon, title: 'Tone Analysis', sub: 'Analyze if your message sounds professional.', btn: 'Analyze Tone' },
                 ].map(card => (
                   <div key={card.title} className="border border-gray-200 rounded-lg p-4">
                     <div className="w-9 h-9 bg-gray-100 rounded-lg flex items-center justify-center mb-3">
@@ -1062,16 +873,13 @@ const HRComposeMessage = () => {
                     </div>
                     <p className="text-sm font-semibold text-gray-800 mb-1">{card.title}</p>
                     <p className="text-xs text-gray-500 mb-4">{card.sub}</p>
-                    <button className="w-full py-2 bg-gray-900 hover:bg-gray-800 text-white text-xs font-medium rounded-lg transition-colors">
-                      {card.btn}
-                    </button>
+                    <button className="w-full py-2 bg-gray-900 hover:bg-gray-800 text-white text-xs font-medium rounded-lg transition-colors">{card.btn}</button>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Footer */}
           <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 text-center">
             <p className="text-xs text-gray-400">All messages are securely stored and encrypted.</p>
           </div>

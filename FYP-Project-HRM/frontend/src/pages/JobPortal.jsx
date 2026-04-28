@@ -29,6 +29,7 @@ const JobPortal = () => {
   // Application form
   const [showApplicationForm, setShowApplicationForm] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [applicationForm, setApplicationForm] = useState({
     firstName: '',
     lastName: '',
@@ -50,11 +51,7 @@ const JobPortal = () => {
     const fetchJobs = async () => {
       try {
         setLoading(true);
-        // Use public API endpoint (no auth required)
         const response = await axios.get('http://localhost:5000/api/public/jobs');
-        
-        // Or if you want to use the same endpoint but filter only open jobs:
-        // const response = await axios.get('http://localhost:5000/api/recruitment/jobs?status=Open');
         
         if (response.data.success) {
           const openJobs = response.data.data.filter(job => job.status === 'Open');
@@ -75,21 +72,17 @@ const JobPortal = () => {
   // Apply filters
   useEffect(() => {
     let result = jobs.filter(job => {
-      // Search filter
       const matchesSearch = !searchTerm || 
         job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         job.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
         job.department.toLowerCase().includes(searchTerm.toLowerCase());
       
-      // Department filter
       const matchesDepartment = departmentFilter === 'all' || 
         job.department === departmentFilter;
       
-      // Job type filter
       const matchesJobType = jobTypeFilter === 'all' || 
         job.jobType === jobTypeFilter;
       
-      // Experience filter
       const matchesExperience = experienceFilter === 'all' || 
         job.experienceLevel === experienceFilter;
       
@@ -103,41 +96,91 @@ const JobPortal = () => {
   const handleApply = (job) => {
     setSelectedJob(job);
     setShowApplicationForm(true);
+    // Reset form
+    setApplicationForm({
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      currentCompany: '',
+      currentPosition: '',
+      totalExperience: '',
+      currentSalary: '',
+      expectedSalary: '',
+      noticePeriod: '',
+      coverLetter: '',
+      skills: '',
+      resume: null
+    });
   };
 
-  // Handle form submission
-  const handleSubmitApplication = async (e) => {
-    e.preventDefault();
-    try {
-      // Submit application to backend
-      const response = await axios.post('http://localhost:5000/api/recruitment/candidates', {
-        jobId: selectedJob._id,
-        ...applicationForm,
-        skills: applicationForm.skills.split(',').map(skill => skill.trim()),
-        resume: applicationForm.resume // You'll need to handle file upload
+  // Handle form submission with proper FormData
+const handleSubmitApplication = async (e) => {
+  e.preventDefault();
+  setSubmitting(true);
+
+  try {
+    const formData = new FormData();
+    formData.append('jobId', selectedJob._id);
+    formData.append('firstName', applicationForm.firstName);
+    formData.append('lastName', applicationForm.lastName);
+    formData.append('email', applicationForm.email);
+    formData.append('phone', applicationForm.phone);
+    formData.append('currentCompany', applicationForm.currentCompany || '');
+    formData.append('currentPosition', applicationForm.currentPosition || '');
+    formData.append('totalExperience', applicationForm.totalExperience || '');
+    formData.append('currentSalary', applicationForm.currentSalary || '');
+    formData.append('expectedSalary', applicationForm.expectedSalary || '');
+    formData.append('noticePeriod', applicationForm.noticePeriod || '0');
+    formData.append('coverLetter', applicationForm.coverLetter || '');
+    formData.append('skills', applicationForm.skills || '');
+
+    if (applicationForm.resume) {
+      formData.append('resume', applicationForm.resume); // File object
+      console.log('📎 Attaching resume:', applicationForm.resume.name);
+    } else {
+      console.log('⚠️ No resume selected');
+    }
+
+    // ✅ NO headers object — let axios set Content-Type with boundary automatically
+    const response = await axios.post(
+      'http://localhost:5000/api/public/apply',
+      formData
+    );
+
+    if (response.data.success) {
+      alert('Application submitted successfully!');
+      setShowApplicationForm(false);
+      setApplicationForm({
+        firstName: '', lastName: '', email: '', phone: '',
+        currentCompany: '', currentPosition: '', totalExperience: '',
+        currentSalary: '', expectedSalary: '', noticePeriod: '',
+        coverLetter: '', skills: '', resume: null
       });
-      
-      if (response.data.success) {
-        alert('Application submitted successfully!');
-        setShowApplicationForm(false);
-        setApplicationForm({
-          firstName: '',
-          lastName: '',
-          email: '',
-          phone: '',
-          currentCompany: '',
-          currentPosition: '',
-          totalExperience: '',
-          currentSalary: '',
-          expectedSalary: '',
-          noticePeriod: '',
-          coverLetter: '',
-          skills: '',
-          resume: null
-        });
+    }
+  } catch (error) {
+    console.error('Submission error:', error);
+    alert('Failed: ' + (error.response?.data?.error || error.message));
+  } finally {
+    setSubmitting(false);
+  }
+};
+  // Handle file selection
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('File size should be less than 5MB');
+        return;
       }
-    } catch (error) {
-      alert('Failed to submit application: ' + (error.response?.data?.message || error.message));
+      // Validate file type
+      const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+      if (!allowedTypes.includes(file.type)) {
+        alert('Only PDF, DOC, and DOCX files are allowed');
+        return;
+      }
+      setApplicationForm({...applicationForm, resume: file});
     }
   };
 
@@ -366,9 +409,8 @@ const JobPortal = () => {
                       </button>
                       <button
                         onClick={() => {
-                          // You can create a detailed job view page
-                          setSelectedJob(job);
-                          // Or show job details in a modal
+                          // Show job details in a modal or navigate
+                          alert(`Job Details:\n\nTitle: ${job.title}\nDepartment: ${job.department}\nLocation: ${job.location || 'Remote'}\n\nDescription: ${job.description}`);
                         }}
                         className="w-full border border-gray-300 hover:bg-gray-50 py-3 px-4 rounded-lg font-medium transition-colors"
                       >
@@ -426,7 +468,7 @@ const JobPortal = () => {
                     <input
                       type="text"
                       required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       value={applicationForm.firstName}
                       onChange={(e) => setApplicationForm({...applicationForm, firstName: e.target.value})}
                     />
@@ -439,7 +481,7 @@ const JobPortal = () => {
                     <input
                       type="text"
                       required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       value={applicationForm.lastName}
                       onChange={(e) => setApplicationForm({...applicationForm, lastName: e.target.value})}
                     />
@@ -452,7 +494,7 @@ const JobPortal = () => {
                     <input
                       type="email"
                       required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       value={applicationForm.email}
                       onChange={(e) => setApplicationForm({...applicationForm, email: e.target.value})}
                     />
@@ -464,7 +506,7 @@ const JobPortal = () => {
                     </label>
                     <input
                       type="tel"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       value={applicationForm.phone}
                       onChange={(e) => setApplicationForm({...applicationForm, phone: e.target.value})}
                     />
@@ -476,7 +518,7 @@ const JobPortal = () => {
                     </label>
                     <input
                       type="text"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       value={applicationForm.currentCompany}
                       onChange={(e) => setApplicationForm({...applicationForm, currentCompany: e.target.value})}
                     />
@@ -488,7 +530,7 @@ const JobPortal = () => {
                     </label>
                     <input
                       type="text"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       value={applicationForm.currentPosition}
                       onChange={(e) => setApplicationForm({...applicationForm, currentPosition: e.target.value})}
                     />
@@ -501,7 +543,7 @@ const JobPortal = () => {
                     <input
                       type="number"
                       step="0.5"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       value={applicationForm.totalExperience}
                       onChange={(e) => setApplicationForm({...applicationForm, totalExperience: e.target.value})}
                     />
@@ -513,7 +555,7 @@ const JobPortal = () => {
                     </label>
                     <input
                       type="number"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       value={applicationForm.expectedSalary}
                       onChange={(e) => setApplicationForm({...applicationForm, expectedSalary: e.target.value})}
                     />
@@ -526,7 +568,7 @@ const JobPortal = () => {
                   </label>
                   <input
                     type="text"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="React, Node.js, MongoDB, AWS"
                     value={applicationForm.skills}
                     onChange={(e) => setApplicationForm({...applicationForm, skills: e.target.value})}
@@ -539,7 +581,7 @@ const JobPortal = () => {
                   </label>
                   <textarea
                     rows="4"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Tell us why you're interested in this position..."
                     value={applicationForm.coverLetter}
                     onChange={(e) => setApplicationForm({...applicationForm, coverLetter: e.target.value})}
@@ -548,17 +590,23 @@ const JobPortal = () => {
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Resume/CV
+                    Resume/CV *
                   </label>
                   <input
                     type="file"
+                    required
                     accept=".pdf,.doc,.docx"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-                    onChange={(e) => setApplicationForm({...applicationForm, resume: e.target.files[0]})}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    onChange={handleFileChange}
                   />
                   <p className="text-sm text-gray-500 mt-1">
                     Accepted formats: PDF, DOC, DOCX (Max 5MB)
                   </p>
+                  {applicationForm.resume && (
+                    <p className="text-sm text-green-600 mt-1">
+                      Selected: {applicationForm.resume.name}
+                    </p>
+                  )}
                 </div>
                 
                 <div className="flex justify-end space-x-3 pt-6 border-t">
@@ -571,9 +619,10 @@ const JobPortal = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+                    disabled={submitting}
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50"
                   >
-                    Submit Application
+                    {submitting ? 'Submitting...' : 'Submit Application'}
                   </button>
                 </div>
               </form>

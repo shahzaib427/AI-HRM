@@ -121,27 +121,38 @@ const Apply = () => {
 const handleSubmit = async (e) => {
   e.preventDefault();
   setSubmitting(true);
-  
-  try {
-    // Submit application to recruitment endpoint
-    // Replace the axios.post section:
-const response = await axios.post('http://localhost:5000/api/public/apply', {
-  jobId,
-  firstName: formData.firstName,
-  lastName: formData.lastName,
-  email: formData.email,
-  phone: formData.phone,
-  currentCompany: formData.currentCompany || '',
-  currentPosition: formData.currentPosition || '',
-  totalExperience: formData.totalExperience || '',
-  currentSalary: formData.currentSalary || '',
-  expectedSalary: formData.expectedSalary || '',
-  noticePeriod: formData.noticePeriod || '15', // ✅ Send number
-  coverLetter: formData.coverLetter || '',
-  skills: formData.skills || ''
-});
 
-    
+  try {
+    // ✅ Use FormData so file gets sent as multipart
+    const data = new FormData();
+    data.append('jobId', jobId);
+    data.append('firstName', formData.firstName);
+    data.append('lastName', formData.lastName);
+    data.append('email', formData.email);
+    data.append('phone', formData.phone);
+    data.append('currentCompany', formData.currentCompany || '');
+    data.append('currentPosition', formData.currentPosition || '');
+    data.append('totalExperience', formData.totalExperience || '');
+    data.append('currentSalary', formData.currentSalary || '');
+    data.append('expectedSalary', formData.expectedSalary || '');
+    data.append('noticePeriod', formData.noticePeriod || '0');
+    data.append('coverLetter', formData.coverLetter || '');
+    data.append('skills', formData.skills || '');
+
+    // ✅ Attach resume file
+    if (formData.resume) {
+      data.append('resume', formData.resume);
+      console.log('📎 Attaching resume:', formData.resume.name);
+    } else {
+      console.log('⚠️ No resume selected');
+    }
+
+    // ✅ No headers — let axios set multipart boundary automatically
+    const response = await axios.post(
+      'http://localhost:5000/api/public/apply',
+      data
+    );
+
     if (response.data.success) {
       alert('Application submitted successfully!');
       navigate('/careers');
@@ -150,7 +161,7 @@ const response = await axios.post('http://localhost:5000/api/public/apply', {
     }
   } catch (error) {
     console.error('Submission error:', error);
-    alert(`Failed to submit application: ${error.response?.data?.message || error.response?.data?.error || error.message}`);
+    alert(`Failed: ${error.response?.data?.error || error.message}`);
   } finally {
     setSubmitting(false);
   }

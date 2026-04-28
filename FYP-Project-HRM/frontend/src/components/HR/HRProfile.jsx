@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axiosInstance from '../../utils/axiosInstance';
 import { 
@@ -7,7 +7,8 @@ import {
   FaGlobe, FaDollarSign, FaUniversity, FaGraduationCap, FaFileAlt, 
   FaCamera, FaSave, FaTimes, FaPlus, FaTrash, FaCheckCircle,
   FaExclamationTriangle, FaInfoCircle, FaUsers, FaUserTie,
-  FaUserShield, FaUserGraduate, FaHandshake, FaBalanceScale
+  FaUserShield, FaUserGraduate, FaHandshake, FaBalanceScale,
+  FaSpinner, FaUpload
 } from 'react-icons/fa';
 import { FiShield, FiLock, FiBell } from 'react-icons/fi';
 
@@ -41,6 +42,182 @@ const Badge = ({ children, variant = 'default' }) => {
   return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${v[variant]}`}>{children}</span>;
 };
 
+// Profile Picture Modal Component for HR
+const HRProfilePictureModal = ({ isOpen, onClose, currentPhoto, onSave }) => {
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedFile(null);
+      setPreview(currentPhoto);
+      setError('');
+    }
+  }, [isOpen, currentPhoto]);
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setError('Please select a valid image file (JPEG, PNG, GIF, or WEBP)');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError('File size must be less than 5MB');
+      return;
+    }
+
+    setSelectedFile(file);
+    setError('');
+    
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPreview(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile) {
+      setError('Please select a file first');
+      return;
+    }
+
+    setUploading(true);
+    setError('');
+
+    const formData = new FormData();
+    formData.append('profilePicture', selectedFile);
+
+    try {
+      const response = await axiosInstance.post('/hr/upload-profile-picture', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (response.data.success) {
+        const photoUrl = response.data.data.profilePicture;
+        onSave(photoUrl);
+        onClose();
+      } else {
+        setError(response.data.message || 'Upload failed');
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      setError(err.response?.data?.message || 'Failed to upload profile picture');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    if (!window.confirm('Are you sure you want to remove your profile picture?')) return;
+
+    setUploading(true);
+    try {
+      const response = await axiosInstance.delete('/hr/profile-picture');
+      if (response.data.success) {
+        onSave(null);
+        onClose();
+      } else {
+        setError(response.data.message || 'Failed to remove profile picture');
+      }
+    } catch (err) {
+      console.error('Remove error:', err);
+      setError(err.response?.data?.message || 'Failed to remove profile picture');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-semibold text-gray-900">Update Profile Picture</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl transition-colors">×</button>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex justify-center">
+            <div className="relative">
+              <img
+                src={preview || `https://ui-avatars.com/api/?name=HR&background=4f46e5&color=fff&size=200`}
+                alt="Profile Preview"
+                className="w-40 h-40 rounded-full object-cover border-4 border-indigo-100"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute bottom-0 right-0 bg-indigo-600 text-white p-2 rounded-full hover:bg-indigo-700 transition-colors shadow-lg"
+              >
+                <FaCamera className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          )}
+
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <p className="text-xs text-gray-500">
+              <FaInfoCircle className="inline mr-1" />
+              Supported formats: JPEG, PNG, GIF, WEBP. Max size: 5MB
+            </p>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={handleRemove}
+              disabled={uploading || !currentPhoto}
+              className="flex-1 py-2.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              Remove
+            </button>
+            <button
+              onClick={handleUpload}
+              disabled={uploading || !selectedFile}
+              className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {uploading ? (
+                <>
+                  <FaSpinner className="animate-spin w-4 h-4" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <FaUpload className="w-4 h-4" />
+                  Upload
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const HRProfile = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -48,8 +225,8 @@ const HRProfile = () => {
   const [error, setError] = useState('');
   const [hrStats, setHrStats] = useState(null);
   const [activeSection, setActiveSection] = useState('overview');
+  const [showPictureModal, setShowPictureModal] = useState(false);
   const [profile, setProfile] = useState({
-    // BASIC INFORMATION
     name: '',
     fatherName: '',
     email: '',
@@ -62,8 +239,6 @@ const HRProfile = () => {
     gender: 'male',
     bloodGroup: '',
     maritalStatus: 'single',
-    
-    // EMPLOYMENT INFORMATION
     employeeId: '',
     employeeType: 'permanent',
     employmentStatus: 'active',
@@ -74,8 +249,6 @@ const HRProfile = () => {
     probationPeriod: '3',
     reportingManager: '',
     systemRole: 'hr',
-    
-    // HR SPECIFIC FIELDS
     hrSpecialization: 'general',
     hrExperience: '',
     employeeCountManaged: '',
@@ -83,19 +256,13 @@ const HRProfile = () => {
     recruitmentAccess: true,
     leaveManagementAccess: true,
     contractManagementAccess: true,
-    
-    // ADDRESS INFORMATION
     presentAddress: '',
     permanentAddress: '',
     city: '',
     state: '',
     country: 'Pakistan',
     postalCode: '',
-    
-    // EMERGENCY CONTACTS
     emergencyContacts: [{ name: '', phone: '', relation: 'parent' }],
-    
-    // SALARY INFORMATION
     salary: '',
     fuelAllowance: '',
     medicalAllowance: '',
@@ -103,32 +270,20 @@ const HRProfile = () => {
     otherAllowance: '',
     currency: 'PKR',
     salaryFrequency: 'monthly',
-    
-    // BANK INFORMATION
     bankName: '',
     bankAccountNumber: '',
     bankAccountTitle: '',
     bankBranchCode: '',
     ibanNumber: '',
-    
-    // ADDITIONAL INFORMATION
     qualifications: '',
     experiences: [{ company: '', position: '', duration: '', description: '' }],
     skills: [{ name: '', level: 'intermediate' }],
     previousExperience: '',
     certifications: [{ name: '', issuer: '', date: '' }],
-    
-    // SYSTEM INFORMATION
     isActive: true,
     hasSystemAccess: true,
-    
-    // PROFILE
     profilePicture: '',
-    
-    // SECURITY SETTINGS
     twoFactorEnabled: false,
-    
-    // NOTIFICATION PREFERENCES
     notificationPreferences: {
       email: true,
       push: true,
@@ -140,7 +295,6 @@ const HRProfile = () => {
     }
   });
 
-  // Fetch HR profile data
   useEffect(() => {
     fetchHRProfile();
     fetchHRStats();
@@ -178,30 +332,6 @@ const HRProfile = () => {
           return date.toISOString().split('T')[0];
         };
         
-        let emergencyContacts = [];
-        if (profileData.emergencyContacts && Array.isArray(profileData.emergencyContacts)) {
-          emergencyContacts = profileData.emergencyContacts;
-        }
-        
-        let experiences = [];
-        if (profileData.experiences && Array.isArray(profileData.experiences)) {
-          experiences = profileData.experiences;
-        }
-        
-        let skills = [];
-        if (profileData.skills && Array.isArray(profileData.skills)) {
-          if (typeof profileData.skills[0] === 'string') {
-            skills = profileData.skills.map(skill => ({ name: skill, level: 'intermediate' }));
-          } else {
-            skills = profileData.skills;
-          }
-        }
-        
-        let certifications = [];
-        if (profileData.certifications && Array.isArray(profileData.certifications)) {
-          certifications = profileData.certifications;
-        }
-        
         setProfile({
           name: profileData.name || 'HR Manager',
           fatherName: profileData.fatherName || '',
@@ -238,7 +368,7 @@ const HRProfile = () => {
           state: profileData.state || '',
           country: profileData.country || 'Pakistan',
           postalCode: profileData.postalCode || '',
-          emergencyContacts,
+          emergencyContacts: profileData.emergencyContacts || [{ name: '', phone: '', relation: 'parent' }],
           salary: profileData.salary || '',
           fuelAllowance: profileData.fuelAllowance || '',
           medicalAllowance: profileData.medicalAllowance || '',
@@ -252,10 +382,10 @@ const HRProfile = () => {
           bankBranchCode: profileData.bankBranchCode || '',
           ibanNumber: profileData.ibanNumber || '',
           qualifications: profileData.qualifications || '',
-          experiences,
-          skills,
+          experiences: profileData.experiences || [{ company: '', position: '', duration: '', description: '' }],
+          skills: profileData.skills || [{ name: '', level: 'intermediate' }],
           previousExperience: profileData.previousExperience || '',
-          certifications,
+          certifications: profileData.certifications || [{ name: '', issuer: '', date: '' }],
           isActive: profileData.isActive !== undefined ? profileData.isActive : true,
           hasSystemAccess: profileData.hasSystemAccess !== undefined ? profileData.hasSystemAccess : true,
           profilePicture: profileData.profilePicture || profileData.avatar || '',
@@ -324,6 +454,10 @@ const HRProfile = () => {
         [type]: value
       }
     }));
+  };
+
+  const handleProfilePictureUpdate = (newPhotoUrl) => {
+    setProfile(prev => ({ ...prev, profilePicture: newPhotoUrl }));
   };
 
   const addEmergencyContact = () => {
@@ -559,6 +693,57 @@ const HRProfile = () => {
           <KpiCard icon={FaFileAlt} label="Contracts Expiring" value={hrStats?.contractsExpiring || 0} sub="Within 30 days" iconBg="bg-red-500" />
         </div>
 
+        {/* Profile Header with Picture Upload - NOW AT THE TOP like Employee Profile */}
+        <div className="bg-white shadow-lg rounded-2xl p-8">
+          <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
+            <div className="relative group">
+              <img
+                src={profile.profilePicture 
+                  ? (profile.profilePicture.startsWith('http') 
+                      ? profile.profilePicture 
+                      : `http://localhost:5000${profile.profilePicture}`)
+                  : `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name || 'HR')}&background=4f46e5&color=fff&size=200`}
+                alt="Profile"
+                className="w-32 h-32 rounded-full object-cover border-4 border-indigo-100 shadow-lg"
+                onError={(e) => {
+                  e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name || 'HR')}&background=4f46e5&color=fff&size=200`;
+                }}
+              />
+              <button
+                onClick={() => setShowPictureModal(true)}
+                className="absolute bottom-0 right-0 bg-indigo-600 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-lg hover:bg-indigo-700"
+                title="Change Profile Picture"
+              >
+                <FaCamera className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 text-center md:text-left">
+              <h1 className="text-3xl font-bold text-gray-900">{profile.name || 'HR Manager'}</h1>
+              <p className="text-xl text-indigo-600 font-semibold mt-1">
+                {profile.position || 'HR Manager'} • {profile.department || 'Human Resources'}
+              </p>
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-sm text-gray-600">Employee ID</p>
+                  <p className="font-medium text-gray-900">{profile.employeeId || 'N/A'}</p>
+                </div>
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-sm text-gray-600">Email</p>
+                  <p className="font-medium text-gray-900">{profile.email || 'N/A'}</p>
+                </div>
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-sm text-gray-600">Phone</p>
+                  <p className="font-medium text-gray-900">{profile.phone || 'N/A'}</p>
+                </div>
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-sm text-gray-600">HR Since</p>
+                  <p className="font-medium text-gray-900">{profile.joiningDate || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Section Navigation */}
         <div className="bg-white rounded-lg border border-gray-100 p-4">
           <div className="flex flex-wrap gap-2">
@@ -592,29 +777,6 @@ const HRProfile = () => {
                   <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center"><FaFileAlt className="text-amber-600" /></div>
                   <div><p className="text-sm font-medium text-gray-800">Contracts</p><p className="text-xs text-gray-400">Manage agreements</p></div>
                 </a>
-              </div>
-            </div>
-
-            {/* Profile Summary */}
-            <div className="bg-white rounded-lg border border-gray-100 p-6">
-              <div className="flex items-start gap-6">
-                <div className="w-24 h-24 rounded-full bg-indigo-100 flex items-center justify-center">
-                  {profile.profilePicture ? (
-                    <img src={profile.profilePicture} alt="Profile" className="w-full h-full rounded-full object-cover" />
-                  ) : (
-                    <span className="text-3xl font-bold text-indigo-600">{profile.name?.charAt(0) || 'H'}</span>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900">{profile.name || 'HR Manager'}</h3>
-                  <p className="text-sm text-indigo-600">{profile.position} • {profile.department}</p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-                    <div><p className="text-xs text-gray-400">Employee ID</p><p className="text-sm font-medium text-gray-800">{profile.employeeId}</p></div>
-                    <div><p className="text-xs text-gray-400">HR Since</p><p className="text-sm font-medium text-gray-800">{profile.joiningDate || 'N/A'}</p></div>
-                    <div><p className="text-xs text-gray-400">HR Specialization</p><p className="text-sm font-medium text-gray-800 capitalize">{profile.hrSpecialization}</p></div>
-                    <div><p className="text-xs text-gray-400">HR Experience</p><p className="text-sm font-medium text-gray-800">{profile.hrExperience || '0'} years</p></div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
@@ -771,6 +933,14 @@ const HRProfile = () => {
           </div>
         </Section>
       </div>
+
+      {/* Profile Picture Modal */}
+      <HRProfilePictureModal
+        isOpen={showPictureModal}
+        onClose={() => setShowPictureModal(false)}
+        currentPhoto={profile.profilePicture}
+        onSave={handleProfilePictureUpdate}
+      />
     </div>
   );
 };

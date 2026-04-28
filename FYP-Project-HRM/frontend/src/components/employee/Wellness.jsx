@@ -9,10 +9,10 @@ const MOOD_LABELS = ['Very Sad', 'Sad', 'Neutral', 'Good', 'Happy', 'Excellent']
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const scoreColor = (s) =>
-  s >= 80 ? 'text-emerald-600' : s >= 60 ? 'text-blue-600' : s >= 40 ? 'text-amber-600' : 'text-red-500';
+  s >= 80 ? 'text-emerald-600' : s >= 60 ? 'text-indigo-600' : s >= 40 ? 'text-amber-600' : 'text-red-500';
 
 const scoreBg = (s) =>
-  s >= 80 ? 'bg-emerald-500' : s >= 60 ? 'bg-blue-500' : s >= 40 ? 'bg-amber-500' : 'bg-red-500';
+  s >= 80 ? 'bg-emerald-500' : s >= 60 ? 'bg-indigo-500' : s >= 40 ? 'bg-amber-500' : 'bg-red-500';
 
 const riskBadge = (level) => {
   const map = {
@@ -40,7 +40,7 @@ const ScoreRing = ({ score, label, color, size = 'md' }) => {
         <svg className={`${sz} -rotate-90`} viewBox={`0 0 ${(r + 6) * 2} ${(r + 6) * 2}`}>
           <circle cx={r + 6} cy={r + 6} r={r} stroke="#e5e7eb" strokeWidth="5" fill="none" />
           <circle cx={r + 6} cy={r + 6} r={r}
-            stroke={score >= 80 ? '#10b981' : score >= 60 ? '#3b82f6' : score >= 40 ? '#f59e0b' : '#ef4444'}
+            stroke={score >= 80 ? '#10b981' : score >= 60 ? '#4f46e5' : score >= 40 ? '#f59e0b' : '#ef4444'}
             strokeWidth="5" fill="none"
             strokeDasharray={circ} strokeDashoffset={offset}
             strokeLinecap="round"
@@ -57,12 +57,12 @@ const ScoreRing = ({ score, label, color, size = 'md' }) => {
 };
 
 const RecommendationCard = ({ rec, index }) => (
-  <div className={`border-l-4 ${priorityRing[rec.priority] || 'border-l-slate-300'} bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition-all duration-200`}>
+  <div className={`border-l-4 ${priorityRing[rec.priority] || 'border-l-slate-300'} bg-white rounded-lg border border-gray-100 p-4 hover:shadow-md transition-all duration-200`}>
     <div className="flex items-start gap-3">
       <span className="text-2xl shrink-0 mt-0.5">{rec.icon || '💡'}</span>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1 flex-wrap">
-          <h4 className="font-semibold text-gray-900 text-sm">{rec.title}</h4>
+          <h4 className="font-semibold text-gray-800 text-sm">{rec.title}</h4>
           <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
             rec.priority === 'high' ? 'bg-red-50 text-red-600 border-red-200'
             : rec.priority === 'medium' ? 'bg-amber-50 text-amber-600 border-amber-200'
@@ -76,9 +76,9 @@ const RecommendationCard = ({ rec, index }) => (
         </div>
         <p className="text-xs text-gray-600 mb-2 leading-relaxed">{rec.description}</p>
         {rec.action && (
-          <div className="bg-slate-50 rounded-lg p-2.5 mb-2">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Action</p>
-            <p className="text-xs text-slate-700 leading-relaxed">{rec.action}</p>
+          <div className="bg-indigo-50 rounded-lg p-2.5 mb-2">
+            <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide mb-1">Action</p>
+            <p className="text-xs text-indigo-800 leading-relaxed">{rec.action}</p>
           </div>
         )}
         {rec.impact && (
@@ -101,12 +101,12 @@ const DayModal = ({ day, onClose }) => {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col z-10">
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col z-10">
         {/* Header */}
-        <div className="bg-gradient-to-r from-rose-500 to-pink-500 px-6 py-4 flex items-center justify-between">
+        <div className="bg-indigo-600 px-6 py-4 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold text-white">{day.full_date}</h2>
-            <p className="text-rose-100 text-sm">
+            <h2 className="text-lg font-semibold text-white">{day.full_date}</h2>
+            <p className="text-indigo-200 text-sm">
               {details.length === 0 ? 'No check-ins recorded'
                 : `${details.length} check-in${details.length > 1 ? 's' : ''} · Avg score: ${day.wellness_score}%`}
             </p>
@@ -121,18 +121,18 @@ const DayModal = ({ day, onClose }) => {
           {details.length === 0 ? (
             <div className="text-center py-12">
               <div className="text-5xl mb-4">📅</div>
-              <p className="text-gray-500 font-medium">No check-ins on this day</p>
+              <p className="text-gray-600 font-medium">No check-ins on this day</p>
               <p className="text-sm text-gray-400 mt-1">Complete your daily check-ins to track progress here</p>
             </div>
           ) : details.map((c, i) => (
-            <div key={c.id} className="border border-gray-100 rounded-xl overflow-hidden shadow-sm">
+            <div key={c.id} className="border border-gray-100 rounded-lg overflow-hidden shadow-sm">
               {/* Check-in header */}
               <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-b border-gray-100">
                 <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-rose-500 text-white text-xs font-bold flex items-center justify-center">
+                  <span className="w-6 h-6 rounded-full bg-indigo-500 text-white text-xs font-bold flex items-center justify-center">
                     {c.checkin_number || i + 1}
                   </span>
-                  <span className="font-semibold text-gray-800 text-sm">Check-in #{c.checkin_number || i + 1}</span>
+                  <span className="font-semibold text-gray-700 text-sm">Check-in #{c.checkin_number || i + 1}</span>
                   <span className="text-xs text-gray-400">{c.time}</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -159,7 +159,7 @@ const DayModal = ({ day, onClose }) => {
                   ].map(m => (
                     <div key={m.label} className="text-center bg-gray-50 rounded-lg p-2">
                       <div className="text-lg mb-0.5">{m.icon}</div>
-                      <div className="text-xs font-bold text-gray-800">{m.value}</div>
+                      <div className="text-xs font-bold text-gray-700">{m.value}</div>
                       <div className="text-[10px] text-gray-500">{m.label}</div>
                       <div className="w-full bg-gray-200 rounded-full h-1 mt-1">
                         <div className={`h-1 rounded-full ${m.invert ? (m.pct > 60 ? 'bg-red-400' : 'bg-emerald-400') : scoreBg(m.pct)}`}
@@ -190,8 +190,8 @@ const DayModal = ({ day, onClose }) => {
 
                 {/* Message */}
                 {c.message && (
-                  <div className="bg-rose-50 rounded-lg px-3 py-2 border-l-2 border-rose-300">
-                    <p className="text-xs text-rose-500 font-semibold mb-0.5">Your note</p>
+                  <div className="bg-indigo-50 rounded-lg px-3 py-2 border-l-2 border-indigo-300">
+                    <p className="text-xs text-indigo-600 font-semibold mb-0.5">Your note</p>
                     <p className="text-sm text-gray-700 italic">"{c.message}"</p>
                   </div>
                 )}
@@ -203,7 +203,7 @@ const DayModal = ({ day, onClose }) => {
                     <div className="space-y-1.5">
                       {c.recommendations.map((r, j) => (
                         <div key={j} className="flex items-start gap-2 text-sm text-gray-700">
-                          <span className="text-rose-400 mt-0.5 shrink-0">•</span>
+                          <span className="text-indigo-400 mt-0.5 shrink-0">•</span>
                           <span className="leading-relaxed">{r}</span>
                         </div>
                       ))}
@@ -231,7 +231,7 @@ const Wellness = () => {
   });
   const [wellnessScore, setWellnessScore] = useState({ overall: 0, physical: 0, mental: 0, emotional: 0, social: 0 });
   const [dailyCheckIn, setDailyCheckIn] = useState({ mood: 3, energy: 7, stress: 4, sleep: 7, productivity: 8, message: '' });
-  const [detailedRecs, setDetailedRecs]   = useState([]);   // rich recommendation objects
+  const [detailedRecs, setDetailedRecs]   = useState([]);
   const [stressPatterns, setStressPatterns] = useState([]);
   const [chatHistory, setChatHistory]     = useState([]);
   const [chatInput, setChatInput]         = useState('');
@@ -240,8 +240,10 @@ const Wellness = () => {
   const [dataLoaded, setDataLoaded]       = useState(false);
   const [error, setError]                 = useState(null);
   const [stats, setStats]                 = useState({ streak: 0, total_days: 0, total_checkins: 0, averages: {} });
-  const [selectedDay, setSelectedDay]     = useState(null);  // for drill-down modal
+  const [selectedDay, setSelectedDay]     = useState(null);
+  const [submitting, setSubmitting]       = useState(false);
   const chatEndRef                        = useRef(null);
+  const recommendationsRef                 = useRef(null);
 
   const api = useRef(null);
   if (!api.current) {
@@ -265,9 +267,11 @@ const Wellness = () => {
   const fetchCheckinStatus  = useCallback(async (uid) => {
     try { const r = await api.current.get(`/checkin/status?user_id=${uid}`); setCheckinStatus(r.data); } catch {}
   }, []);
+
   const fetchWeeklyWellness = useCallback(async (uid) => {
     try { const r = await api.current.get(`/weekly-wellness?days=7&user_id=${uid}`); setWeeklyWellness(r.data); } catch {}
   }, []);
+
   const fetchHistory = useCallback(async (uid) => {
     try {
       const r = await api.current.get(`/history?user_id=${uid}`);
@@ -279,9 +283,32 @@ const Wellness = () => {
           mood:           c.mood,
           checkin_number: c.checkin_number
         })));
+
+        const latest = r.data.checkins[0];
+        if (latest?.detailed_recommendations?.length > 0) {
+          setDetailedRecs(latest.detailed_recommendations);
+        } else if (latest?.wellness_score) {
+          try {
+            const regenRes = await api.current.post('/checkin/recommendations', {
+              user_id:      uid,
+              mood:         latest.mood,
+              stress:       latest.stress,
+              sleep:        latest.sleep,
+              energy:       latest.energy,
+              productivity: latest.productivity,
+              message:      latest.message || '',
+            });
+            if (regenRes.data?.detailed_recommendations?.length > 0) {
+              setDetailedRecs(regenRes.data.detailed_recommendations);
+            }
+          } catch {
+            // endpoint may not exist — silently skip
+          }
+        }
       }
     } catch {}
   }, []);
+
   const fetchStats = useCallback(async (uid) => {
     try { const r = await api.current.get(`/stats?user_id=${uid}`); setStats(r.data); } catch {}
   }, []);
@@ -300,13 +327,22 @@ const Wellness = () => {
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatHistory]);
 
+  // Scroll to recommendations when they appear
+  useEffect(() => {
+    if (detailedRecs.length > 0 && recommendationsRef.current) {
+      setTimeout(() => {
+        recommendationsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 300);
+    }
+  }, [detailedRecs]);
+
   // ── Check-in submit ────────────────────────────────────────────────────────
   const handleCheckIn = async () => {
     const uid = getUserId();
     if (!uid)                        { setError('User not found. Please log in again.'); return; }
     if (!checkinStatus.can_checkin)  { setError("You've completed both check-ins for today. Come back tomorrow!"); return; }
 
-    setLoading(true);
+    setSubmitting(true);
     setError(null);
     try {
       const payload = {
@@ -329,9 +365,10 @@ const Wellness = () => {
         social:    Math.min(Math.round(((selectedMood + 1) * 20 + (10 - dailyCheckIn.stress) * 5) / 2), 100)
       });
 
-      // ── Use detailed_recommendations if present, fall back to simple list ──
       const richRecs = data.detailed_recommendations || [];
-      setDetailedRecs(richRecs);
+      if (richRecs.length > 0) {
+        setDetailedRecs(richRecs);
+      }
 
       const remaining = checkinStatus.remaining - 1;
       setChatHistory(prev => [...prev,
@@ -348,7 +385,7 @@ const Wellness = () => {
       console.error('checkin error:', e);
       setError(e.response?.data?.error || 'Check-in failed. Please try again.');
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
@@ -401,7 +438,7 @@ const Wellness = () => {
         className="flex flex-col items-center group cursor-pointer focus:outline-none"
         title={`${day.full_date} — click to view details`}
       >
-        <div className="text-xs font-semibold text-gray-500 mb-1.5 group-hover:text-rose-500 transition-colors">
+        <div className="text-xs font-semibold text-gray-500 mb-1.5 group-hover:text-indigo-600 transition-colors">
           {day.day_name}
         </div>
         <div className="relative w-14 h-14 mb-1">
@@ -421,8 +458,7 @@ const Wellness = () => {
               {hasData ? (day.completed ? '✓' : `${day.checkins}/2`) : '–'}
             </span>
           </div>
-          {/* Hover ring */}
-          <div className="absolute inset-0 rounded-full ring-2 ring-rose-400 ring-offset-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="absolute inset-0 rounded-full ring-2 ring-indigo-400 ring-offset-1 opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
         <div className="text-[11px] text-gray-500">
           {hasData ? `${day.wellness_score}%` : 'No data'}
@@ -433,10 +469,10 @@ const Wellness = () => {
 
   if (authLoading || !dataLoaded) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-rose-50 via-white to-pink-50">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <div className="text-6xl mb-4 animate-pulse">🧘</div>
-          <div className="text-xl text-gray-500">Loading your wellness space...</div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600 font-medium">Loading your wellness space...</p>
         </div>
       </div>
     );
@@ -445,8 +481,7 @@ const Wellness = () => {
   const userName = currentUser?.name || currentUser?.username || currentUser?.email?.split('@')[0] || 'there';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-pink-50/40">
-      {/* Day drill-down modal */}
+    <div className="min-h-screen bg-gray-50">
       {selectedDay && <DayModal day={selectedDay} onClose={() => setSelectedDay(null)} />}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -456,53 +491,52 @@ const Wellness = () => {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-3 flex-wrap">
-                <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-rose-600 to-pink-600">
+                <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                  <span className="text-indigo-500 text-xl">🧘</span>
                   AI Wellness Coach
                 </h1>
                 {weeklyWellness.streak > 0 && (
-                  <span className="px-3 py-1 bg-gradient-to-r from-orange-400 to-pink-500 text-white text-sm rounded-full font-semibold shadow-sm">
-                    🔥 {weeklyWellness.streak} day streak
-                  </span>
+                  <Badge variant="success">🔥 {weeklyWellness.streak} day streak</Badge>
                 )}
               </div>
-              <p className="mt-1.5 text-gray-600">
-                Welcome back, <span className="font-semibold text-rose-600">{userName}</span>
+              <p className="text-sm text-gray-500 mt-1">
+                Welcome back, <span className="font-semibold text-indigo-600">{userName}</span>
                 {stats.total_days > 0 && <span className="text-gray-400"> · {stats.total_days} days tracked</span>}
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <div className="px-4 py-2 bg-white border border-rose-200 rounded-xl shadow-sm text-sm">
+              <div className="px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm text-sm">
                 <span className="text-gray-500">Today </span>
-                <span className="font-bold text-rose-600">{checkinStatus.today_checkins}/2</span>
+                <span className="font-bold text-indigo-600">{checkinStatus.today_checkins}/2</span>
               </div>
-              <button onClick={handleCheckIn} disabled={loading || !checkinStatus.can_checkin}
-                className={`px-5 py-2 rounded-xl text-sm font-semibold shadow-sm transition-all ${
+              <button onClick={handleCheckIn} disabled={submitting || !checkinStatus.can_checkin}
+                className={`px-5 py-2.5 rounded-lg text-sm font-medium shadow-sm transition-all ${
                   checkinStatus.can_checkin
-                    ? 'bg-gradient-to-r from-rose-500 to-pink-500 text-white hover:from-rose-600 hover:to-pink-600 hover:shadow-md'
+                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
-                {loading ? 'Processing...' : checkinStatus.can_checkin ? `📝 Check-in #${checkinStatus.checkin_number}` : '✅ Done today'}
+                {submitting ? 'Processing...' : checkinStatus.can_checkin ? `📝 Check-in #${checkinStatus.checkin_number}` : '✅ Done today'}
               </button>
             </div>
           </div>
           {error && (
-            <div className="mt-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm flex items-center gap-2">
+            <div className="mt-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm flex items-center gap-2">
               <span>⚠️</span> {error}
             </div>
           )}
         </div>
 
         {/* ── Score Rings ── */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
+        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-gray-800">Wellness Overview</h3>
+            <h3 className="text-sm font-semibold text-gray-800">Wellness Overview</h3>
             {wellnessScore.overall > 0 && (
-              <span className={`text-sm font-bold px-3 py-1 rounded-full ${
-                wellnessScore.overall >= 80 ? 'bg-emerald-50 text-emerald-700'
-                : wellnessScore.overall >= 60 ? 'bg-blue-50 text-blue-700'
-                : wellnessScore.overall >= 40 ? 'bg-amber-50 text-amber-700'
-                : 'bg-red-50 text-red-700'}`}>
+              <Badge variant={
+                wellnessScore.overall >= 80 ? 'success' :
+                wellnessScore.overall >= 60 ? 'info' :
+                wellnessScore.overall >= 40 ? 'warning' : 'danger'
+              }>
                 {wellnessScore.overall >= 80 ? 'Excellent' : wellnessScore.overall >= 60 ? 'Good' : wellnessScore.overall >= 40 ? 'Moderate' : 'Needs Attention'}
-              </span>
+              </Badge>
             )}
           </div>
           <div className="flex items-center justify-around flex-wrap gap-4">
@@ -521,34 +555,34 @@ const Wellness = () => {
           <div className="lg:col-span-2 space-y-6">
 
             {/* Daily Check-in */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
               <div className="flex items-center justify-between mb-5">
-                <h2 className="text-lg font-bold text-gray-900">Daily Check-in</h2>
+                <h2 className="text-base font-semibold text-gray-800">Daily Check-in</h2>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-400">
                     {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                   </span>
-                  <span className={`px-2 py-1 rounded-full text-[11px] font-semibold ${
-                    checkinStatus.daily_completed ? 'bg-emerald-100 text-emerald-700'
-                    : checkinStatus.today_checkins > 0 ? 'bg-amber-100 text-amber-700'
-                    : 'bg-gray-100 text-gray-600'}`}>
+                  <Badge variant={
+                    checkinStatus.daily_completed ? 'success' :
+                    checkinStatus.today_checkins > 0 ? 'warning' : 'default'
+                  }>
                     {checkinStatus.daily_completed ? '✓ Complete' : `${checkinStatus.today_checkins}/2`}
-                  </span>
+                  </Badge>
                 </div>
               </div>
 
               <div className="space-y-5">
                 {/* Mood */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     How are you feeling? <span className="font-normal text-gray-400">({MOOD_LABELS[selectedMood]})</span>
                   </label>
                   <div className="flex justify-between gap-1">
                     {MOODS.map((m, i) => (
                       <button key={i} onClick={() => setSelectedMood(i)} disabled={!checkinStatus.can_checkin}
-                        className={`text-3xl transition-all duration-150 rounded-xl p-2 flex-1
+                        className={`text-3xl transition-all duration-150 rounded-lg p-2 flex-1
                           ${!checkinStatus.can_checkin ? 'opacity-30 cursor-not-allowed'
-                          : selectedMood === i ? 'scale-110 bg-rose-50 ring-2 ring-rose-300'
+                          : selectedMood === i ? 'scale-110 bg-indigo-50 ring-2 ring-indigo-300'
                           : 'opacity-50 hover:opacity-90 hover:bg-gray-50'}`}
                         title={MOOD_LABELS[i]}>
                         {m}
@@ -565,59 +599,59 @@ const Wellness = () => {
                     { key: 'productivity', label: 'Productivity',   emoji: '🎯' },
                   ].map(({ key, label, emoji }) => (
                     <div key={key} className="space-y-1.5">
-                      <label className="block text-xs font-semibold text-gray-600 flex items-center gap-1">
+                      <label className="block text-xs font-medium text-gray-600 flex items-center gap-1">
                         <span>{emoji}</span> {label}
                       </label>
                       <input type="range" min="1" max="10" step="1" value={dailyCheckIn[key]}
                         onChange={e => setDailyCheckIn(p => ({ ...p, [key]: parseInt(e.target.value) }))}
                         disabled={!checkinStatus.can_checkin}
-                        className="w-full accent-rose-500 disabled:opacity-40" />
+                        className="w-full accent-indigo-500 disabled:opacity-40" />
                       <div className="flex justify-between text-[11px] text-gray-400">
                         <span>1</span>
-                        <span className="font-bold text-rose-500">{dailyCheckIn[key]}/10</span>
+                        <span className="font-bold text-indigo-600">{dailyCheckIn[key]}/10</span>
                         <span>10</span>
                       </div>
                     </div>
                   ))}
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-semibold text-gray-600 flex items-center gap-1">
+                    <label className="block text-xs font-medium text-gray-600 flex items-center gap-1">
                       <span>😴</span> Sleep (hours)
                     </label>
                     <input type="number" min="0" max="24" step="0.5" value={dailyCheckIn.sleep}
                       onChange={e => setDailyCheckIn(p => ({ ...p, sleep: parseFloat(e.target.value) || 0 }))}
                       disabled={!checkinStatus.can_checkin}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-rose-400 focus:outline-none disabled:opacity-40 disabled:bg-gray-50" />
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:opacity-40 disabled:bg-gray-50" />
                     <div className="text-[11px] text-gray-400 text-center">Recommended: 7–9h</div>
                   </div>
                 </div>
 
                 {/* Message */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Describe your day <span className="font-normal text-gray-400">(optional — improves AI recommendations)</span>
                   </label>
                   <textarea value={dailyCheckIn.message}
                     onChange={e => setDailyCheckIn(p => ({ ...p, message: e.target.value }))}
                     disabled={!checkinStatus.can_checkin}
                     placeholder={checkinStatus.can_checkin ? "e.g. 'Feeling overwhelmed with deadlines but had a good lunch break...'" : "You've completed both check-ins for today"}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-rose-400 focus:outline-none resize-none disabled:opacity-40 disabled:bg-gray-50 leading-relaxed"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none resize-none disabled:opacity-40 disabled:bg-gray-50 leading-relaxed"
                     rows="3" />
                 </div>
 
-                <button onClick={handleCheckIn} disabled={loading || !checkinStatus.can_checkin}
-                  className={`w-full py-3 rounded-xl font-bold text-sm transition-all duration-200 shadow-sm
+                <button onClick={handleCheckIn} disabled={submitting || !checkinStatus.can_checkin}
+                  className={`w-full py-3 rounded-lg font-medium text-sm transition-all duration-200 shadow-sm
                     ${checkinStatus.can_checkin
-                      ? 'bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white hover:shadow-md'
+                      ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
                       : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
-                  {loading ? '⏳ Analysing your wellness...' : checkinStatus.can_checkin ? `Submit Check-in #${checkinStatus.checkin_number} ✨` : '✓ Daily Check-ins Complete'}
+                  {submitting ? '⏳ Analysing your wellness...' : checkinStatus.can_checkin ? `Submit Check-in #${checkinStatus.checkin_number} ✨` : '✓ Daily Check-ins Complete'}
                 </button>
               </div>
             </div>
 
             {/* Recent check-ins */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
               <div className="flex items-center justify-between mb-5">
-                <h2 className="text-lg font-bold text-gray-900">Recent Check-ins</h2>
+                <h2 className="text-base font-semibold text-gray-800">Recent Check-ins</h2>
                 {stressPatterns.length > 0 && <span className="text-xs text-gray-400">Last 7 entries</span>}
               </div>
               {stressPatterns.length > 0 ? (
@@ -626,7 +660,7 @@ const Wellness = () => {
                     {stressPatterns.map((day, i) => (
                       <div key={i} className="flex items-center gap-3 group">
                         <div className="w-14 shrink-0">
-                          <div className="text-xs font-semibold text-gray-600">{day.day}</div>
+                          <div className="text-xs font-medium text-gray-600">{day.day}</div>
                           {day.checkin_number && (
                             <div className="text-[10px] text-gray-400">#{day.checkin_number}</div>
                           )}
@@ -647,11 +681,11 @@ const Wellness = () => {
                       </div>
                     ))}
                   </div>
-                  <div className="mt-4 p-3 bg-blue-50 rounded-xl border border-blue-100 flex items-start gap-2">
+                  <div className="mt-4 p-3 bg-indigo-50 rounded-lg border border-indigo-100 flex items-start gap-2">
                     <span className="text-lg shrink-0">💡</span>
                     <div>
-                      <p className="text-xs font-bold text-blue-800 mb-0.5">AI Pattern Insight</p>
-                      <p className="text-xs text-blue-700 leading-relaxed">{getAIInsight(stressPatterns)}</p>
+                      <p className="text-xs font-semibold text-indigo-800 mb-0.5">AI Pattern Insight</p>
+                      <p className="text-xs text-indigo-700 leading-relaxed">{getAIInsight(stressPatterns)}</p>
                     </div>
                   </div>
                 </>
@@ -669,32 +703,52 @@ const Wellness = () => {
           <div className="space-y-6">
 
             {/* Recommendations */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div ref={recommendationsRef} className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-gray-900">AI Recommendations</h2>
+                <h2 className="text-base font-semibold text-gray-800">AI Recommendations</h2>
                 {detailedRecs.length > 0 && (
-                  <span className="text-[11px] px-2 py-1 bg-rose-50 text-rose-600 rounded-full font-semibold border border-rose-100">
+                  <span className="text-[11px] px-2 py-1 bg-indigo-50 text-indigo-600 rounded-full font-semibold border border-indigo-100">
                     {detailedRecs.length} actions
                   </span>
                 )}
               </div>
+
               {detailedRecs.length > 0 ? (
                 <div className="space-y-3">
-                  {detailedRecs.map((rec, i) => <RecommendationCard key={i} rec={rec} index={i} />)}
+                  {detailedRecs.map((rec, i) => (
+                    <RecommendationCard key={rec.title || i} rec={rec} index={i} />
+                  ))}
+                </div>
+              ) : submitting ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map(n => (
+                    <div key={n} className="animate-pulse border-l-4 border-l-gray-200 bg-gray-50 rounded-lg p-4">
+                      <div className="flex gap-3">
+                        <div className="w-8 h-8 rounded-full bg-gray-200 shrink-0" />
+                        <div className="flex-1 space-y-2">
+                          <div className="h-3 bg-gray-200 rounded w-3/4" />
+                          <div className="h-3 bg-gray-200 rounded w-full" />
+                          <div className="h-3 bg-gray-200 rounded w-5/6" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div className="text-center py-10">
                   <div className="text-4xl mb-3">🧘</div>
                   <p className="text-gray-500 font-medium">No recommendations yet</p>
-                  <p className="text-sm text-gray-400 mt-1">Submit a check-in to get personalised AI guidance</p>
+                  <p className="text-sm text-gray-400 mt-1">
+                    Submit a check-in to get personalised AI guidance
+                  </p>
                 </div>
               )}
             </div>
 
             {/* Stats */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-gray-900">Your Stats</h3>
+                <h3 className="text-sm font-semibold text-gray-800">Your Stats</h3>
                 {stats.total_days > 0 && (
                   <span className="text-[11px] bg-purple-50 text-purple-600 px-2 py-1 rounded-full font-semibold border border-purple-100">
                     {stats.total_days}d tracked
@@ -702,9 +756,9 @@ const Wellness = () => {
                 )}
               </div>
               <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 bg-orange-50 rounded-xl border border-orange-100">
+                <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-100">
                   <span className="text-sm text-gray-700 font-medium">🔥 Current Streak</span>
-                  <span className="font-bold text-orange-600">{stats.streak || 0} days</span>
+                  <span className="font-bold text-amber-600">{stats.streak || 0} days</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {[
@@ -713,7 +767,7 @@ const Wellness = () => {
                     { label: 'Avg Stress', value: `${(stats.averages?.stress || 0).toFixed(1)}/10`, bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-100' },
                     { label: 'Avg Mood',   value: `${(stats.averages?.mood || 0).toFixed(1)}/5`,   bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-100' },
                   ].map(s => (
-                    <div key={s.label} className={`p-3 ${s.bg} rounded-xl border ${s.border}`}>
+                    <div key={s.label} className={`p-3 ${s.bg} rounded-lg border ${s.border}`}>
                       <div className="text-[11px] text-gray-500 mb-0.5">{s.label}</div>
                       <div className={`font-bold ${s.text} text-sm`}>{s.value}</div>
                     </div>
@@ -723,9 +777,9 @@ const Wellness = () => {
             </div>
 
             {/* Chat */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-gray-900">Wellness Chat</h3>
+                <h3 className="text-sm font-semibold text-gray-800">Wellness Chat</h3>
                 {chatHistory.length > 0 && (
                   <button onClick={() => setChatHistory([])} className="text-xs text-gray-400 hover:text-gray-600">Clear</button>
                 )}
@@ -738,12 +792,12 @@ const Wellness = () => {
                   </div>
                 ) : chatHistory.map(msg => (
                   <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed
+                    <div className={`max-w-[85%] px-3 py-2 rounded-lg text-sm leading-relaxed
                       ${msg.sender === 'user'
-                        ? 'bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-br-none'
-                        : 'bg-gray-100 text-gray-800 rounded-bl-none'}`}>
+                        ? 'bg-indigo-600 text-white rounded-br-none'
+                        : 'bg-gray-100 text-gray-700 rounded-bl-none'}`}>
                       {msg.text}
-                      <div className={`text-[10px] mt-1 ${msg.sender === 'user' ? 'text-rose-200' : 'text-gray-400'}`}>{msg.time}</div>
+                      <div className={`text-[10px] mt-1 ${msg.sender === 'user' ? 'text-indigo-200' : 'text-gray-400'}`}>{msg.time}</div>
                     </div>
                   </div>
                 ))}
@@ -754,9 +808,9 @@ const Wellness = () => {
                   onChange={e => setChatInput(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && sendChatMessage()}
                   placeholder="How are you feeling?"
-                  className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-rose-400 focus:outline-none" />
+                  className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none" />
                 <button onClick={sendChatMessage} disabled={!chatInput.trim()}
-                  className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40 transition-colors">
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium disabled:opacity-40 transition-colors">
                   Send
                 </button>
               </div>
@@ -765,14 +819,14 @@ const Wellness = () => {
         </div>
 
         {/* ── Weekly at a Glance ── */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
           <div className="flex items-center justify-between mb-5">
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Your Week at a Glance</h2>
+              <h2 className="text-base font-semibold text-gray-800">Your Week at a Glance</h2>
               <p className="text-xs text-gray-400 mt-0.5">Click any day to view detailed performance</p>
             </div>
             <div className="flex items-center gap-4 text-sm">
-              <div><span className="text-gray-500">Avg: </span><span className="font-bold text-rose-600">{weeklyWellness.avg_weekly}%</span></div>
+              <div><span className="text-gray-500">Avg: </span><span className="font-bold text-indigo-600">{weeklyWellness.avg_weekly}%</span></div>
               <div><span className="text-gray-500">Done: </span><span className="font-bold text-emerald-600">{weeklyWellness.completed_days}/7</span></div>
             </div>
           </div>
@@ -789,7 +843,7 @@ const Wellness = () => {
 
           {weeklyWellness.streak > 0 && (
             <div className="text-center mt-3 text-sm text-gray-600">
-              🔥 You're on a <strong className="text-rose-600">{weeklyWellness.streak}-day streak</strong> — outstanding consistency!
+              🔥 You're on a <strong className="text-indigo-600">{weeklyWellness.streak}-day streak</strong> — outstanding consistency!
             </div>
           )}
         </div>
@@ -797,6 +851,20 @@ const Wellness = () => {
       </div>
     </div>
   );
+};
+
+// Badge Component
+const Badge = ({ children, variant = 'default' }) => {
+  const v = {
+    default: 'bg-gray-100 text-gray-600',
+    success: 'bg-green-50 text-green-700',
+    warning: 'bg-yellow-50 text-yellow-700',
+    danger: 'bg-red-50 text-red-700',
+    info: 'bg-blue-50 text-blue-700',
+    purple: 'bg-purple-50 text-purple-700',
+    orange: 'bg-orange-50 text-orange-700'
+  };
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${v[variant]}`}>{children}</span>;
 };
 
 export default Wellness;

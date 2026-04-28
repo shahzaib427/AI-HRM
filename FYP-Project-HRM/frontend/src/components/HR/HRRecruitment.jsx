@@ -17,7 +17,14 @@ import {
   AcademicCapIcon,
   StarIcon,
   ExclamationCircleIcon,
-  ArrowPathIcon as RefreshIcon
+  ArrowPathIcon as RefreshIcon,
+  UserIcon,
+  BuildingOfficeIcon,
+  CodeBracketIcon,
+  ChatBubbleLeftRightIcon,
+  DocumentArrowDownIcon,
+  DocumentIcon,
+  EyeIcon
 } from '@heroicons/react/24/outline';
 import axiosInstance from '../../utils/axiosInstance';
 
@@ -58,6 +65,10 @@ const HRRecruitment = () => {
   const [error, setError] = useState(null);
   const [selectedJobId, setSelectedJobId] = useState(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedCandidate, setSelectedCandidate] = useState(null);
+  const [showCandidateProfileModal, setShowCandidateProfileModal] = useState(false);
+  const [viewingResume, setViewingResume] = useState(false);
+  const [resumeFileUrl, setResumeFileUrl] = useState(null);
   
   // Real data states
   const [jobPostings, setJobPostings] = useState([]);
@@ -89,7 +100,6 @@ const HRRecruitment = () => {
   });
   
   const [showNewJobModal, setShowNewJobModal] = useState(false);
-  const [showCandidateModal, setShowCandidateModal] = useState(false);
 
   useEffect(() => {
     console.log('🚀 HRRecruitment Component Mounted');
@@ -123,7 +133,8 @@ const HRRecruitment = () => {
       // Fetch candidates
       const candidatesResponse = await axiosInstance.get('/recruitment/candidates');
       if (candidatesResponse.data.success) {
-        setCandidates(candidatesResponse.data.data || []);
+        const candidatesData = candidatesResponse.data.data || [];
+        setCandidates(candidatesData);
       } else {
         setCandidates([]);
       }
@@ -224,6 +235,96 @@ const HRRecruitment = () => {
       }
     } catch (error) {
       alert(error.response?.data?.message || 'Failed to update candidate status.');
+    }
+  };
+
+  // View candidate profile
+  const handleViewProfile = (candidate) => {
+    setSelectedCandidate(candidate);
+    setShowCandidateProfileModal(true);
+    // Reset resume view state
+    setViewingResume(false);
+    if (resumeFileUrl) {
+      URL.revokeObjectURL(resumeFileUrl);
+      setResumeFileUrl(null);
+    }
+  };
+
+  // Check if candidate has resume
+  const hasResume = (candidate) => {
+    return candidate.resume && candidate.resume.url;
+  };
+
+  // View Resume function
+  const handleViewResume = async (candidateId) => {
+    try {
+      setViewingResume(true);
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+      
+      const response = await axiosInstance.get(`/recruitment/candidates/${candidateId}/resume`, {
+        responseType: 'blob',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      if (response.data && response.data.size > 0) {
+        const contentType = response.headers['content-type'];
+        let fileType = contentType || 'application/pdf';
+        
+        const blob = new Blob([response.data], { type: fileType });
+        const url = URL.createObjectURL(blob);
+        setResumeFileUrl(url);
+      } else {
+        throw new Error('No resume data received');
+      }
+      
+    } catch (error) {
+      console.error('Error fetching resume:', error);
+      if (error.response?.status === 404) {
+        alert('No resume found for this candidate.');
+      } else {
+        alert('Failed to load resume. Please try again.');
+      }
+      setViewingResume(false);
+    }
+  };
+
+  // Download Resume function
+  const handleDownloadResume = async (candidateId, candidateName) => {
+    try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+      
+      const response = await axiosInstance.get(`/recruitment/candidates/${candidateId}/resume`, {
+        responseType: 'blob',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      if (response.data && response.data.size > 0) {
+        const contentType = response.headers['content-type'];
+        let extension = 'pdf';
+        if (contentType === 'application/pdf') extension = 'pdf';
+        else if (contentType === 'application/msword') extension = 'doc';
+        else if (contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') extension = 'docx';
+        
+        const blob = new Blob([response.data], { type: contentType || 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${candidateName.replace(/\s/g, '_')}_Resume.${extension}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } else {
+        throw new Error('No resume data received');
+      }
+      
+    } catch (error) {
+      console.error('Error downloading resume:', error);
+      alert('No resume found for this candidate.');
     }
   };
 
@@ -517,7 +618,7 @@ const HRRecruitment = () => {
                               <h4 className="text-base font-semibold text-gray-900">{candidate.firstName} {candidate.lastName}</h4>
                               {getStatusBadge(candidate.status)}
                             </div>
-                            <p className="text-sm text-indigo-600 font-medium mb-2">{candidate.position || 'No position specified'}</p>
+                            <p className="text-sm text-indigo-600 font-medium mb-2">{candidate.jobId?.title || 'No position specified'}</p>
                             <div className="flex flex-wrap gap-4 text-sm text-gray-500">
                               {candidate.email && <span className="flex items-center gap-1"><MailIcon className="w-4 h-4" /> {candidate.email}</span>}
                               {candidate.phone && <span className="flex items-center gap-1"><PhoneIcon className="w-4 h-4" /> {candidate.phone}</span>}
@@ -527,6 +628,18 @@ const HRRecruitment = () => {
                               <div className="flex flex-wrap gap-2 mt-3">
                                 {candidate.skills.slice(0, 4).map((skill, idx) => <Badge key={idx} variant="info">{skill}</Badge>)}
                                 {candidate.skills.length > 4 && <Badge>+{candidate.skills.length - 4}</Badge>}
+                              </div>
+                            )}
+                            {/* Resume Indicator */}
+                            {hasResume(candidate) && (
+                              <div className="mt-2">
+                                <button
+                                  onClick={() => handleViewResume(candidate._id)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 text-xs text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100 transition-colors"
+                                >
+                                  <DocumentIcon className="w-3.5 h-3.5" />
+                                  View Resume
+                                </button>
                               </div>
                             )}
                           </div>
@@ -540,7 +653,12 @@ const HRRecruitment = () => {
                             <option value="Rejected">Rejected</option>
                             <option value="Hired">Hired</option>
                           </select>
-                          <button className="px-3 py-2 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">View Profile</button>
+                          <button 
+                            onClick={() => handleViewProfile(candidate)}
+                            className="px-3 py-2 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                          >
+                            View Profile
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -551,6 +669,315 @@ const HRRecruitment = () => {
           )}
         </div>
       </div>
+
+      {/* Candidate Profile Modal */}
+      {showCandidateProfileModal && selectedCandidate && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white p-6 flex-shrink-0">
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-2xl">
+                    {selectedCandidate.firstName?.charAt(0) || '?'}{selectedCandidate.lastName?.charAt(0) || ''}
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold">{selectedCandidate.firstName} {selectedCandidate.lastName}</h2>
+                    <p className="text-indigo-100 text-sm mt-1">{selectedCandidate.jobId?.title || 'Position not specified'}</p>
+                    <div className="mt-1">{getStatusBadge(selectedCandidate.status)}</div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowCandidateProfileModal(false);
+                    if (resumeFileUrl) {
+                      URL.revokeObjectURL(resumeFileUrl);
+                      setResumeFileUrl(null);
+                    }
+                  }}
+                  className="text-white/80 hover:text-white transition-colors"
+                >
+                  <XCircleIcon className="h-6 w-6" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto">
+              {viewingResume && resumeFileUrl ? (
+                // Resume Viewer
+                <div className="flex flex-col h-full">
+                  <div className="bg-gray-100 p-3 flex justify-between items-center border-b border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <DocumentIcon className="w-5 h-5 text-indigo-600" />
+                      <span className="text-sm font-medium text-gray-700">Resume/CV</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setViewingResume(false);
+                          if (resumeFileUrl) {
+                            URL.revokeObjectURL(resumeFileUrl);
+                            setResumeFileUrl(null);
+                          }
+                        }}
+                        className="px-3 py-1 text-xs text-gray-600 hover:text-gray-800 bg-white rounded-md border border-gray-200"
+                      >
+                        Back to Profile
+                      </button>
+                      <button
+                        onClick={() => handleDownloadResume(selectedCandidate._id, `${selectedCandidate.firstName}_${selectedCandidate.lastName}`)}
+                        className="px-3 py-1 text-xs text-white bg-indigo-600 rounded-md hover:bg-indigo-700 flex items-center gap-1"
+                      >
+                        <DocumentArrowDownIcon className="w-3.5 h-3.5" />
+                        Download
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex-1 min-h-[500px]">
+                    {resumeFileUrl && (
+                      <iframe
+                        src={resumeFileUrl}
+                        className="w-full h-full min-h-[500px]"
+                        title="Resume Viewer"
+                      />
+                    )}
+                  </div>
+                </div>
+              ) : (
+                // Profile Information
+                <div className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Left Column - Personal Info */}
+                    <div className="md:col-span-1 space-y-4">
+                      <div className="bg-gray-50 rounded-xl p-4">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                          <UserIcon className="w-4 h-4 text-indigo-500" />
+                          Personal Information
+                        </h3>
+                        <div className="space-y-2 text-sm">
+                          <div>
+                            <p className="text-xs text-gray-500">Full Name</p>
+                            <p className="font-medium text-gray-900">{selectedCandidate.firstName} {selectedCandidate.lastName}</p>
+                          </div>
+                          {selectedCandidate.email && (
+                            <div>
+                              <p className="text-xs text-gray-500">Email</p>
+                              <p className="font-medium text-gray-900">{selectedCandidate.email}</p>
+                            </div>
+                          )}
+                          {selectedCandidate.phone && (
+                            <div>
+                              <p className="text-xs text-gray-500">Phone</p>
+                              <p className="font-medium text-gray-900">{selectedCandidate.phone}</p>
+                            </div>
+                          )}
+                          {selectedCandidate.location && (
+                            <div>
+                              <p className="text-xs text-gray-500">Location</p>
+                              <p className="font-medium text-gray-900">{selectedCandidate.location}</p>
+                            </div>
+                          )}
+                          {selectedCandidate.createdAt && (
+                            <div>
+                              <p className="text-xs text-gray-500">Applied On</p>
+                              <p className="font-medium text-gray-900">{formatDate(selectedCandidate.createdAt)}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Applied Job */}
+                      {selectedCandidate.jobId && (
+                        <div className="bg-gray-50 rounded-xl p-4">
+                          <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                            <BriefcaseIcon className="w-4 h-4 text-indigo-500" />
+                            Applied Position
+                          </h3>
+                          <div className="space-y-1 text-sm">
+                            <p className="font-medium text-gray-900">{selectedCandidate.jobId?.title || 'Position'}</p>
+                            <p className="text-xs text-gray-500">Department: {selectedCandidate.jobId?.department || 'N/A'}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Resume Section */}
+                      <div className="bg-gray-50 rounded-xl p-4">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                          <DocumentTextIcon className="w-4 h-4 text-indigo-500" />
+                          Resume/CV
+                        </h3>
+                        {hasResume(selectedCandidate) ? (
+                          <div className="space-y-2">
+                            <button
+                              onClick={() => handleViewResume(selectedCandidate._id)}
+                              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 text-sm font-medium rounded-lg hover:bg-indigo-100 transition-colors"
+                            >
+                              <EyeIcon className="w-4 h-4" />
+                              View Resume
+                            </button>
+                            <button
+                              onClick={() => handleDownloadResume(selectedCandidate._id, `${selectedCandidate.firstName}_${selectedCandidate.lastName}`)}
+                              className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-100 transition-colors"
+                            >
+                              <DocumentArrowDownIcon className="w-4 h-4" />
+                              Download Resume
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500 text-center py-3">No resume uploaded</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right Column - Skills & Experience */}
+                    <div className="md:col-span-2 space-y-4">
+                      {/* Skills */}
+                      {selectedCandidate.skills && selectedCandidate.skills.length > 0 && (
+                        <div className="bg-gray-50 rounded-xl p-4">
+                          <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                            <CodeBracketIcon className="w-4 h-4 text-indigo-500" />
+                            Skills
+                          </h3>
+                          <div className="flex flex-wrap gap-2">
+                            {selectedCandidate.skills.map((skill, idx) => (
+                              <Badge key={idx} variant="info">{skill}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Experience */}
+                      {(selectedCandidate.totalExperience || selectedCandidate.currentCompany || selectedCandidate.workExperience) && (
+                        <div className="bg-gray-50 rounded-xl p-4">
+                          <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                            <BuildingOfficeIcon className="w-4 h-4 text-indigo-500" />
+                            Work Experience
+                          </h3>
+                          <div className="space-y-2">
+                            {selectedCandidate.totalExperience && (
+                              <p className="text-sm text-gray-700">
+                                <span className="font-medium">Total Experience:</span> {typeof selectedCandidate.totalExperience === 'object' 
+                                  ? `${selectedCandidate.totalExperience.years || 0} years ${selectedCandidate.totalExperience.months || 0} months`
+                                  : `${selectedCandidate.totalExperience} years`}
+                              </p>
+                            )}
+                            {selectedCandidate.currentCompany && (
+                              <p className="text-sm text-gray-700">
+                                <span className="font-medium">Current Company:</span> {selectedCandidate.currentCompany}
+                              </p>
+                            )}
+                            {selectedCandidate.currentPosition && (
+                              <p className="text-sm text-gray-700">
+                                <span className="font-medium">Current Position:</span> {selectedCandidate.currentPosition}
+                              </p>
+                            )}
+                            {selectedCandidate.workExperience && Array.isArray(selectedCandidate.workExperience) && selectedCandidate.workExperience.length > 0 && (
+                              <div className="mt-2">
+                                <p className="font-medium text-gray-700 mb-2">Work History:</p>
+                                {selectedCandidate.workExperience.map((exp, idx) => (
+                                  <div key={idx} className="ml-2 mb-2 pb-2 border-b border-gray-200 last:border-0">
+                                    <p className="text-sm font-medium text-gray-800">{exp.title || exp.position}</p>
+                                    <p className="text-xs text-gray-500">{exp.company} • {exp.startDate} - {exp.endDate || 'Present'}</p>
+                                    {exp.description && <p className="text-xs text-gray-600 mt-1">{exp.description}</p>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Education */}
+                      {selectedCandidate.education && selectedCandidate.education.length > 0 && (
+                        <div className="bg-gray-50 rounded-xl p-4">
+                          <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                            <AcademicCapIcon className="w-4 h-4 text-indigo-500" />
+                            Education
+                          </h3>
+                          <div className="space-y-3">
+                            {selectedCandidate.education.map((edu, idx) => (
+                              <div key={idx} className="border-b border-gray-200 last:border-0 pb-2 last:pb-0">
+                                <p className="font-medium text-gray-800">
+                                  {typeof edu === 'object' 
+                                    ? (edu.degree || edu.Degree || edu.institution || 'Education')
+                                    : edu}
+                                </p>
+                                {typeof edu === 'object' && (
+                                  <>
+                                    {(edu.degree || edu.Degree) && (
+                                      <p className="text-sm text-gray-700">{edu.degree || edu.Degree}</p>
+                                    )}
+                                    {(edu.institution || edu.Institution) && (
+                                      <p className="text-xs text-gray-500">{edu.institution || edu.Institution}</p>
+                                    )}
+                                    {(edu.year || edu.Year) && (
+                                      <p className="text-xs text-gray-500">Year: {edu.year || edu.Year}</p>
+                                    )}
+                                    {edu.fieldOfStudy && (
+                                      <p className="text-xs text-gray-500">Field: {edu.fieldOfStudy}</p>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Cover Letter */}
+                      {selectedCandidate.coverLetter && (
+                        <div className="bg-gray-50 rounded-xl p-4">
+                          <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                            <ChatBubbleLeftRightIcon className="w-4 h-4 text-indigo-500" />
+                            Cover Letter
+                          </h3>
+                          <p className="text-sm text-gray-700 whitespace-pre-line">{selectedCandidate.coverLetter}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            {!viewingResume && (
+              <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex-shrink-0 flex justify-end gap-3">
+                <select 
+                  onChange={(e) => {
+                    handleUpdateCandidateStatus(selectedCandidate._id, e.target.value);
+                    setShowCandidateProfileModal(false);
+                    if (resumeFileUrl) {
+                      URL.revokeObjectURL(resumeFileUrl);
+                    }
+                  }} 
+                  value={selectedCandidate.status || 'Applied'} 
+                  className="px-4 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
+                >
+                  <option value="Applied">Applied</option>
+                  <option value="Under Review">Under Review</option>
+                  <option value="Shortlisted">Shortlisted</option>
+                  <option value="Interview Scheduled">Interview Scheduled</option>
+                  <option value="Rejected">Rejected</option>
+                  <option value="Hired">Hired</option>
+                </select>
+                <button
+                  onClick={() => {
+                    setShowCandidateProfileModal(false);
+                    if (resumeFileUrl) {
+                      URL.revokeObjectURL(resumeFileUrl);
+                    }
+                  }}
+                  className="px-4 py-2 border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* New Job Modal */}
       {showNewJobModal && (

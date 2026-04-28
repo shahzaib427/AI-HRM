@@ -35,13 +35,21 @@ const EmployeeDashboard = () => {
   const [teamMembers, setTeamMembers] = useState([]);
   const [performanceMetrics, setPerformanceMetrics] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [timeRange, setTimeRange] = useState('monthly');
   const [darkMode, setDarkMode] = useState(false);
+  
+  // Slide indices
+  const [activitySlideIndex, setActivitySlideIndex] = useState(0);
+  const [eventsSlideIndex, setEventsSlideIndex] = useState(0);
+  const [teamSlideIndex, setTeamSlideIndex] = useState(0);
+  const [performanceSlideIndex, setPerformanceSlideIndex] = useState(0);
 
   // Fetch all dashboard data
   useEffect(() => {
     const loadDashboardData = async () => {
       setIsLoading(true);
+      setError(null);
       try {
         console.log('🔄 Loading dashboard data...');
         
@@ -56,8 +64,8 @@ const EmployeeDashboard = () => {
 
         const requests = endpoints.map(endpoint => 
           axiosInstance.get(endpoint).catch(err => {
-            console.log(`⚠️ Failed to load ${endpoint}:`, err.message);
-            return { data: { success: false, data: null } };
+            console.error(`❌ Failed to load ${endpoint}:`, err.response?.status, err.message);
+            throw new Error(`Failed to load ${endpoint}: ${err.message}`);
           })
         );
 
@@ -79,13 +87,9 @@ const EmployeeDashboard = () => {
 
         // Process stats data
         if (statsResponse?.data?.success) {
-          const data = statsResponse.data.data;
-          console.log('✅ Dashboard stats loaded:', data);
-          setDashboardData(data);
+          setDashboardData(statsResponse.data.data);
         } else {
-          console.log('❌ Stats API failed, loading fallback');
-          loadFallbackData();
-          return;
+          throw new Error('Stats API returned unsuccessful response');
         }
 
         // Process upcoming events
@@ -110,7 +114,7 @@ const EmployeeDashboard = () => {
 
       } catch (error) {
         console.error('❌ Error loading dashboard data:', error);
-        loadFallbackData();
+        setError(error.message || 'Failed to load dashboard data. Please try again later.');
       } finally {
         setIsLoading(false);
       }
@@ -119,120 +123,18 @@ const EmployeeDashboard = () => {
     loadDashboardData();
   }, []);
 
-  // Fallback data
-  const loadFallbackData = () => {
-    console.log('📋 Loading fallback data...');
-    
-    setDashboardData({
-      userInfo: {
-        name: 'John Doe',
-        email: 'john.doe@company.com',
-        department: 'Engineering',
-        position: 'Software Developer',
-        joiningDate: '2023-01-15'
-      },
-      stats: {
-        leaveBalance: { annual: 12, casual: 6, sick: 5 },
-        totalAvailableLeaves: 23,
-        totalUsedLeaves: 5,
-        leaveRequests: {
-          pending: 1,
-          approved: 3,
-          rejected: 0,
-          total: 4
-        },
-        attendance: {
-          presentDays: 18,
-          workingDays: 20,
-          attendanceRate: 90
-        }
-      }
-    });
+  // Slide navigation functions
+  const nextSlide = (currentIndex, totalItems, setIndex, itemsPerSlide = 3) => {
+    const maxSlides = Math.ceil(totalItems / itemsPerSlide);
+    if (currentIndex + 1 < maxSlides) {
+      setIndex(currentIndex + 1);
+    }
+  };
 
-    setUpcomingEvents([
-      { 
-        id: 1, 
-        title: 'Annual Leave', 
-        date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
-        endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        type: 'leave',
-        description: 'Vacation time',
-        icon: '🏖️',
-        color: 'blue'
-      },
-      { 
-        id: 2, 
-        title: 'Team Meeting', 
-        date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
-        type: 'meeting',
-        description: 'Weekly team sync',
-        icon: '👥',
-        color: 'indigo'
-      }
-    ]);
-
-    setRecentActivity([
-      {
-        id: 1,
-        type: 'leave',
-        title: 'Annual Leave Approved',
-        description: '2 day(s): Vacation',
-        time: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-        status: 'approved',
-        icon: '✅',
-        color: 'green'
-      },
-      {
-        id: 2,
-        type: 'leave',
-        title: 'Sick Leave Pending',
-        description: '1 day(s): Not feeling well',
-        time: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-        status: 'pending',
-        icon: '⏳',
-        color: 'yellow'
-      }
-    ]);
-
-    setTeamMembers([
-      { 
-        id: 1, 
-        name: 'Alex Johnson', 
-        email: 'alex@company.com',
-        role: 'Senior Developer',
-        department: 'Engineering',
-        avatar: 'https://ui-avatars.com/api/?name=Alex+Johnson&background=random&color=fff',
-        status: 'online',
-        productivity: 92
-      },
-      { 
-        id: 2, 
-        name: 'Sarah Miller', 
-        email: 'sarah@company.com',
-        role: 'Project Manager',
-        department: 'Engineering',
-        avatar: 'https://ui-avatars.com/api/?name=Sarah+Miller&background=random&color=fff',
-        status: 'online',
-        productivity: 88
-      }
-    ]);
-
-    setPerformanceMetrics([
-      {
-        label: 'Attendance',
-        value: 95,
-        icon: '📅',
-        color: 'from-green-500 to-emerald-500',
-        description: 'Present days this month'
-      },
-      {
-        label: 'Productivity',
-        value: 88,
-        icon: '📊',
-        color: 'from-blue-500 to-cyan-500',
-        description: 'Based on task completion'
-      }
-    ]);
+  const prevSlide = (currentIndex, setIndex) => {
+    if (currentIndex > 0) {
+      setIndex(currentIndex - 1);
+    }
   };
 
   // ===== NAVIGATION HANDLERS =====
@@ -358,12 +260,11 @@ const EmployeeDashboard = () => {
 
     return (
       <div 
-        className={`flex items-center space-x-4 p-4 rounded-xl border transition-all duration-300 transform hover:scale-102 group animate-slide-in ${
+        className={`flex items-center space-x-4 p-4 rounded-xl border transition-all duration-300 transform hover:scale-102 group ${
           darkMode 
             ? 'border-gray-700 hover:border-cyan-500 hover:bg-cyan-900/20' 
             : 'border-gray-200 hover:border-blue-200 hover:bg-blue-50'
         }`}
-        style={{ animationDelay: `${index * 100}ms` }}
       >
         <div className="flex-shrink-0">
           <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
@@ -407,12 +308,11 @@ const EmployeeDashboard = () => {
 
     return (
       <div 
-        className={`flex items-start space-x-4 p-4 rounded-xl border transition-all duration-300 transform hover:scale-102 group animate-slide-in ${
+        className={`flex items-start space-x-4 p-4 rounded-xl border transition-all duration-300 transform hover:scale-102 group ${
           darkMode 
             ? 'border-gray-700 hover:border-green-500 hover:bg-green-900/20' 
             : 'border-gray-200 hover:border-green-200 hover:bg-green-50'
         }`}
-        style={{ animationDelay: `${index * 150}ms` }}
       >
         <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform duration-300 mt-1 shadow-md ${
           activity.status === 'approved' ? (darkMode ? 'bg-green-900/50' : 'bg-green-100') :
@@ -451,12 +351,11 @@ const EmployeeDashboard = () => {
 
   const TeamMember = ({ member, index }) => (
     <div 
-      className={`flex items-center space-x-3 p-3 rounded-xl border transition-all duration-300 transform hover:scale-102 animate-slide-in ${
+      className={`flex items-center space-x-3 p-3 rounded-xl border transition-all duration-300 transform hover:scale-102 ${
         darkMode 
           ? 'border-gray-700 hover:border-cyan-500 hover:bg-cyan-900/20' 
           : 'border-gray-200 hover:border-blue-200 hover:bg-blue-50'
       }`}
-      style={{ animationDelay: `${index * 100}ms` }}
     >
       <div className="relative">
         <img 
@@ -495,10 +394,9 @@ const EmployeeDashboard = () => {
 
   const PerformanceMetric = ({ metric, index }) => (
     <div 
-      className={`p-4 rounded-2xl border transform transition-all duration-300 hover:scale-105 animate-fade-in-up ${
+      className={`p-4 rounded-2xl border transform transition-all duration-300 hover:scale-105 ${
         darkMode ? 'bg-gradient-to-br from-gray-800 to-gray-900 border-gray-700' : 'bg-white border-gray-100'
       }`}
-      style={{ animationDelay: `${index * 200}ms` }}
     >
       <div className="flex items-center justify-between mb-2">
         <span className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
@@ -519,6 +417,98 @@ const EmployeeDashboard = () => {
       </p>
     </div>
   );
+
+  // Slide Carousel Component
+  const SlideCarousel = ({ items, renderItem, itemsPerSlide = 3, slideIndex, setSlideIndex, title }) => {
+    const totalSlides = Math.ceil(items.length / itemsPerSlide);
+    const startIndex = slideIndex * itemsPerSlide;
+    const visibleItems = items.slice(startIndex, startIndex + itemsPerSlide);
+
+    if (items.length === 0) {
+      return (
+        <div className={`text-center py-8 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+          No {title.toLowerCase()} available
+        </div>
+      );
+    }
+
+    return (
+      <div className="relative">
+        <div className="grid grid-cols-1 gap-3">
+          {visibleItems.map((item, idx) => renderItem(item, idx))}
+        </div>
+        
+        {totalSlides > 1 && (
+          <div className="flex justify-center items-center space-x-2 mt-4">
+            <button
+              onClick={() => prevSlide(slideIndex, setSlideIndex)}
+              disabled={slideIndex === 0}
+              className={`p-1 rounded-full transition-all duration-300 ${
+                slideIndex === 0
+                  ? 'opacity-30 cursor-not-allowed'
+                  : darkMode
+                  ? 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                  : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            
+            <div className="flex space-x-1">
+              {Array.from({ length: totalSlides }).map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setSlideIndex(idx)}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                    slideIndex === idx
+                      ? `w-6 ${darkMode ? 'bg-cyan-400' : 'bg-blue-500'}`
+                      : `w-1.5 ${darkMode ? 'bg-gray-600' : 'bg-gray-300'}`
+                  }`}
+                />
+              ))}
+            </div>
+            
+            <button
+              onClick={() => nextSlide(slideIndex, items.length, setSlideIndex, itemsPerSlide)}
+              disabled={slideIndex + 1 >= totalSlides}
+              className={`p-1 rounded-full transition-all duration-300 ${
+                slideIndex + 1 >= totalSlides
+                  ? 'opacity-30 cursor-not-allowed'
+                  : darkMode
+                  ? 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                  : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Error state
+  if (error && !isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50/30">
+        <div className="text-center max-w-md mx-auto p-8 bg-white rounded-2xl shadow-2xl">
+          <div className="text-6xl mb-4">⚠️</div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Error Loading Dashboard</h2>
+          <p className="text-gray-600 mb-6">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Loading skeleton
   if (isLoading) {
@@ -541,7 +531,7 @@ const EmployeeDashboard = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Header */}
         <div className="mb-8 animate-fade-in-up">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
               <h1 className={`text-4xl font-bold transition-colors duration-500 ${
                 darkMode ? 'text-white' : 'text-gray-900'
@@ -697,29 +687,24 @@ const EmployeeDashboard = () => {
               </div>
             </div>
 
-            {/* Recent Activity */}
+            {/* Recent Activity - With Slide Carousel */}
             {recentActivity.length > 0 && (
               <div className={`rounded-2xl shadow-2xl border p-6 transform transition-all duration-300 hover:shadow-3xl animate-fade-in-up ${
                 darkMode ? 'bg-gradient-to-br from-gray-800 to-gray-900 border-gray-700' : 'bg-white border-gray-100'
               }`}>
-                <div className="flex items-center justify-between mb-6">
+                <div className="mb-6">
                   <h2 className={`text-xl font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-900'}`}>
                     Recent Activity
                   </h2>
-                  <span 
-                    className={`font-medium text-sm cursor-pointer transition-colors duration-200 ${
-                      darkMode ? 'text-cyan-400 hover:text-cyan-300' : 'text-blue-500 hover:text-blue-600'
-                    }`}
-                    onClick={handleViewLeaves}
-                  >
-                    View all →
-                  </span>
                 </div>
-                <div className="space-y-3 max-h-80 overflow-y-auto custom-scrollbar pr-2">
-                  {recentActivity.map((activity, index) => (
-                    <ActivityItem key={activity.id || index} activity={activity} index={index} />
-                  ))}
-                </div>
+                <SlideCarousel
+                  items={recentActivity}
+                  renderItem={(activity, idx) => <ActivityItem key={activity.id || idx} activity={activity} index={idx} />}
+                  itemsPerSlide={3}
+                  slideIndex={activitySlideIndex}
+                  setSlideIndex={setActivitySlideIndex}
+                  title="activities"
+                />
               </div>
             )}
 
@@ -767,71 +752,62 @@ const EmployeeDashboard = () => {
 
           {/* Right Sidebar */}
           <div className="space-y-6">
-            {/* Upcoming Events */}
+            {/* Upcoming Events - With Slide Carousel */}
             <div className={`rounded-2xl shadow-2xl border p-6 transform transition-all duration-300 hover:shadow-3xl animate-fade-in-up ${
               darkMode ? 'bg-gradient-to-br from-gray-800 to-gray-900 border-gray-700' : 'bg-white border-gray-100'
             }`}>
-              <div className="flex items-center justify-between mb-6">
+              <div className="mb-6">
                 <h2 className={`text-xl font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-900'}`}>
                   Upcoming Events
                 </h2>
               </div>
-              <div className="space-y-3 max-h-80 overflow-y-auto custom-scrollbar pr-2">
-                {upcomingEvents.length > 0 ? (
-                  upcomingEvents.map((event, index) => (
-                    <EventItem key={event.id || index} event={event} index={index} />
-                  ))
-                ) : (
-                  <p className={`text-center py-8 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    No upcoming events
-                  </p>
-                )}
-              </div>
+              <SlideCarousel
+                items={upcomingEvents}
+                renderItem={(event, idx) => <EventItem key={event.id || idx} event={event} index={idx} />}
+                itemsPerSlide={3}
+                slideIndex={eventsSlideIndex}
+                setSlideIndex={setEventsSlideIndex}
+                title="events"
+              />
             </div>
 
-            {/* Team Members */}
+            {/* Team Members - With Slide Carousel */}
             <div className={`rounded-2xl shadow-2xl border p-6 transform transition-all duration-300 hover:shadow-3xl animate-fade-in-up ${
               darkMode ? 'bg-gradient-to-br from-gray-800 to-gray-900 border-gray-700' : 'bg-white border-gray-100'
             }`}>
-              <div className="flex items-center justify-between mb-6">
+              <div className="mb-6">
                 <h2 className={`text-xl font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-900'}`}>
                   Team Members
                 </h2>
-                <span 
-                  className={`font-medium text-sm cursor-pointer transition-colors duration-200 ${
-                    darkMode ? 'text-cyan-400 hover:text-cyan-300' : 'text-blue-500 hover:text-blue-600'
-                  }`}
-                  onClick={handleViewTeam}
-                >
-                  View all →
-                </span>
               </div>
-              <div className="space-y-3 max-h-48 overflow-y-auto custom-scrollbar pr-2">
-                {teamMembers.length > 0 ? (
-                  teamMembers.map((member, index) => (
-                    <TeamMember key={member.id || index} member={member} index={index} />
-                  ))
-                ) : (
-                  <p className={`text-center py-8 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    No team members available
-                  </p>
-                )}
-              </div>
+              <SlideCarousel
+                items={teamMembers}
+                renderItem={(member, idx) => <TeamMember key={member.id || idx} member={member} index={idx} />}
+                itemsPerSlide={3}
+                slideIndex={teamSlideIndex}
+                setSlideIndex={setTeamSlideIndex}
+                title="team members"
+              />
             </div>
 
-            {/* Performance Metrics */}
+            {/* Performance Metrics - With Slide Carousel */}
             {performanceMetrics.length > 0 && (
               <div className={`rounded-2xl shadow-2xl border p-6 transform transition-all duration-300 hover:shadow-3xl animate-fade-in-up ${
                 darkMode ? 'bg-gradient-to-br from-gray-800 to-gray-900 border-gray-700' : 'bg-white border-gray-100'
               }`}>
-                <h3 className={`text-lg font-semibold mb-4 ${darkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                  Performance Metrics
-                </h3>
-                <div className="space-y-4">
-                  {performanceMetrics.map((metric, index) => (
-                    <PerformanceMetric key={index} metric={metric} index={index} />
-                  ))}
+                <div className="mb-6">
+                  <h3 className={`text-lg font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                    Performance Metrics
+                  </h3>
                 </div>
+                <SlideCarousel
+                  items={performanceMetrics}
+                  renderItem={(metric, idx) => <PerformanceMetric key={idx} metric={metric} index={idx} />}
+                  itemsPerSlide={3}
+                  slideIndex={performanceSlideIndex}
+                  setSlideIndex={setPerformanceSlideIndex}
+                  title="metrics"
+                />
               </div>
             )}
           </div>

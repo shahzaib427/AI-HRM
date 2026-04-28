@@ -3,10 +3,10 @@ import axiosInstance from '../../utils/axiosInstance';
 import {
   FaCheckCircle, FaTimesCircle, FaClock, FaCalendarDay,
   FaHistory, FaUserClock, FaExclamationTriangle,
-  FaEye, FaDownload, FaFileCsv, FaChartLine, FaUser
+  FaEye, FaDownload, FaFileCsv, FaChartLine, FaUser, FaTrash
 } from 'react-icons/fa';
 
-// ─── Unchanged helper logic ────────────────────────────────────────────────────
+// ─── Helper logic ────────────────────────────────────────────────────────────
 
 const formatTime = (timeString) => {
   if (!timeString) return '--:--';
@@ -43,7 +43,6 @@ const getTimeBasedStatus = (checkInTime, checkOutTime = null) => {
     const checkOutTotalMinutes = checkOutDate.getHours() * 60 + checkOutDate.getMinutes();
     const ON_TIME_THRESHOLD = 17 * 60;
     const EARLY_THRESHOLD   = 17 * 60 - 30;
-
     const checkInStatus = checkInTotalMinutes < PRESENT_THRESHOLD ? 'Present' : checkInTotalMinutes < LATE_THRESHOLD ? 'Late' : 'Very Late';
     const checkInColor  = checkInTotalMinutes < PRESENT_THRESHOLD ? 'green'   : checkInTotalMinutes < LATE_THRESHOLD ? 'orange' : 'red';
     const checkOutStatus = checkOutTotalMinutes >= ON_TIME_THRESHOLD ? 'On Time' : checkOutTotalMinutes >= EARLY_THRESHOLD ? 'Early Leave' : 'Very Early';
@@ -54,7 +53,6 @@ const getTimeBasedStatus = (checkInTime, checkOutTime = null) => {
       totalHours: (checkOutTotalMinutes - checkInTotalMinutes) / 60,
     };
   }
-
   const status  = checkInTotalMinutes < PRESENT_THRESHOLD ? 'Present' : checkInTotalMinutes < LATE_THRESHOLD ? 'Late' : 'Very Late';
   const color   = checkInTotalMinutes < PRESENT_THRESHOLD ? 'green'   : checkInTotalMinutes < LATE_THRESHOLD ? 'orange' : 'red';
   return { status, color, message: `${status} (checked in at ${formatTime(checkInTime)})`, checkInTime: formatTime(checkInTime) };
@@ -71,7 +69,6 @@ const getCurrentTimeStatus = (todayAttendance) => {
     if (currentTotalMinutes < LATE_THRESHOLD) return { message: `You're late · expected 9:00 AM`, color: 'orange' };
     return { message: `Very late · expected check-in was 9:00 AM`, color: 'red' };
   }
-
   if (!todayAttendance?.approvedCheckOut) {
     const ci = new Date(todayAttendance.approvedCheckIn || todayAttendance.requestedCheckIn);
     const ciMins = ci.getHours() * 60 + ci.getMinutes();
@@ -84,8 +81,7 @@ const getCurrentTimeStatus = (todayAttendance) => {
       ? { message: `${status} · expected checkout ${hh}:${mm} (${remaining} min remaining)`, color: 'green' }
       : { message: `${status} · overdue checkout by ${Math.abs(remaining)} min`, color: 'yellow' };
   }
-
-  return { ...getTimeBasedStatus(todayAttendance.approvedCheckIn, todayAttendance.approvedCheckOut), };
+  return { ...getTimeBasedStatus(todayAttendance.approvedCheckIn, todayAttendance.approvedCheckOut) };
 };
 
 // ─── UI Primitives ────────────────────────────────────────────────────────────
@@ -109,6 +105,7 @@ const statusVariant = (status) => {
     case 'late':      return 'orange';
     case 'half-day':  return 'warning';
     case 'absent':    return 'danger';
+    case 'rejected':  return 'danger';
     default:          return 'default';
   }
 };
@@ -144,9 +141,7 @@ const CSVExportModal = ({ isOpen, onClose, onExport, loading }) => {
     endDate:   new Date().toISOString().split('T')[0],
   });
   const [includeAll, setIncludeAll] = useState(true);
-
   if (!isOpen) return null;
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
@@ -160,39 +155,31 @@ const CSVExportModal = ({ isOpen, onClose, onExport, loading }) => {
             <p className="text-xs text-slate-500">Download records as CSV</p>
           </div>
         </div>
-
         <div className="space-y-5">
           <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={includeAll} onChange={e => setIncludeAll(e.target.checked)}
-              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+            <input type="checkbox" checked={includeAll} onChange={e => setIncludeAll(e.target.checked)} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
             <span className="text-sm text-slate-700 font-medium">Export all records</span>
           </label>
-
           {!includeAll && (
             <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 rounded-xl">
-              {[['startDate','Start Date','','dateRange.endDate'],['endDate','End Date',dateRange.startDate,new Date().toISOString().split('T')[0]]].map(([field, label, min, max]) => (
+              {[['startDate','Start Date',''],[  'endDate','End Date',dateRange.startDate]].map(([field, label, min]) => (
                 <div key={field}>
                   <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
-                  <input type="date" value={dateRange[field]} min={min || undefined} max={max || undefined}
+                  <input type="date" value={dateRange[field]} min={min || undefined}
                     onChange={e => setDateRange(p => ({ ...p, [field]: e.target.value }))}
                     className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
               ))}
             </div>
           )}
-
           <div className="bg-slate-50 rounded-xl p-4 text-xs text-slate-500 space-y-1">
             <p className="font-medium text-slate-700 mb-2">How to download:</p>
             <p>1. Click <em>Export CSV</em> below</p>
             <p>2. Find the file in your downloads folder</p>
             <p>3. Open with Excel or Google Sheets</p>
           </div>
-
           <div className="flex gap-3 pt-1">
-            <button onClick={onClose} disabled={loading}
-              className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
-              Cancel
-            </button>
+            <button onClick={onClose} disabled={loading} className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">Cancel</button>
             <button onClick={() => onExport(dateRange, includeAll)} disabled={loading}
               className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
               {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <FaDownload className="text-xs" />}
@@ -207,13 +194,12 @@ const CSVExportModal = ({ isOpen, onClose, onExport, loading }) => {
 
 // ─── Record Details Modal ─────────────────────────────────────────────────────
 
-const RecordDetailsModal = ({ isOpen, onClose, record }) => {
+const RecordDetailsModal = ({ isOpen, onClose, record, userRole }) => {
   if (!isOpen || !record) return null;
-
   const times = getActualTime(record);
   const employee = record.employee || {};
   const timeStatus = getTimeBasedStatus(times.checkIn, times.checkOut);
-
+  const isAdmin = userRole === 'admin' || userRole === 'hr';
   const statusBarColors = {
     green:  'border-emerald-200 bg-emerald-50',
     orange: 'border-orange-200 bg-orange-50',
@@ -221,20 +207,15 @@ const RecordDetailsModal = ({ isOpen, onClose, record }) => {
     red:    'border-red-200 bg-red-50',
     gray:   'border-slate-200 bg-slate-50',
   };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b border-slate-100">
           <h3 className="text-lg font-semibold text-slate-900">Attendance Details</h3>
-          <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors">
-            <span className="text-xl leading-none">×</span>
-          </button>
+          <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors"><span className="text-xl leading-none">×</span></button>
         </div>
-
         <div className="p-5 space-y-5">
-          {/* Status Banner */}
           <div className={`flex items-center gap-3 p-4 rounded-xl border ${statusBarColors[timeStatus.color] || statusBarColors.gray}`}>
             <div className="w-8 h-8 rounded-lg bg-white/80 flex items-center justify-center flex-shrink-0">
               <FaClock className={timeStatus.color === 'green' ? 'text-emerald-500' : timeStatus.color === 'orange' ? 'text-orange-500' : 'text-red-500'} />
@@ -244,24 +225,10 @@ const RecordDetailsModal = ({ isOpen, onClose, record }) => {
               <p className="text-xs text-slate-500 mt-0.5">{timeStatus.message}</p>
             </div>
           </div>
-
-          {/* Employee + Summary */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
-              {
-                title: 'Employee Info', rows: [
-                  ['Name', employee.name], ['Employee ID', employee.employeeId],
-                  ['Department', employee.department], ['Email', employee.email],
-                ]
-              },
-              {
-                title: 'Attendance Summary', rows: [
-                  ['Date', formatDate(record.date, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })],
-                  ['Status', record.status],
-                  ['Total Hours', `${record.totalHours?.toFixed(2) || '0.00'} hrs`],
-                  ['Late Minutes', `${record.lateMinutes || 0} min`],
-                ]
-              }
+              { title: 'Employee Info', rows: [['Name', employee.name], ['Employee ID', employee.employeeId], ['Department', employee.department], ['Email', employee.email]] },
+              { title: 'Attendance Summary', rows: [['Date', formatDate(record.date, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })], ['Status', record.status], ['Total Hours', `${record.totalHours?.toFixed(2) || '0.00'} hrs`], ['Late Minutes', `${record.lateMinutes || 0} min`]] }
             ].map(section => (
               <div key={section.title} className="bg-slate-50 rounded-xl p-4 border border-slate-100">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">{section.title}</p>
@@ -276,8 +243,6 @@ const RecordDetailsModal = ({ isOpen, onClose, record }) => {
               </div>
             ))}
           </div>
-
-          {/* Check In / Check Out */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
               {
@@ -285,7 +250,7 @@ const RecordDetailsModal = ({ isOpen, onClose, record }) => {
                 rows: [
                   ['Actual Time', formatTime(record.approvedCheckIn)],
                   ['Requested', formatTime(record.requestedCheckIn)],
-                  ['Status', record.checkInRequest?.approved === false ? 'Pending' : 'Approved'],
+                  ['Status', record.checkInRequest?.rejected ? 'Rejected' : record.checkInRequest?.approved === false ? 'Pending' : record.approvedCheckIn ? 'Approved' : '—'],
                   ...(record.checkInRequest?.remarks ? [['Remarks', record.checkInRequest.remarks]] : []),
                 ]
               },
@@ -294,7 +259,7 @@ const RecordDetailsModal = ({ isOpen, onClose, record }) => {
                 rows: [
                   ['Actual Time', formatTime(record.approvedCheckOut)],
                   ['Requested', formatTime(record.requestedCheckOut)],
-                  ['Status', record.checkOutRequest?.approved === false ? 'Pending' : 'Approved'],
+                  ['Status', record.checkOutRequest?.rejected ? 'Rejected' : record.checkOutRequest?.approved === false ? 'Pending' : record.approvedCheckOut ? 'Approved' : '—'],
                   ...(record.checkOutRequest?.remarks ? [['Remarks', record.checkOutRequest.remarks]] : []),
                 ]
               }
@@ -312,8 +277,6 @@ const RecordDetailsModal = ({ isOpen, onClose, record }) => {
               </div>
             ))}
           </div>
-
-          {/* System info */}
           <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">System Information</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
@@ -323,11 +286,51 @@ const RecordDetailsModal = ({ isOpen, onClose, record }) => {
             </div>
           </div>
         </div>
+        <div className="px-5 pb-5 flex justify-end gap-3">
+          {isAdmin && (
+            <button 
+              onClick={() => {
+                if (window.confirm('Delete this record?')) {
+                  // You'll need to pass delete function as prop
+                  onClose();
+                }
+              }}
+              className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-medium transition-colors">
+              Delete Record
+            </button>
+          )}
+          <button onClick={onClose} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors">Close</button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
-        <div className="px-5 pb-5 flex justify-end">
-          <button onClick={onClose} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors">
-            Close
-          </button>
+// ─── Delete Confirmation Modal ────────────────────────────────────────────────
+
+const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, record, deleting }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+        <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center mb-4">
+          <FaTrash className="text-red-500" style={{ fontSize: 20 }} />
+        </div>
+        <h3 className="text-slate-900 font-semibold text-lg mb-1">Delete Attendance Record?</h3>
+        <p className="text-slate-500 text-sm mb-6">This action cannot be undone.</p>
+        {record && (
+          <div className="bg-slate-50 rounded-xl p-4 mb-6">
+            <p className="text-sm font-medium text-slate-800">{formatDate(record.date, { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+            <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
+              <div><span className="text-slate-500">Check In:</span> <span className="font-medium">{formatTime(getActualTime(record).checkIn)}</span></div>
+              <div><span className="text-slate-500">Check Out:</span> <span className="font-medium">{formatTime(getActualTime(record).checkOut)}</span></div>
+            </div>
+          </div>
+        )}
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">Cancel</button>
+          <button onClick={onConfirm} disabled={deleting} className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50">{deleting ? 'Deleting…' : 'Delete Record'}</button>
         </div>
       </div>
     </div>
@@ -349,10 +352,7 @@ class ErrorBoundary extends React.Component {
           </div>
           <h2 className="text-lg font-semibold text-slate-900 mb-2">Something went wrong</h2>
           <p className="text-slate-500 text-sm mb-5">Failed to load attendance data.</p>
-          <button onClick={() => window.location.reload()}
-            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors">
-            Reload Page
-          </button>
+          <button onClick={() => window.location.reload()} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors">Reload Page</button>
         </div>
       </div>
     );
@@ -363,6 +363,7 @@ class ErrorBoundary extends React.Component {
 // ─── Main Content ─────────────────────────────────────────────────────────────
 
 const EmployeeAttendanceContent = () => {
+  const [userRole, setUserRole] = useState(null);
   const [todayAttendance, setTodayAttendance] = useState(null);
   const [history, setHistory]                 = useState([]);
   const [loading, setLoading]                 = useState(false);
@@ -373,8 +374,25 @@ const EmployeeAttendanceContent = () => {
   const [selectedRecord, setSelectedRecord]   = useState(null);
   const [csvModalOpen, setCsvModalOpen]       = useState(false);
   const [exporting, setExporting]             = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [recordToDelete, setRecordToDelete]   = useState(null);
+  const [deleting, setDeleting]               = useState(false);
 
-  // ── All logic unchanged ─────────────────────────────────────────────────────
+  // Get user role on component mount
+  useEffect(() => {
+    const getUserRole = () => {
+      try {
+        const user = JSON.parse(localStorage.getItem('user'));
+        if (user && user.role) {
+          setUserRole(user.role);
+        }
+      } catch (error) {
+        console.error('Error getting user role:', error);
+      }
+    };
+    getUserRole();
+    loadAttendance();
+  }, []);
 
   const loadAttendance = async () => {
     try {
@@ -391,7 +409,9 @@ const EmployeeAttendanceContent = () => {
       setTodayAttendance(todayRecord);
 
       if (todayRecord) {
-        setPendingRequests({ checkIn: todayRecord.checkInRequest?.approved === false, checkOut: todayRecord.checkOutRequest?.approved === false });
+        const ciPending = todayRecord.checkInRequest?.approved === false && todayRecord.checkInRequest?.rejected !== true;
+        const coPending = todayRecord.checkOutRequest?.approved === false && todayRecord.checkOutRequest?.rejected !== true;
+        setPendingRequests({ checkIn: ciPending, checkOut: coPending });
       } else {
         setPendingRequests({ checkIn: false, checkOut: false });
       }
@@ -412,7 +432,9 @@ const EmployeeAttendanceContent = () => {
     const today = new Date().toDateString();
     const rec = history.find(r => r.date && new Date(r.date).toDateString() === today);
     if (rec?.approvedCheckIn) { alert('You have already checked in today!'); return; }
-    if (rec?.checkInRequest?.approved === false) { alert('Check-in request is pending approval'); return; }
+    if (rec?.checkInRequest?.approved === false && rec?.checkInRequest?.rejected !== true) {
+      alert('Check-in request is pending approval'); return;
+    }
     setLoading(true);
     try {
       await axiosInstance.post('/attendance/checkin');
@@ -426,6 +448,17 @@ const EmployeeAttendanceContent = () => {
   };
 
   const handleCheckOut = async () => {
+    const today = new Date().toDateString();
+    const rec = history.find(r => r.date && new Date(r.date).toDateString() === today);
+    if (!rec?.approvedCheckIn) {
+      alert('Your check-in must be approved first before checking out.'); return;
+    }
+    if (rec?.approvedCheckOut) {
+      alert('You have already checked out today!'); return;
+    }
+    if (rec?.checkOutRequest?.approved === false && rec?.checkOutRequest?.rejected !== true) {
+      alert('Check-out request is already pending approval'); return;
+    }
     setLoading(true);
     try {
       await axiosInstance.post('/attendance/checkout');
@@ -440,10 +473,9 @@ const EmployeeAttendanceContent = () => {
   const handleExportCSV = async (dateRange, includeAll) => {
     setExporting(true);
     try {
-      let url = '/attendance/export/my-csv';
       const params = new URLSearchParams();
       if (!includeAll) { params.append('startDate', dateRange.startDate); params.append('endDate', dateRange.endDate); }
-      const fullUrl = url + (params.toString() ? `?${params.toString()}` : '');
+      const fullUrl = '/attendance/export/my-csv' + (params.toString() ? `?${params.toString()}` : '');
       const response = await axiosInstance.get(fullUrl, { responseType: 'blob', headers: { Accept: 'text/csv' } });
       const blob = new Blob([response.data], { type: 'text/csv' });
       const downloadUrl = window.URL.createObjectURL(blob);
@@ -459,7 +491,40 @@ const EmployeeAttendanceContent = () => {
     } finally { setExporting(false); }
   };
 
+  const handleDeleteRecord = async () => {
+    // Only allow if admin/HR
+    if (userRole !== 'admin' && userRole !== 'hr') {
+      alert('Only administrators can delete attendance records');
+      return;
+    }
+    
+    if (!recordToDelete) return;
+    setDeleting(true);
+    try {
+      await axiosInstance.delete(`/attendance/${recordToDelete._id}`);
+      setHistory(prev => prev.filter(r => r._id !== recordToDelete._id));
+      if (recordToDelete.date && new Date(recordToDelete.date).toDateString() === new Date().toDateString()) {
+        setTodayAttendance(null);
+        setPendingRequests({ checkIn: false, checkOut: false });
+      }
+      setDeleteModalOpen(false);
+      setRecordToDelete(null);
+      alert('Attendance record deleted successfully');
+    } catch (error) {
+      alert(error.response?.data?.message || 'Failed to delete record');
+    } finally { setDeleting(false); }
+  };
+
   const openDetailsModal = (record) => { setSelectedRecord(record); setDetailsModalOpen(true); };
+  const openDeleteModal = (record) => { 
+    // Only allow if admin/HR
+    if (userRole !== 'admin' && userRole !== 'hr') {
+      alert('Only administrators can delete attendance records');
+      return;
+    }
+    setRecordToDelete(record); 
+    setDeleteModalOpen(true); 
+  };
 
   const getTodayDisplayTimes = () => {
     if (!todayAttendance) return { checkIn: '--:--', checkOut: '--:--' };
@@ -470,8 +535,8 @@ const EmployeeAttendanceContent = () => {
   const getTodayStatus = () => {
     if (!todayAttendance) return { label: 'Not checked in', variant: 'default' };
     const { approvedCheckIn, approvedCheckOut, status, checkInRequest, checkOutRequest } = todayAttendance;
-    if (checkInRequest?.approved === false)  return { label: 'Check-in pending', variant: 'warning' };
-    if (checkOutRequest?.approved === false) return { label: 'Check-out pending', variant: 'warning' };
+    if (checkInRequest?.approved === false && checkInRequest?.rejected !== true)  return { label: 'Check-in pending', variant: 'warning' };
+    if (checkOutRequest?.approved === false && checkOutRequest?.rejected !== true) return { label: 'Check-out pending', variant: 'warning' };
     if (approvedCheckIn && approvedCheckOut) return { label: 'Complete', variant: 'success' };
     if (approvedCheckIn) return { label: 'Checked in', variant: 'info' };
     switch (status) {
@@ -479,16 +544,19 @@ const EmployeeAttendanceContent = () => {
       case 'late':     return { label: 'Late',     variant: 'orange' };
       case 'half-day': return { label: 'Half Day', variant: 'warning' };
       case 'absent':   return { label: 'Absent',   variant: 'danger' };
+      case 'rejected': return { label: 'Rejected', variant: 'danger' };
       case 'pending':  return { label: 'Pending',  variant: 'warning' };
       default:         return { label: 'Not checked in', variant: 'default' };
     }
   };
 
-  const canCheckIn  = !todayAttendance?.approvedCheckIn  && !pendingRequests.checkIn;
-  const canCheckOut = todayAttendance?.approvedCheckIn && !todayAttendance?.approvedCheckOut && !pendingRequests.checkOut;
-  const currentTimeStatus = getCurrentTimeStatus(todayAttendance);
+  const canCheckIn  = !todayAttendance?.approvedCheckIn && !pendingRequests.checkIn;
+  const canCheckOut = !!(todayAttendance?.approvedCheckIn) &&
+    !todayAttendance?.approvedCheckOut &&
+    !pendingRequests.checkOut;
 
-  useEffect(() => { loadAttendance(); }, []);
+  const currentTimeStatus = getCurrentTimeStatus(todayAttendance);
+  const isAdmin = userRole === 'admin' || userRole === 'hr';
 
   if (loading && history.length === 0) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -564,11 +632,26 @@ const EmployeeAttendanceContent = () => {
           </div>
         )}
 
+        {/* Rejected request alert */}
+        {(todayAttendance?.checkInRequest?.rejected === true || todayAttendance?.checkOutRequest?.rejected === true) && (
+          <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+            <FaTimesCircle className="text-red-500 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-red-800">Request Rejected</p>
+              <p className="text-xs text-red-600 mt-0.5">
+                {todayAttendance?.checkInRequest?.rejected && 'Your check-in request was rejected. '}
+                {todayAttendance?.checkOutRequest?.rejected && 'Your check-out request was rejected. '}
+                You can submit a new request below.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* ── KPI Cards ── */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <KpiCard icon={FaCalendarDay} label="Total Records"    value={stats.totalDays}                        sub="All time" iconBg="bg-blue-500" />
-          <KpiCard icon={FaUserClock}   label="Present Days"     value={stats.presentDays}                      sub={`${stats.totalDays > 0 ? ((stats.presentDays / stats.totalDays) * 100).toFixed(0) : 0}% attendance`} iconBg="bg-emerald-500" />
-          <KpiCard icon={FaClock}       label="Avg. Hours / Day" value={`${stats.averageHours.toFixed(1)}h`}    sub="Standard: 8h" iconBg="bg-violet-500" />
+          <KpiCard icon={FaCalendarDay} label="Total Records"    value={stats.totalDays}                     sub="All time"        iconBg="bg-blue-500" />
+          <KpiCard icon={FaUserClock}   label="Present Days"     value={stats.presentDays}                   sub={`${stats.totalDays > 0 ? ((stats.presentDays / stats.totalDays) * 100).toFixed(0) : 0}% attendance`} iconBg="bg-emerald-500" />
+          <KpiCard icon={FaClock}       label="Avg. Hours / Day" value={`${stats.averageHours.toFixed(1)}h`} sub="Standard: 8h"    iconBg="bg-violet-500" />
         </div>
 
         {/* ── Today Card ── */}
@@ -631,7 +714,6 @@ const EmployeeAttendanceContent = () => {
 
         {/* ── Attendance History ── */}
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-          {/* Table Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
@@ -668,7 +750,7 @@ const EmployeeAttendanceContent = () => {
               <table className="w-full">
                 <thead>
                   <tr className="bg-slate-50/60 border-b border-slate-100">
-                    {['Date','Day','Check In','Check Out','Hours','Status','Time Status',''].map(h => (
+                    {['Date','Day','Check In','Check Out','Hours','Status','Time Status','Actions'].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -676,7 +758,8 @@ const EmployeeAttendanceContent = () => {
                 <tbody className="divide-y divide-slate-50">
                   {history.map((record, index) => {
                     const times = getActualTime(record);
-                    const isPending = record.checkInRequest?.approved === false || record.checkOutRequest?.approved === false;
+                    const isPending = (record.checkInRequest?.approved === false && record.checkInRequest?.rejected !== true) ||
+                      (record.checkOutRequest?.approved === false && record.checkOutRequest?.rejected !== true);
                     const timeStatus = getTimeBasedStatus(times.checkIn, times.checkOut);
                     return (
                       <tr key={record._id || index} className={`group hover:bg-slate-50 transition-colors ${isPending ? 'bg-amber-50/30' : ''}`}>
@@ -684,18 +767,20 @@ const EmployeeAttendanceContent = () => {
                         <td className="px-4 py-3 text-xs text-slate-500">{formatDate(record.date, { weekday: 'short' })}</td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <span className="text-sm text-slate-800">{times.checkIn ? formatTime(times.checkIn) : '—'}</span>
-                          {record.checkInRequest?.approved === false && <span className="ml-1.5"><Badge variant="warning">Pending</Badge></span>}
+                          {record.checkInRequest?.approved === false && record.checkInRequest?.rejected !== true && <span className="ml-1.5"><Badge variant="warning">Pending</Badge></span>}
+                          {record.checkInRequest?.rejected === true && <span className="ml-1.5"><Badge variant="danger">Rejected</Badge></span>}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <span className="text-sm text-slate-800">{times.checkOut ? formatTime(times.checkOut) : '—'}</span>
-                          {record.checkOutRequest?.approved === false && <span className="ml-1.5"><Badge variant="warning">Pending</Badge></span>}
+                          {record.checkOutRequest?.approved === false && record.checkOutRequest?.rejected !== true && <span className="ml-1.5"><Badge variant="warning">Pending</Badge></span>}
+                          {record.checkOutRequest?.rejected === true && <span className="ml-1.5"><Badge variant="danger">Rejected</Badge></span>}
                         </td>
                         <td className="px-4 py-3">
                           <Badge variant={record.totalHours >= 8 ? 'success' : 'default'}>{record.totalHours?.toFixed(1) || '0.0'}h</Badge>
                         </td>
                         <td className="px-4 py-3">
                           <Badge variant={statusVariant(record.status)}>
-                            {record.status === 'present' ? 'Present' : record.status === 'late' ? 'Late' : record.status === 'half-day' ? 'Half Day' : record.status === 'absent' ? 'Absent' : 'Pending'}
+                            {record.status === 'present' ? 'Present' : record.status === 'late' ? 'Late' : record.status === 'half-day' ? 'Half Day' : record.status === 'absent' ? 'Absent' : record.status === 'rejected' ? 'Rejected' : 'Pending'}
                           </Badge>
                         </td>
                         <td className="px-4 py-3">
@@ -708,11 +793,23 @@ const EmployeeAttendanceContent = () => {
                             </div>
                           ) : <span className="text-xs text-slate-300">—</span>}
                         </td>
+                        {/* Actions Column - Delete button only for admins */}
                         <td className="px-4 py-3">
-                          <button onClick={() => openDetailsModal(record)}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100">
-                            <FaEye style={{ fontSize: 14 }} />
-                          </button>
+                          <div className="flex gap-2">
+                            <button onClick={() => openDetailsModal(record)}
+                              className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="View Details">
+                              <FaEye style={{ fontSize: 14 }} />
+                            </button>
+                            {/* Delete button - ONLY for admin/HR */}
+                            {isAdmin && (
+                              <button onClick={() => openDeleteModal(record)}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Delete Record">
+                                <FaTrash style={{ fontSize: 14 }} />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -726,7 +823,22 @@ const EmployeeAttendanceContent = () => {
 
       {/* Modals */}
       <CSVExportModal isOpen={csvModalOpen} onClose={() => setCsvModalOpen(false)} onExport={handleExportCSV} loading={exporting} />
-      <RecordDetailsModal isOpen={detailsModalOpen} onClose={() => { setDetailsModalOpen(false); setSelectedRecord(null); }} record={selectedRecord} />
+      <RecordDetailsModal 
+        isOpen={detailsModalOpen} 
+        onClose={() => { setDetailsModalOpen(false); setSelectedRecord(null); }} 
+        record={selectedRecord}
+        userRole={userRole}
+      />
+      {/* Delete modal - only shown when there's a record to delete */}
+      {deleteModalOpen && (
+        <DeleteConfirmationModal
+          isOpen={deleteModalOpen}
+          onClose={() => { setDeleteModalOpen(false); setRecordToDelete(null); }}
+          onConfirm={handleDeleteRecord}
+          record={recordToDelete}
+          deleting={deleting}
+        />
+      )}
     </div>
   );
 };

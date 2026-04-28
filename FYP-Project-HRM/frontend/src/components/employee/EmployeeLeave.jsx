@@ -254,11 +254,12 @@ const LeaveRequestCard = ({ request, onEdit, onCancel, onViewDetails }) => {
   );
 };
 
-// Leave Details Modal
-const LeaveDetailsModal = ({ isOpen, leaveId, onClose, onSuccess }) => {
+// Leave Details Modal (UPDATED with Delete Button)
+const LeaveDetailsModal = ({ isOpen, leaveId, onClose, onSuccess, onDelete }) => {
   const [loading, setLoading] = useState(false);
   const [leave, setLeave] = useState(null);
   const [error, setError] = useState('');
+  const [deleting, setDeleting] = useState(false);
   const modalRef = useRef(null);
 
   const fetchLeaveDetails = useCallback(async () => {
@@ -312,10 +313,35 @@ const LeaveDetailsModal = ({ isOpen, leaveId, onClose, onSuccess }) => {
     };
   }, [isOpen, onClose]);
 
+  const handleDelete = async () => {
+    if (!leave || leave.status !== 'pending') {
+      alert('Only pending leave requests can be deleted');
+      return;
+    }
+    
+    const confirmDelete = window.confirm('Are you sure you want to delete this leave request? This action cannot be undone.');
+    if (!confirmDelete) return;
+    
+    setDeleting(true);
+    try {
+      await api.delete(`/${leaveId}`);
+      alert('Leave request deleted successfully!');
+      onClose();
+      if (onDelete) onDelete();
+      if (onSuccess) onSuccess();
+    } catch (error) {
+      console.error('❌ Error deleting leave:', error);
+      alert(handleApiError(error, 'Failed to delete leave request'));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   const typeInfo = leave ? MONTHLY_LEAVE_CONFIG.leaveTypes.find(t => t.id === leave.type) : null;
   const statusConfig = leave ? STATUS_CONFIG[leave.status] : STATUS_CONFIG.pending;
+  const isPending = leave?.status === 'pending';
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -374,6 +400,28 @@ const LeaveDetailsModal = ({ isOpen, leaveId, onClose, onSuccess }) => {
                 <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium py-2.5 px-4 rounded-lg transition-colors">
                   Close
                 </button>
+                {isPending && (
+                  <button 
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {deleting ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Deleting...
+                      </>
+                    ) : (
+                      <>
+                        <FaTrash className="text-xs" />
+                        Delete Request
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
           ) : null}
@@ -865,6 +913,10 @@ const EmployeeLeave = () => {
     setShowLeaveDetails(true);
   }, []);
 
+  const handleDeleteFromModal = useCallback(() => {
+    fetchAllData();
+  }, [fetchAllData]);
+
   const handleCloseForm = useCallback(() => {
     setShowLeaveForm(false);
     setEditingLeave(null);
@@ -1015,12 +1067,13 @@ const EmployeeLeave = () => {
         monthlyBalance={monthlyBalance}
       />
 
-      {/* Leave Details Modal */}
+      {/* Leave Details Modal with Delete Button */}
       <LeaveDetailsModal
         isOpen={showLeaveDetails}
         leaveId={selectedLeaveId}
         onClose={handleCloseDetails}
         onSuccess={fetchAllData}
+        onDelete={handleDeleteFromModal}
       />
     </div>
   );

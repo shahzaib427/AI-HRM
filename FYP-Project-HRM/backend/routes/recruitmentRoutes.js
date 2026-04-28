@@ -17,7 +17,9 @@ const {
   addCandidateNote,
   uploadResume,
   getRecruitmentAnalytics,
-  getDashboardStats
+  getDashboardStats,
+  checkCandidateResume,
+  getCandidateResume
 } = require('../controllers/recruitmentController');
 const { protect, authorize } = require('../utils/authMiddleware');
 const upload = require('../utils/uploadMiddleware');
@@ -38,7 +40,7 @@ router.put('/jobs/:id/close', protect, authorize('hr', 'admin'), closeJob);
 // Candidate routes
 router.route('/candidates')
   .get(protect, authorize('hr', 'admin'), getCandidates)
-  .post(protect, authorize('hr', 'admin'), addCandidate);
+  .post(protect, authorize('hr', 'admin'), upload.single('resume'), addCandidate);
 
 router.route('/candidates/:id')
   .get(protect, authorize('hr', 'admin'), getCandidate);
@@ -48,28 +50,14 @@ router.post('/candidates/:id/interview', protect, authorize('hr', 'admin'), sche
 router.post('/candidates/:id/feedback', protect, authorize('hr', 'admin'), addInterviewFeedback);
 router.post('/candidates/:id/notes', protect, authorize('hr', 'admin'), addCandidateNote);
 router.post('/candidates/:id/resume', protect, authorize('hr', 'admin'), upload.single('resume'), uploadResume);
+router.route('/candidates/:id/resume')
+  .get(protect, authorize('hr', 'admin'), getCandidateResume)
+  .head(protect, authorize('hr', 'admin'), checkCandidateResume);
 
 // Analytics routes
 router.get('/analytics', protect, authorize('hr', 'admin'), getRecruitmentAnalytics);
 router.get('/dashboard', protect, authorize('hr', 'admin'), getDashboardStats);
 // Add this to your recruitment routes or create new public routes
-router.get('/public/jobs', async (req, res) => {
-  try {
-    const jobs = await Job.find({ status: 'Open' })
-      .select('title department jobType location description salaryRange experienceLevel createdAt deadline applicantsCount')
-      .sort('-createdAt');
-    
-    res.json({
-      success: true,
-      count: jobs.length,
-      data: jobs
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Server Error'
-    });
-  }
-});
+
 
 module.exports = router;

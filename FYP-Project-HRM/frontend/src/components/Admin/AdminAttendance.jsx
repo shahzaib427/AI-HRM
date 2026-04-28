@@ -37,8 +37,75 @@ const Badge = ({ children, variant = 'default' }) => {
   return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${v[variant]}`}>{children}</span>;
 };
 
+// ─── Reject Modal ──────────────────────────────────────────────────────────────
+const RejectModal = ({ isOpen, onClose, onConfirm, request, type, loading }) => {
+  const [reason, setReason] = useState('');
+
+  useEffect(() => {
+    if (isOpen) setReason('');
+  }, [isOpen]);
+
+  if (!isOpen || !request) return null;
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
+              <FiXCircle className="text-red-600 w-4 h-4" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900">
+              Reject {type === 'checkin' ? 'Check-in' : 'Check-out'} Request
+            </h3>
+          </div>
+          <p className="text-sm text-gray-500 mt-1 ml-10">
+            {request.employee?.name} &bull;{' '}
+            {request.date ? format(new Date(request.date), 'MMM dd, yyyy') : 'N/A'}
+          </p>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Reason <span className="text-gray-400 font-normal">(optional)</span>
+            </label>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows="3"
+              placeholder="e.g. Insufficient information, time mismatch…"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-400 resize-none"
+              autoFocus
+            />
+          </div>
+        </div>
+        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onConfirm(reason.trim())}
+            disabled={loading}
+            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+          >
+            {loading ? (
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <FiXCircle className="w-4 h-4" />
+            )}
+            {loading ? 'Rejecting…' : 'Reject Request'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const AdminAttendance = () => {
-  // States
   const [attendances, setAttendances] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
   const [filters, setFilters] = useState({ search: '', status: '', dateFrom: '', dateTo: '' });
@@ -56,14 +123,19 @@ const AdminAttendance = () => {
   const [showActionsDropdown, setShowActionsDropdown] = useState(null);
   const [showReportModal, setShowReportModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
-  const [sendingReport, setSendingReport] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState(null);
+
+  // Reject modal state
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectRequest, setRejectRequest] = useState(null);
+  const [rejectType, setRejectType] = useState('');
+  const [rejecting, setRejecting] = useState(false);
+
   const csvLinkRef = useRef(null);
-  const tableContainerRef = useRef(null);
   const actionsRefs = useRef({});
 
-  // 🔒 Safe date formatting utility
+  // 🔒 Safe date formatting
   const safeDateFormat = (dateValue, formatStr = 'hh:mm a') => {
     if (!dateValue) return '-';
     try {
@@ -93,25 +165,20 @@ const AdminAttendance = () => {
       if (minutes < 60) return `${minutes}m ago`;
       if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`;
       return `${Math.floor(minutes / 1440)}d ago`;
-    } catch {
-      return 'Unknown';
-    }
+    } catch { return 'Unknown'; }
   };
 
-  // 📊 Fetch attendance data with pagination
+  // Fetch attendance
   const fetchAttendance = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      
       const params = new URLSearchParams({
         ...filters,
         page: pagination.page,
         limit: pagination.limit
       }).toString();
-
       const { data } = await axiosInstance.get(`/attendance?${params}`);
-      
       if (data.success) {
         setAttendances(data.data || []);
         setPagination(data.pagination || { page: 1, limit: 50, total: 0, pages: 0 });
@@ -122,20 +189,28 @@ const AdminAttendance = () => {
       }
     } catch (error) {
       setError(error.response?.data?.message || 'Failed to load attendance data');
-      console.error('Attendance fetch error:', error);
     } finally {
       setLoading(false);
     }
   }, [filters, pagination.page, pagination.limit]);
 
-  // 🔄 Fetch pending requests
+  // Fetch pending requests
+  // ✅ FIX: Filter out records where the request was rejected (rejected: true)
+  //    The backend sets approved:true + rejected:true on rejection, so
+  //    we must exclude those from the pending list.
   const fetchPendingRequests = async () => {
     try {
       setLoadingRequests(true);
       const { data } = await axiosInstance.get('/attendance/pending-requests');
       if (data.success) {
-        setPendingRequests(data.data || []);
-        setStats(prev => ({ ...prev, pending: data.count || 0 }));
+        // Filter: only keep records that have a genuinely pending (approved===false, rejected!==true) request
+        const truly_pending = (data.data || []).filter(r => {
+          const ciPending = r.checkInRequest?.approved === false && r.checkInRequest?.rejected !== true;
+          const coPending = r.checkOutRequest?.approved === false && r.checkOutRequest?.rejected !== true;
+          return ciPending || coPending;
+        });
+        setPendingRequests(truly_pending);
+        setStats(prev => ({ ...prev, pending: truly_pending.length }));
       }
     } catch (error) {
       console.error('Pending requests error:', error);
@@ -144,34 +219,23 @@ const AdminAttendance = () => {
     }
   };
 
-  // 📈 Calculate statistics
   const calculateStats = (records) => {
     const total = records.length;
     const present = records.filter(r => r.status === 'present' || r.status === 'late').length;
     const late = records.filter(r => r.lateMinutes > 0).length;
     const totalHours = records.reduce((sum, r) => sum + (parseFloat(r.totalHours) || 0), 0);
     const avgHours = total > 0 ? (totalHours / total).toFixed(1) : 0;
-
-    setStats({
-      total,
-      pending: pendingRequests.length,
-      present,
-      late,
-      avgHours
-    });
+    setStats(prev => ({ ...prev, total, present, late, avgHours }));
   };
 
-  // 📄 Prepare CSV data for export
   const prepareCSVData = (data) => {
     const formattedData = data.map(record => ({
       'Employee Name': record.employee?.name || 'N/A',
       'Employee ID': record.employee?.employeeId || 'N/A',
       'Department': record.employee?.department || 'N/A',
-      'Date': formatDate(record.date, { year: 'numeric', month: 'short', day: 'numeric' }),
-      'Check-in Time': record.approvedCheckIn ? safeDateFormat(record.approvedCheckIn) : 
-                       (record.checkInRequest?.approved === false ? 'Pending' : 'Not Checked In'),
-      'Check-out Time': record.approvedCheckOut ? safeDateFormat(record.approvedCheckOut) :
-                        (record.checkOutRequest?.approved === false ? 'Pending' : 'Not Checked Out'),
+      'Date': formatDate(record.date),
+      'Check-in Time': record.approvedCheckIn ? safeDateFormat(record.approvedCheckIn) : 'Not Checked In',
+      'Check-out Time': record.approvedCheckOut ? safeDateFormat(record.approvedCheckOut) : 'Not Checked Out',
       'Total Hours': record.totalHours?.toFixed(2) || '0.00',
       'Status': record.status ? record.status.charAt(0).toUpperCase() + record.status.slice(1) : 'N/A',
       'Late Minutes': record.lateMinutes || 0
@@ -179,36 +243,34 @@ const AdminAttendance = () => {
     setCsvData(formattedData);
   };
 
-  // ✅ Handle approve request
+  // ✅ FIX: getPendingType — also exclude rejected requests
+  const getPendingType = (request) => {
+    if (request.checkInRequest?.approved === false && request.checkInRequest?.rejected !== true) return 'checkin';
+    if (request.checkOutRequest?.approved === false && request.checkOutRequest?.rejected !== true) return 'checkout';
+    return null;
+  };
+
+  // Approve request
   const handleApproveRequest = async () => {
     try {
       const { type, actualTime, remarks } = approvalData;
-      
       let payload = { remarks: remarks || '' };
-      
       if (actualTime) {
-        if (actualTime.includes('T')) {
-          payload.actualTime = actualTime;
-        } else {
+        payload.actualTime = actualTime.includes('T') ? actualTime : (() => {
           const [hours, minutes] = actualTime.split(':');
           const date = new Date();
           date.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
-          payload.actualTime = date.toISOString();
-        }
+          return date.toISOString();
+        })();
       }
-
-      const endpoint = type === 'checkin' ? 
-        `/attendance/approve-checkin/${selectedRequest._id}` : 
-        `/attendance/approve-checkout/${selectedRequest._id}`;
-      
+      const endpoint = type === 'checkin'
+        ? `/attendance/approve-checkin/${selectedRequest._id}`
+        : `/attendance/approve-checkout/${selectedRequest._id}`;
       const { data } = await axiosInstance.put(endpoint, payload);
-
       if (data && data.success) {
-        alert(`✅ ${type === 'checkin' ? 'Check-in' : 'Check-out'} approved successfully!`);
         setShowApprovalModal(false);
         setSelectedRequest(null);
         setApprovalData({ type: '', actualTime: '', remarks: '' });
-        
         fetchAttendance();
         fetchPendingRequests();
       } else {
@@ -219,27 +281,44 @@ const AdminAttendance = () => {
     }
   };
 
-  // ❌ Handle reject request
-  const handleRejectRequest = async (request, type) => {
-    const reason = prompt(`Enter reason for rejecting ${type} request:`);
-    if (!reason) return;
+  // Reject modal helpers
+  const openRejectModal = (request, type) => {
+    setRejectRequest(request);
+    setRejectType(type);
+    setShowRejectModal(true);
+  };
 
+  const closeRejectModal = () => {
+    setShowRejectModal(false);
+    setRejectRequest(null);
+    setRejectType('');
+  };
+
+  // ✅ FIX: handleRejectRequest — after success, refetch both lists so
+  //    the rejected record disappears from the pending queue immediately.
+  const handleRejectRequest = async (reason) => {
+    if (!rejectRequest || !rejectType) return;
+    setRejecting(true);
     try {
-      const { data } = await axiosInstance.put(`/attendance/reject/${request._id}`, { type, reason });
-      
-      if (data && data.success) {
-        alert(`❌ ${type === 'checkin' ? 'Check-in' : 'Check-out'} request rejected`);
-        fetchPendingRequests();
-        fetchAttendance();
+      const { data } = await axiosInstance.put(
+        `/attendance/reject/${rejectRequest._id}`,
+        { type: rejectType, reason: reason || 'Rejected by admin' }
+      );
+      if (data?.success) {
+        closeRejectModal();
+        // Refetch both so UI updates correctly
+        await Promise.all([fetchPendingRequests(), fetchAttendance()]);
       } else {
         alert(data?.message || 'Rejection failed');
       }
     } catch (error) {
       alert(error.response?.data?.message || 'Rejection failed');
+    } finally {
+      setRejecting(false);
     }
   };
 
-  // 🗑️ Handle delete record with confirmation
+  // Delete
   const handleDeleteClick = (record) => {
     setRecordToDelete(record);
     setDeleteConfirm(true);
@@ -247,11 +326,9 @@ const AdminAttendance = () => {
 
   const confirmDelete = async () => {
     if (!recordToDelete) return;
-    
     try {
       const { data } = await axiosInstance.delete(`/attendance/${recordToDelete._id}`);
       if (data.success) {
-        alert('✅ Record deleted successfully');
         fetchAttendance();
       } else {
         alert(data.message || 'Delete failed');
@@ -264,11 +341,10 @@ const AdminAttendance = () => {
     }
   };
 
-  // ✏️ Handle update record
+  // Update
   const handleUpdate = async (e) => {
     e.preventDefault();
     if (!editing) return;
-
     try {
       const updatePayload = {
         status: editing.status,
@@ -276,14 +352,10 @@ const AdminAttendance = () => {
         remarks: editing.remarks || '',
         totalHours: editing.totalHours || 0
       };
-
       if (editing.approvedCheckIn) updatePayload.approvedCheckIn = editing.approvedCheckIn;
       if (editing.approvedCheckOut) updatePayload.approvedCheckOut = editing.approvedCheckOut;
-
       const { data } = await axiosInstance.put(`/attendance/${editing._id}`, updatePayload);
-      
       if (data.success) {
-        alert('✅ Record updated successfully');
         setEditing(null);
         fetchAttendance();
       } else {
@@ -294,26 +366,24 @@ const AdminAttendance = () => {
     }
   };
 
-  // Close dropdown when clicking outside
+  // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (showActionsDropdown && 
-          !actionsRefs.current[showActionsDropdown]?.contains(event.target)) {
+      if (showActionsDropdown && !actionsRefs.current[showActionsDropdown]?.contains(event.target)) {
         setShowActionsDropdown(null);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showActionsDropdown]);
 
-  // 🎨 Status badge color mapping
   const getStatusColor = (status) => {
     const colors = {
       present: 'bg-green-100 text-green-800 border-green-200',
       late: 'bg-yellow-100 text-yellow-800 border-yellow-200',
       absent: 'bg-red-100 text-red-800 border-red-200',
       pending: 'bg-gray-100 text-gray-800 border-gray-200',
+      rejected: 'bg-red-50 text-red-700 border-red-100',
       checkout_pending: 'bg-gray-100 text-gray-800 border-gray-200',
       'Not Checked In': 'bg-gray-100 text-gray-800 border-gray-200',
       'half-day': 'bg-gray-100 text-gray-800 border-gray-200'
@@ -321,11 +391,10 @@ const AdminAttendance = () => {
     return colors[status] || 'bg-gray-100 text-gray-800 border-gray-200';
   };
 
-  // 📅 Set default date filters
+  // Default date filters
   useEffect(() => {
     const today = new Date();
     const sevenDaysAgo = addDays(today, -7);
-    
     setFilters(prev => ({
       ...prev,
       dateFrom: format(sevenDaysAgo, 'yyyy-MM-dd'),
@@ -333,25 +402,16 @@ const AdminAttendance = () => {
     }));
   }, []);
 
-  // 🔄 Fetch data when filters or pagination changes
   useEffect(() => {
-    const debounceTimer = setTimeout(() => {
-      fetchAttendance();
-    }, 300);
-
+    const debounceTimer = setTimeout(() => { fetchAttendance(); }, 300);
     return () => clearTimeout(debounceTimer);
   }, [filters, pagination.page, fetchAttendance]);
 
-  // 🔄 Fetch pending requests on mount
-  useEffect(() => {
-    fetchPendingRequests();
-  }, []);
+  useEffect(() => { fetchPendingRequests(); }, []);
 
-  // Format date for datetime-local input
   const formatDateTimeLocal = (dateValue) => {
     if (!dateValue) return '';
-    const date = new Date(dateValue);
-    return date.toISOString().slice(0, 16);
+    return new Date(dateValue).toISOString().slice(0, 16);
   };
 
   return (
@@ -365,9 +425,7 @@ const AdminAttendance = () => {
                 <FiUsers className="text-indigo-500 text-sm" />
                 Attendance Management
               </h1>
-              <p className="text-sm text-gray-500 mt-1">
-                Monitor and manage employee attendance records
-              </p>
+              <p className="text-sm text-gray-500 mt-1">Monitor and manage employee attendance records</p>
             </div>
             <button
               onClick={fetchAttendance}
@@ -382,7 +440,7 @@ const AdminAttendance = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-        {/* Statistics Cards with Colored Icons */}
+        {/* Statistics Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <KpiCard icon={FiUser} label="Total Records" value={stats.total} sub="All time" iconBg="bg-indigo-500" />
           <KpiCard icon={FiAlertCircle} label="Pending Requests" value={stats.pending} sub="Awaiting approval" iconBg="bg-amber-500" />
@@ -442,11 +500,13 @@ const AdminAttendance = () => {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {pendingRequests.map((request) => {
-                      const isCheckin = request.checkInRequest?.approved === false;
-                      const requestedTime = isCheckin 
-                        ? request.checkInRequest?.requestedAt 
+                      const pendingType = getPendingType(request);
+                      if (!pendingType) return null;
+
+                      const requestedTime = pendingType === 'checkin'
+                        ? request.checkInRequest?.requestedAt
                         : request.checkOutRequest?.requestedAt;
-                      
+
                       return (
                         <tr key={request._id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-4 py-3">
@@ -454,8 +514,8 @@ const AdminAttendance = () => {
                             <div className="text-xs text-gray-500">{request.employee?.employeeId}</div>
                           </td>
                           <td className="px-4 py-3">
-                            <Badge variant={isCheckin ? 'info' : 'default'}>
-                              {isCheckin ? 'Check-in' : 'Check-out'}
+                            <Badge variant={pendingType === 'checkin' ? 'info' : 'default'}>
+                              {pendingType === 'checkin' ? 'Check-in' : 'Check-out'}
                             </Badge>
                           </td>
                           <td className="px-4 py-3">
@@ -470,11 +530,7 @@ const AdminAttendance = () => {
                               <button
                                 onClick={() => {
                                   setSelectedRequest(request);
-                                  setApprovalData({ 
-                                    type: isCheckin ? 'checkin' : 'checkout', 
-                                    actualTime: '', 
-                                    remarks: '' 
-                                  });
+                                  setApprovalData({ type: pendingType, actualTime: '', remarks: '' });
                                   setShowApprovalModal(true);
                                 }}
                                 className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
@@ -483,7 +539,7 @@ const AdminAttendance = () => {
                                 Approve
                               </button>
                               <button
-                                onClick={() => handleRejectRequest(request, isCheckin ? 'checkin' : 'checkout')}
+                                onClick={() => openRejectModal(request, pendingType)}
                                 className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
                               >
                                 <FiXCircle className="w-3.5 h-3.5" />
@@ -514,7 +570,6 @@ const AdminAttendance = () => {
                 className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
               />
             </div>
-            
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setShowFilters(!showFilters)}
@@ -523,14 +578,12 @@ const AdminAttendance = () => {
                 <FiFilter className="w-4 h-4" />
                 Filters
               </button>
-              
               <CSVLink
                 ref={csvLinkRef}
                 data={csvData}
                 filename={`attendance-export-${format(new Date(), 'yyyy-MM-dd')}.csv`}
                 className="hidden"
               />
-              
               <button
                 onClick={() => csvLinkRef.current?.link.click()}
                 disabled={csvData.length === 0}
@@ -542,7 +595,6 @@ const AdminAttendance = () => {
             </div>
           </div>
 
-          {/* Advanced Filters */}
           {showFilters && (
             <div className="border-t border-gray-100 pt-5 mt-5">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -559,9 +611,9 @@ const AdminAttendance = () => {
                     <option value="absent">Absent</option>
                     <option value="pending">Pending</option>
                     <option value="half-day">Half Day</option>
+                    <option value="rejected">Rejected</option>
                   </select>
                 </div>
-                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
                   <input
@@ -571,7 +623,6 @@ const AdminAttendance = () => {
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                   />
                 </div>
-                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
                   <input
@@ -581,18 +632,12 @@ const AdminAttendance = () => {
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                   />
                 </div>
-                
                 <div className="flex items-end">
                   <button
                     onClick={() => {
                       const today = new Date();
                       const sevenDaysAgo = addDays(today, -7);
-                      setFilters({
-                        search: '',
-                        status: '',
-                        dateFrom: format(sevenDaysAgo, 'yyyy-MM-dd'),
-                        dateTo: format(today, 'yyyy-MM-dd')
-                      });
+                      setFilters({ search: '', status: '', dateFrom: format(sevenDaysAgo, 'yyyy-MM-dd'), dateTo: format(today, 'yyyy-MM-dd') });
                     }}
                     className="w-full px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors"
                   >
@@ -617,9 +662,7 @@ const AdminAttendance = () => {
                   <p className="text-xs text-gray-400">{pagination.total} records</p>
                 </div>
               </div>
-              <div className="text-sm text-gray-500">
-                Page {pagination.page} of {pagination.pages}
-              </div>
+              <div className="text-sm text-gray-500">Page {pagination.page} of {pagination.pages}</div>
             </div>
           </div>
 
@@ -664,7 +707,8 @@ const AdminAttendance = () => {
                           <span className={record.approvedCheckIn ? 'text-green-600 font-medium' : 'text-gray-400'}>
                             {safeDateFormat(record.approvedCheckIn) || '-'}
                           </span>
-                          {record.checkInRequest?.approved === false && (
+                          {/* ✅ FIX: Only show "Pending approval" if not rejected */}
+                          {record.checkInRequest?.approved === false && record.checkInRequest?.rejected !== true && (
                             <button
                               onClick={() => {
                                 setSelectedRequest(record);
@@ -676,12 +720,16 @@ const AdminAttendance = () => {
                               Pending approval
                             </button>
                           )}
+                          {record.checkInRequest?.rejected === true && (
+                            <span className="text-xs text-red-500 mt-1 block">Rejected</span>
+                          )}
                         </td>
                         <td className="px-5 py-4">
                           <span className={record.approvedCheckOut ? 'text-green-600 font-medium' : 'text-gray-400'}>
                             {safeDateFormat(record.approvedCheckOut) || '-'}
                           </span>
-                          {record.checkOutRequest?.approved === false && (
+                          {/* ✅ FIX: Only show "Pending approval" if not rejected */}
+                          {record.checkOutRequest?.approved === false && record.checkOutRequest?.rejected !== true && (
                             <button
                               onClick={() => {
                                 setSelectedRequest(record);
@@ -692,6 +740,9 @@ const AdminAttendance = () => {
                             >
                               Pending approval
                             </button>
+                          )}
+                          {record.checkOutRequest?.rejected === true && (
+                            <span className="text-xs text-red-500 mt-1 block">Rejected</span>
                           )}
                         </td>
                         <td className="px-5 py-4">
@@ -715,25 +766,17 @@ const AdminAttendance = () => {
                             >
                               <FiMoreVertical className="w-4 h-4" />
                             </button>
-                            
                             {showActionsDropdown === record._id && (
                               <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-100 z-50 py-1">
                                 <button
-                                  onClick={() => {
-                                    setEditing(record);
-                                    setShowActionsDropdown(null);
-                                  }}
+                                  onClick={() => { setEditing(record); setShowActionsDropdown(null); }}
                                   className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                                 >
                                   <FiEdit3 className="w-4 h-4 text-indigo-500" />
                                   Edit Record
                                 </button>
                                 <button
-                                  onClick={() => {
-                                    setSelectedEmployee(record.employee);
-                                    setShowReportModal(true);
-                                    setShowActionsDropdown(null);
-                                  }}
+                                  onClick={() => { setSelectedEmployee(record.employee); setShowReportModal(true); setShowActionsDropdown(null); }}
                                   className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                                 >
                                   <FiMail className="w-4 h-4 text-emerald-500" />
@@ -741,10 +784,7 @@ const AdminAttendance = () => {
                                 </button>
                                 <div className="border-t border-gray-100 my-1"></div>
                                 <button
-                                  onClick={() => {
-                                    handleDeleteClick(record);
-                                    setShowActionsDropdown(null);
-                                  }}
+                                  onClick={() => { handleDeleteClick(record); setShowActionsDropdown(null); }}
                                   className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
                                 >
                                   <FiTrash2 className="w-4 h-4" />
@@ -794,6 +834,16 @@ const AdminAttendance = () => {
         </div>
       </div>
 
+      {/* Reject Modal */}
+      <RejectModal
+        isOpen={showRejectModal}
+        onClose={closeRejectModal}
+        onConfirm={handleRejectRequest}
+        request={rejectRequest}
+        type={rejectType}
+        loading={rejecting}
+      />
+
       {/* Approval Modal */}
       {showApprovalModal && selectedRequest && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -806,7 +856,6 @@ const AdminAttendance = () => {
                 {selectedRequest.employee?.name} • {formatDate(selectedRequest.date, { month: 'short', day: 'numeric', year: 'numeric' })}
               </p>
             </div>
-            
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Adjust Time (Optional)</label>
@@ -816,11 +865,8 @@ const AdminAttendance = () => {
                   onChange={(e) => setApprovalData(prev => ({ ...prev, actualTime: e.target.value }))}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                 />
-                <p className="text-xs text-gray-400 mt-1">
-                  Leave empty to use requested time
-                </p>
+                <p className="text-xs text-gray-400 mt-1">Leave empty to use requested time</p>
               </div>
-              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Remarks (Optional)</label>
                 <textarea
@@ -832,14 +878,9 @@ const AdminAttendance = () => {
                 />
               </div>
             </div>
-            
             <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
               <button
-                onClick={() => {
-                  setShowApprovalModal(false);
-                  setSelectedRequest(null);
-                  setApprovalData({ type: '', actualTime: '', remarks: '' });
-                }}
+                onClick={() => { setShowApprovalModal(false); setSelectedRequest(null); setApprovalData({ type: '', actualTime: '', remarks: '' }); }}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancel
@@ -861,11 +902,8 @@ const AdminAttendance = () => {
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900">Edit Attendance Record</h3>
-              <p className="text-sm text-gray-500 mt-1">
-                {editing.employee?.name || 'Unknown Employee'}
-              </p>
+              <p className="text-sm text-gray-500 mt-1">{editing.employee?.name || 'Unknown Employee'}</p>
             </div>
-            
             <form onSubmit={handleUpdate} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -877,7 +915,6 @@ const AdminAttendance = () => {
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-sm"
                   />
                 </div>
-                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                   <select
@@ -893,32 +930,25 @@ const AdminAttendance = () => {
                     <option value="half-day">Half Day</option>
                   </select>
                 </div>
-                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Late Minutes</label>
                   <input
-                    type="number"
-                    min="0"
+                    type="number" min="0"
                     value={editing.lateMinutes || 0}
                     onChange={(e) => setEditing(prev => ({ ...prev, lateMinutes: parseInt(e.target.value) || 0 }))}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                   />
                 </div>
-                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Total Hours</label>
                   <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="24"
+                    type="number" step="0.1" min="0" max="24"
                     value={editing.totalHours || 0}
                     onChange={(e) => setEditing(prev => ({ ...prev, totalHours: parseFloat(e.target.value) || 0 }))}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                   />
                 </div>
               </div>
-              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Check-in Time</label>
                 <input
@@ -928,7 +958,6 @@ const AdminAttendance = () => {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                 />
               </div>
-              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Check-out Time</label>
                 <input
@@ -938,7 +967,6 @@ const AdminAttendance = () => {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                 />
               </div>
-              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Remarks</label>
                 <textarea
@@ -949,19 +977,13 @@ const AdminAttendance = () => {
                   placeholder="Add remarks..."
                 />
               </div>
-              
               <div className="flex justify-end gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setEditing(null)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                >
+                <button type="button" onClick={() => setEditing(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
-                >
+                <button type="submit"
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm">
                   Save Changes
                 </button>
               </div>
@@ -982,7 +1004,6 @@ const AdminAttendance = () => {
                 <h3 className="text-lg font-semibold text-gray-900">Delete Attendance Record</h3>
               </div>
             </div>
-            
             <div className="p-6">
               <p className="text-sm text-gray-600 mb-4">
                 Are you sure you want to delete this attendance record? This action cannot be undone.
@@ -991,27 +1012,16 @@ const AdminAttendance = () => {
                 <p className="text-sm font-medium text-gray-800">
                   {recordToDelete.employee?.name || 'Employee'} • {formatDate(recordToDelete.date, { month: 'short', day: 'numeric', year: 'numeric' })}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  Check-in: {safeDateFormat(recordToDelete.approvedCheckIn) || 'Not checked in'}
-                </p>
-                <p className="text-xs text-gray-500">
-                  Check-out: {safeDateFormat(recordToDelete.approvedCheckOut) || 'Not checked out'}
-                </p>
+                <p className="text-xs text-gray-500 mt-1">Check-in: {safeDateFormat(recordToDelete.approvedCheckIn) || 'Not checked in'}</p>
+                <p className="text-xs text-gray-500">Check-out: {safeDateFormat(recordToDelete.approvedCheckOut) || 'Not checked out'}</p>
               </div>
               <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    setDeleteConfirm(false);
-                    setRecordToDelete(null);
-                  }}
-                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
-                >
+                <button onClick={() => { setDeleteConfirm(false); setRecordToDelete(null); }}
+                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
                   Cancel
                 </button>
-                <button
-                  onClick={confirmDelete}
-                  className="flex-1 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
-                >
+                <button onClick={confirmDelete}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2">
                   <FiTrash2 className="w-4 h-4" />
                   Delete Record
                 </button>
@@ -1029,40 +1039,27 @@ const AdminAttendance = () => {
               <h3 className="text-lg font-semibold text-gray-900">Send Attendance Report</h3>
               <p className="text-sm text-gray-500 mt-1">Send report to {selectedEmployee.name}</p>
             </div>
-            
             <div className="p-6">
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Period</label>
                 <div className="text-sm text-gray-600">
-                  {filters.dateFrom ? formatDate(filters.dateFrom, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Last 2 weeks'} 
+                  {filters.dateFrom ? formatDate(filters.dateFrom) : 'Last 2 weeks'}
                   {' to '}
-                  {filters.dateTo ? formatDate(filters.dateTo, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Today'}
+                  {filters.dateTo ? formatDate(filters.dateTo) : 'Today'}
                 </div>
               </div>
-              
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Recipient Email</label>
                 <div className="text-sm text-gray-600">{selectedEmployee.email}</div>
               </div>
             </div>
-            
             <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowReportModal(false);
-                  setSelectedEmployee(null);
-                }}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-              >
+              <button onClick={() => { setShowReportModal(false); setSelectedEmployee(null); }}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
                 Cancel
               </button>
-              <button
-                onClick={() => {
-                  alert('Report feature coming soon');
-                  setShowReportModal(false);
-                }}
-                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
-              >
+              <button onClick={() => { alert('Report feature coming soon'); setShowReportModal(false); }}
+                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm">
                 Send Report
               </button>
             </div>
@@ -1072,7 +1069,7 @@ const AdminAttendance = () => {
 
       {/* Error Notification */}
       {error && (
-        <div className="fixed bottom-4 right-4 z-50 animate-fade-in">
+        <div className="fixed bottom-4 right-4 z-50">
           <div className="bg-red-50 border border-red-200 rounded-lg shadow-lg p-4 max-w-sm">
             <div className="flex items-start">
               <FiAlertCircle className="w-5 h-5 text-red-500 mt-0.5 mr-3 flex-shrink-0" />

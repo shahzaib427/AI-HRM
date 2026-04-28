@@ -1,4 +1,6 @@
 const User = require('../models/User');
+const fs = require('fs');
+const path = require('path');
 
 exports.getMyProfile = async (req, res) => {
   try {
@@ -567,6 +569,84 @@ async function generateEmployeeId() {
     return `EMP${Date.now().toString().slice(-6)}`;
   }
 }
+exports.uploadProfilePicture = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'No file uploaded'
+      });
+    }
+
+    // Get the file URL
+    const profilePictureUrl = `/uploads/profile-pictures/${req.file.filename}`;
+    
+    // Update user's profile picture in database
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { profilePicture: profilePictureUrl },
+      { new: true }
+    ).select('-password');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile picture uploaded successfully',
+      data: {
+        profilePicture: profilePictureUrl
+      }
+    });
+  } catch (error) {
+    console.error('Error uploading profile picture:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to upload profile picture'
+    });
+  }
+};
+
+// Delete Profile Picture
+exports.deleteProfilePicture = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    // Delete the file if it exists
+    if (user.profilePicture) {
+      const filePath = path.join(__dirname, '..', user.profilePicture);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+
+    // Remove profile picture reference from database
+    user.profilePicture = null;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile picture removed successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting profile picture:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete profile picture'
+    });
+  }
+};
 
 // 👇 ADD THIS EXACTLY AT THE BOTTOM (CRITICAL!)
 module.exports = {
@@ -579,6 +659,8 @@ module.exports = {
   createEmployee: exports.createEmployee,
   updateEmployee: exports.updateEmployee,
   deleteEmployee: exports.deleteEmployee,
-  createEmployeeWithAccount: exports.createEmployeeWithAccount
+  createEmployeeWithAccount: exports.createEmployeeWithAccount,
+   uploadProfilePicture: exports.uploadProfilePicture, 
+  deleteProfilePicture: exports.deleteProfilePicture 
 
 };
