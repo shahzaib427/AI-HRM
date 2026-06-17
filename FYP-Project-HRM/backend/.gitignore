@@ -1,4 +1,25 @@
-node_modules
+# Dependencies
+node_modules/
+
+# Environment variables
 .env
+
+# Logs
 npm-debug.log*
-logs
+yarn-debug.log*
+yarn-error.log*
+logs/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build folders (optional but recommended)
+dist/
+build/
