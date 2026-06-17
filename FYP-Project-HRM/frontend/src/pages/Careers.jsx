@@ -21,7 +21,8 @@ import {
   BuildingOfficeIcon,
   CheckCircleIcon,
   EyeIcon,
-  ArrowRightIcon
+  ArrowRightIcon,
+  SparklesIcon
 } from '@heroicons/react/24/outline';
 import { HeartIcon as BookmarkSolidIcon } from '@heroicons/react/24/solid';
 
@@ -57,7 +58,7 @@ const KpiCard = ({ icon: Icon, label, value, sub, color }) => {
 // Badge Component
 const Badge = ({ children, variant = 'default' }) => {
   const variants = {
-    default: 'bg-gray-100 text-gray-600',
+    default: 'bg-gray-100 text-gray-700',
     success: 'bg-green-50 text-green-700',
     warning: 'bg-yellow-50 text-yellow-700',
     danger: 'bg-red-50 text-red-700',
@@ -282,7 +283,7 @@ const Careers = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-4 text-gray-600 font-medium">Loading career opportunities...</p>
         </div>
       </div>
@@ -295,7 +296,7 @@ const Careers = () => {
       <div className="bg-white border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-6 py-12 md:py-16">
           <div className="text-center max-w-3xl mx-auto">
-            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+            <h1 className="text-3xl md:text-4xl font-bold text-blue-600 mb-4">
               Join Our Team
             </h1>
             <p className="text-gray-500 text-lg mb-8">
@@ -308,7 +309,7 @@ const Careers = () => {
               <input
                 type="text"
                 placeholder="Search by job title, skills, or department..."
-                className="w-full pl-12 pr-4 py-3 text-gray-900 border border-gray-200 rounded-xl shadow-sm focus:ring-2 focus:ring-gray-300 focus:outline-none focus:border-gray-300"
+                className="w-full pl-12 pr-4 py-3 text-gray-900 border border-gray-200 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-300 focus:outline-none focus:border-blue-300"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -378,7 +379,7 @@ const Careers = () => {
               </button>
               <div className={`flex flex-wrap gap-3 ${!showFilters && 'hidden md:flex'}`}>
                 <select
-                  className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-gray-300 focus:border-gray-300 bg-white"
+                  className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-blue-300 bg-white"
                   value={departmentFilter}
                   onChange={(e) => setDepartmentFilter(e.target.value)}
                 >
@@ -390,7 +391,7 @@ const Careers = () => {
                 </select>
                 
                 <select
-                  className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-gray-300 focus:border-gray-300 bg-white"
+                  className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-blue-300 bg-white"
                   value={jobTypeFilter}
                   onChange={(e) => setJobTypeFilter(e.target.value)}
                 >
@@ -402,7 +403,7 @@ const Careers = () => {
                 </select>
                 
                 <select
-                  className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-gray-300 focus:border-gray-300 bg-white"
+                  className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-blue-300 bg-white"
                   value={experienceFilter}
                   onChange={(e) => setExperienceFilter(e.target.value)}
                 >
@@ -414,7 +415,7 @@ const Careers = () => {
                 </select>
 
                 <select
-                  className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-gray-300 focus:border-gray-300 bg-white"
+                  className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-blue-300 bg-white"
                   value={locationFilter}
                   onChange={(e) => setLocationFilter(e.target.value)}
                 >
@@ -490,7 +491,7 @@ const Careers = () => {
           </div>
           <button 
             onClick={clearAllFilters}
-            className="text-sm text-gray-500 hover:text-gray-700 font-medium flex items-center gap-1"
+            className="text-sm text-gray-500 hover:text-blue-600 font-medium flex items-center gap-1"
           >
             <RefreshIcon className="w-4 h-4" />
             Reset Filters
@@ -507,7 +508,7 @@ const Careers = () => {
             </p>
             <button
               onClick={clearAllFilters}
-              className="px-6 py-2.5 bg-gray-800 hover:bg-gray-900 text-white rounded-lg font-medium transition-colors"
+              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
             >
               Clear All Filters
             </button>
@@ -523,7 +524,7 @@ const Careers = () => {
                   <div className="flex-1">
                     <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
                       <div>
-                        <h3 className="text-lg font-bold text-gray-900 hover:text-gray-700 transition-colors">
+                        <h3 className="text-lg font-bold text-blue-600 hover:text-blue-700 transition-colors">
                           {job.title}
                         </h3>
                         <div className="flex flex-wrap gap-2 mt-2">
@@ -581,7 +582,7 @@ const Careers = () => {
                     <div className="space-y-3 min-w-[180px]">
                       <button
                         onClick={() => navigate(`/apply/${job._id}`)}
-                        className="w-full bg-gray-800 hover:bg-gray-900 text-white py-2.5 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
                       >
                         Apply Now
                         <ArrowRightIcon className="w-4 h-4" />
@@ -600,7 +601,7 @@ const Careers = () => {
                           onClick={() => handleBookmark(job._id)}
                           className={`flex-1 flex items-center justify-center py-2 px-3 rounded-lg transition-colors ${
                             isBookmarked[job._id]
-                              ? 'bg-gray-100 border border-gray-200 text-gray-700'
+                              ? 'bg-blue-50 border border-blue-200 text-blue-600'
                               : 'border border-gray-200 hover:bg-gray-50 text-gray-600'
                           }`}
                         >
@@ -628,14 +629,14 @@ const Careers = () => {
 
         {/* Call to Action - Simple */}
         <div className="mt-12">
-          <div className="bg-gray-100 rounded-2xl p-8 text-center">
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Can't find the right role?</h3>
-            <p className="text-gray-600 mb-6 max-w-md mx-auto">
+          <div className="bg-blue-50 rounded-2xl p-8 text-center">
+            <h3 className="text-xl font-bold text-blue-900 mb-2">Can't find the right role?</h3>
+            <p className="text-blue-700 mb-6 max-w-md mx-auto">
               Send us your resume anyway! We're always looking for talented people.
             </p>
             <button
               onClick={() => navigate('/contact')}
-              className="inline-flex items-center gap-2 bg-gray-800 text-white hover:bg-gray-900 px-6 py-2.5 rounded-lg font-semibold transition-colors"
+              className="inline-flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700 px-6 py-2.5 rounded-lg font-semibold transition-colors"
             >
               <MailIcon className="h-4 w-4" />
               Send General Application
@@ -649,7 +650,7 @@ const Careers = () => {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
             {/* Modal Header - Simple */}
-            <div className="bg-gray-800 text-white p-6 flex-shrink-0">
+            <div className="bg-blue-600 text-white p-6 flex-shrink-0">
               <div className="flex justify-between items-start">
                 <div>
                   <h2 className="text-xl font-bold mb-2">{viewingJob.title}</h2>
@@ -771,7 +772,7 @@ const Careers = () => {
                       onClick={() => handleBookmark(viewingJob._id)}
                       className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg transition-colors ${
                         isBookmarked[viewingJob._id]
-                          ? 'bg-gray-100 border border-gray-200 text-gray-700'
+                          ? 'bg-blue-50 border border-blue-200 text-blue-600'
                           : 'border border-gray-200 hover:bg-gray-50 text-gray-700'
                       }`}
                     >
@@ -805,12 +806,5 @@ const Careers = () => {
     </div>
   );
 };
-
-// SparklesIcon component
-const SparklesIcon = (props) => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
-  </svg>
-);
 
 export default Careers;

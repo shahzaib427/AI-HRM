@@ -11,16 +11,23 @@ const {
 
 const { protect, authorize } = require('../utils/authMiddleware');
 
-// Apply middleware
+// All routes require authentication
 router.use(protect);
 router.use(authorize('employee', 'hr', 'admin'));
 
-// Employee payroll routes
+// Static routes (no params)
 router.get('/dashboard', getMyDashboard);
-router.get('/', getMyPayroll);
 router.get('/years', getPayrollYears);
-router.get('/payslip/:id', getMyPayslip);
-router.get('/payslip/:id/download', downloadPayslip);
+
+// List route with pagination
+// GET /api/employee/payroll?year=2025&status=Paid&page=1&limit=10
+router.get('/', getMyPayroll);
+
+// Param routes (must be after static routes)
+router.get('/:id/payslip', getMyPayslip);
+router.get('/:id/payslip/download', downloadPayslip);
 router.post('/:id/request-correction', requestCorrection);
+
+console.log('✅ Employee Payroll Routes Loaded');
 
 module.exports = router;

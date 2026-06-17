@@ -1,4 +1,4 @@
-// CareerCoach.jsx - FIXED with working sidebar
+// CareerCoach.jsx - FIXED: sidebar data extraction + auto-switch to overview tab
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
@@ -169,11 +169,14 @@ const CareerCoach = () => {
 
     try {
       const response = await api.post('/career-chat/send', { message: messageToSend });
-      console.log('API RESPONSE:', response.data);
 
+      // ── FIX: response.data IS the top-level JSON body ──────────────────────
       const res = response.data;
-      // intent and data are TOP-LEVEL fields on the response object
+      console.log('API RESPONSE:', JSON.stringify(res, null, 2)); // debug log
+
+      // intent and data are TOP-LEVEL fields
       const intent = res.intent;
+      // FIX: backend sends data at top level as 'data' key
       const data = res.data || {};
 
       const aiMessage = {
@@ -184,56 +187,77 @@ const CareerCoach = () => {
       };
       setChatMessages(prev => [...prev, aiMessage]);
 
+      // ── FIX: Auto-switch to overview tab so sidebar is visible ────────────
+      const sidebarIntents = [
+        'show_recommendations', 'show_skills', 'show_roadmap',
+        'show_resume', 'show_salary', 'show_freelancing', 'show_interview'
+      ];
+      if (sidebarIntents.includes(intent)) {
+        setActiveTab('overview');
+      }
+
       // ── Helper: show loader briefly, then reveal content ────────────────────
-      const showWithDelay = (contentObj, delay = 1000) => {
-        setSidebarContent({ type: 'loading', data: null, title: null, isLoading: true });
+      const showWithDelay = (contentObj, delay = 800) => {
         setTimeout(() => setSidebarContent({ ...contentObj, isLoading: false }), delay);
       };
 
-      // ── INTENT → SIDEBAR MAPPING (use intent as sole discriminator) ──────────
+      // ── INTENT → SIDEBAR MAPPING ──────────────────────────────────────────
       if (intent === 'show_recommendations') {
-        const recs = data.recommendations;
+        // FIX: try multiple paths where recommendations might be
+        const recs =
+          data.recommendations ||
+          res.recommendations ||
+          [];
         showWithDelay({
           type: 'recommendations',
           data: Array.isArray(recs) ? recs : [],
           title: '🎯 Recommended Career Paths',
         });
+
       } else if (intent === 'show_skills') {
         showWithDelay({
           type: 'skills',
           data: data,
           title: `💡 Skills for ${data.domain || 'Tech Industry'}`,
         });
+
       } else if (intent === 'show_roadmap') {
         showWithDelay({
           type: 'roadmap',
           data: data,
-          title: `🗺️ Roadmap: ${data.career ? data.career.charAt(0).toUpperCase() + data.career.slice(1) : 'Learning Path'}`,
+          title: `🗺️ Roadmap: ${data.career
+            ? data.career.charAt(0).toUpperCase() + data.career.slice(1)
+            : 'Learning Path'}`,
         });
+
       } else if (intent === 'show_resume') {
         showWithDelay({
           type: 'resume',
           data: data,
           title: '📄 Resume Tips for Pakistani Job Market',
         });
+
       } else if (intent === 'show_salary') {
         showWithDelay({
           type: 'salary',
           data: data,
           title: '💰 Salary Guide - Pakistan Tech Industry',
         });
+
       } else if (intent === 'show_freelancing') {
         showWithDelay({
           type: 'freelancing',
           data: data,
           title: '💼 Freelancing Guide for Pakistan',
         });
+
       } else if (intent === 'show_interview') {
         showWithDelay({
           type: 'interview',
           data: data,
           title: '🎯 Interview Preparation Tips',
         });
+
       } else {
         // fallback / roadmap_prompt / welcome — clear sidebar
         setSidebarContent({ type: null, data: null, title: null, isLoading: false });
@@ -334,7 +358,25 @@ const CareerCoach = () => {
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8 text-center hover:shadow-xl transition-all duration-300">
           <div className="text-6xl mb-4 animate-pulse">💬</div>
           <h3 className="text-xl font-semibold text-gray-800 mb-2">Ask me about careers!</h3>
-          <p className="text-gray-500 text-sm">Type your question in the chat box.</p>
+          <p className="text-gray-500 text-sm mb-4">Type your question in the chat box.</p>
+          <div className="space-y-2 text-left">
+            {[
+              '🎯 Which career should I choose?',
+              '🗺️ Show me roadmap for MERN Stack',
+              '💡 What skills are in demand?',
+              '📄 Give me resume tips',
+              '💰 What is the salary range?',
+              '💼 How to start freelancing?',
+            ].map((suggestion, i) => (
+              <button
+                key={i}
+                onClick={() => handleChatSend(suggestion)}
+                className="w-full text-left text-xs px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-all duration-200"
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
         </div>
       );
     }
@@ -692,7 +734,7 @@ const CareerCoach = () => {
           {/* Content Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-            {/* ── Chat Section ──────────────────────────────────────────────── */}
+            {/* ── Chat Section — always visible on all tabs ──────────────── */}
             <div className="lg:col-span-2">
               <div className="bg-white rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-all duration-300">
                 {/* Chat header */}
@@ -782,7 +824,7 @@ const CareerCoach = () => {
             {/* ── Right Sidebar ─────────────────────────────────────────────── */}
             <div className="space-y-8">
 
-              {/* Overview: chat-driven sidebar */}
+              {/* FIX: Overview sidebar — always render, driven by chat intents */}
               {activeTab === 'overview' && renderSidebarContent()}
 
               {/* Skills tab */}

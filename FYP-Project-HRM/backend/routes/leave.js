@@ -17,6 +17,8 @@ router.get('/upcoming', leaveController.getUpcomingLeaves);
 router.post('/apply', leaveController.applyLeave);
 router.get('/my-leaves', leaveController.getMyLeaves);
 
+
+
 // Admin/HR routes - MUST COME BEFORE :id ROUTES
 router.get('/all', auth.authorize('admin', 'hr'), leaveController.getAllLeaves);
 // Add delete all routes - IMPORTANT: Place BEFORE :id route

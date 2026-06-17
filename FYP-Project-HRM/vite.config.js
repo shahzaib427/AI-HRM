@@ -31,9 +31,10 @@ export default defineConfig({
       'react-dom',
       '@mui/material',
       '@heroicons/react',
-      'axios'
-    ],
-    exclude: ['lucide-react']
+      'axios',
+      'lucide-react'  // ✅ ADD THIS - include instead of exclude
+    ]
+    // ❌ REMOVE the exclude line completely
   },
   esbuild: {
     jsx: 'automatic',
@@ -47,7 +48,8 @@ export default defineConfig({
         manualChunks: {
           'react-vendor': ['react', 'react-dom'],
           'mui-vendor': ['@mui/material', '@mui/icons-material'],
-          'utils-vendor': ['axios', 'lodash', 'date-fns']
+          'utils-vendor': ['axios', 'lodash', 'date-fns'],
+          'icon-vendor': ['lucide-react', '@heroicons/react']  // ✅ Add this for better chunking
         }
       }
     }

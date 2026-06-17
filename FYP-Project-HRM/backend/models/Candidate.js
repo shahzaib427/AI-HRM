@@ -58,7 +58,7 @@ const candidateSchema = new mongoose.Schema({
     interviewer: String,
     interviewType: {
       type: String,
-      enum: ['Phone', 'Video', 'In-person']
+      enum: ['Virtual', 'In-Person', 'Phone']
     },
     meetingLink: String,
     notes: String
@@ -70,7 +70,7 @@ const candidateSchema = new mongoose.Schema({
     feedback: String,
     rating: {
       type: Number,
-      min: 1,
+      min: 0,
       max: 5
     },
     status: {

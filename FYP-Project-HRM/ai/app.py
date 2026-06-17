@@ -1,14 +1,31 @@
 """
 Main Flask Application
 """
+import os
+
+# ── FIX: Load .env from the ai/ directory (same folder as this file) ─────────
+# Using __file__ ensures it finds the .env regardless of where you run the
+# server from (e.g. running `python ai/app.py` from the project root).
+from dotenv import load_dotenv
+_env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+load_dotenv(dotenv_path=_env_file, override=True)
+
+# Quick sanity-check log so you can confirm vars loaded on startup
+import logging
+logging.basicConfig(level=logging.INFO)
+_startup_logger = logging.getLogger('startup')
+_startup_logger.info(f"📧 EMAIL_USER  = {os.environ.get('EMAIL_USER', '❌ NOT SET')}")
+_startup_logger.info(f"📧 EMAIL_PASS  = {'✅ set' if os.environ.get('EMAIL_PASS') else '❌ NOT SET'}")
+_startup_logger.info(f"📧 EMAIL_HOST  = {os.environ.get('EMAIL_HOST', 'smtp.gmail.com (default)')}")
+# ─────────────────────────────────────────────────────────────────────────────
+
+
 from flask import Flask, jsonify, request, Response, stream_with_context
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager, get_jwt_identity, jwt_required
 from routes.career_chat_routes import career_chat_bp
 from datetime import datetime, timedelta
-import logging
-import os
 import json
 import threading
 from queue import Queue, Empty
@@ -17,10 +34,12 @@ from config.config import Config
 from models import db
 from routes import register_blueprints
 from services.ai_service import AIService
+from routes.face_routes import face_bp
+ 
+from routes.ats_routes import ats_bp
 # ------------------------------------------------------------------
 # Logging
 # ------------------------------------------------------------------
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ------------------------------------------------------------------
@@ -29,7 +48,7 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.config.from_object(Config)
 
-# JWT config — FIX 4: read secret from env, never hardcode
+# JWT config
 app.config['JWT_SECRET_KEY']          = os.environ.get('JWT_SECRET_KEY', 'change-this-in-production')
 app.config['JWT_TOKEN_LOCATION']      = ['headers', 'query_string']
 app.config['JWT_QUERY_STRING_NAME']   = 'token'
@@ -48,8 +67,7 @@ CORS(app,
 
 # ------------------------------------------------------------------
 # FIX 1 & 2: Single shared stream registry used by BOTH app.py and
-# wellness_routes.py.  Import it from one place so there is only
-# ever ONE dict and ONE UserStream class.
+# wellness_routes.py.
 # ------------------------------------------------------------------
 from routes.wellness_routes import (
     UserStream,
@@ -61,7 +79,6 @@ from routes.wellness_routes import (
     _streams_lock as streams_lock
 )
 
-# Expose on app for any blueprint that still uses current_app.active_streams
 app.active_streams = active_streams
 
 # ------------------------------------------------------------------
@@ -69,9 +86,12 @@ app.active_streams = active_streams
 # ------------------------------------------------------------------
 register_blueprints(app)
 app.register_blueprint(career_chat_bp, url_prefix='/api/career-chat')
+app.register_blueprint(ats_bp)
+app.register_blueprint(face_bp)   
 
 # ------------------------------------------------------------------
-# FIX 10: Create DB tables on first app context (works with gunicorn)
+# Create DB tables on first app context
+from models.ats import ATSAnalysis
 # ------------------------------------------------------------------
 with app.app_context():
     db.create_all()
@@ -79,15 +99,12 @@ with app.app_context():
 
 # ------------------------------------------------------------------
 # SSE stream endpoint
-# FIX 3: Accept user_id as string, not <int:user_id>, so it matches
-#         the string keys used in wellness_routes.py
 # ------------------------------------------------------------------
 @app.route("/api/stream/<string:user_id>", methods=["GET"])
 def stream_updates(user_id: str):
     """Server-Sent Events endpoint for real-time updates"""
 
     def generate():
-        # FIX 5: use thread-safe get_stream()
         stream = get_stream(user_id)
         yield f"data: {json.dumps({'type': 'connected', 'user_id': user_id, 'timestamp': datetime.now().isoformat()})}\n\n"
 
@@ -142,31 +159,52 @@ print("=" * 70 + "\n")
 # ------------------------------------------------------------------
 # Chat endpoint (public)
 # ------------------------------------------------------------------
-@app.route("/chat", methods=["POST"])
+ 
+@app.route("/api/chat/send", methods=["POST"])
+@app.route("/chat", methods=["POST"])           # keep old route working too
 def chat():
     try:
         data    = request.json or {}
         message = data.get('message', '').strip()
-
+ 
         if not message:
             return jsonify({'answer': "Please type a message.", 'status': 'error',
                             'timestamp': datetime.now().isoformat()}), 400
-
+ 
         boat_predict = app.config.get('BOAT_PREDICT')
         if boat_predict is None:
             return jsonify({'answer': "HR system is initializing. Please try again.",
                             'status': 'error', 'timestamp': datetime.now().isoformat()}), 503
-
-        result = boat_predict({'action': 'ask', 'question': message})
+ 
+        # ── NEW: Read JWT token from Authorization header ─────────────────────
+        # React sends: headers: { Authorization: "Bearer <token>" }
+        # We forward it to boat_predict so it can call MERN APIs on behalf of user
+        auth_header = request.headers.get("Authorization", "")
+        jwt_token   = auth_header if auth_header.startswith("Bearer ") else None
+        # ─────────────────────────────────────────────────────────────────────
+ 
+        # ── MODIFIED: pass jwt_token in the data dict ─────────────────────────
+        result = boat_predict({
+            'action':    'ask',
+            'question':  message,
+            'jwt_token': jwt_token      # ← NEW: was not here before
+        })
+        # ─────────────────────────────────────────────────────────────────────
+ 
         answer = result.get('answer') or "I couldn't find an answer. Please try rephrasing."
-
-        return jsonify({'answer': answer, 'status': 'success',
-                        'timestamp': datetime.now().isoformat()})
-
+ 
+        return jsonify({
+            'answer':    answer,
+            'status':   'success',
+            'timestamp': datetime.now().isoformat(),
+            # Optional: tell frontend what the bot used to answer
+            'session_id': data.get('session_id', '')
+        })
+ 
     except Exception as e:
         logger.exception("Chat endpoint failed")
         return jsonify({'error': 'Internal server error', 'status': 'error'}), 500
-
+ 
 # ------------------------------------------------------------------
 # Test endpoints
 # ------------------------------------------------------------------
@@ -197,7 +235,7 @@ def test_broadcast():
                     'connected_users': count})
 
 # ------------------------------------------------------------------
-# Stream status — FIX 9: don't expose other users' IDs
+# Stream status
 # ------------------------------------------------------------------
 @app.route("/api/stream/status", methods=["GET"])
 @jwt_required(locations=['headers', 'query_string'])
@@ -210,12 +248,11 @@ def stream_status():
     return jsonify({
         'is_connected':       is_connected,
         'active_connections': count,
-        # FIX 9: removed 'users_connected' list — privacy issue
         'timestamp':          datetime.now().isoformat()
     })
 
 # ------------------------------------------------------------------
-# FIX 8: debug_auth uses flask_jwt_extended properly
+# Debug auth
 # ------------------------------------------------------------------
 @app.route("/api/debug/auth", methods=["GET"])
 @jwt_required(locations=['headers', 'query_string'], optional=True)
@@ -275,18 +312,11 @@ if __name__ == "__main__":
     print("✅ CORS configured for: http://localhost:5173, :5174")
     print("✅ JWT configured (read from JWT_SECRET_KEY env var)")
     print("✅ Real-time streaming enabled")
+    print(f"✅ Email: {os.environ.get('EMAIL_USER', '❌ NOT CONFIGURED')}")
     print("\n📡 Stream endpoint:  GET /api/stream/<user_id>")
     print("📡 Health check:     GET /health")
     print("📡 Chat:             POST /chat")
-    print("\n📡 Wellness endpoints (user_id required, no JWT):")
-    print("   GET  /api/checkin/status")
-    print("   POST /api/checkin")
-    print("   GET  /api/weekly-wellness")
-    print("   GET  /api/history")
-    print("   GET  /api/stats")
-    print("   GET  /api/insights")
-    print("   POST /api/chat/send")
     print("\n🌐 Server: http://localhost:5001")
     print("=" * 70 + "\n")
 
-    app.run(port=5001, debug=True, threaded=True)
+    app.run(port=5001, debug=True, threaded=True,use_reloader=False)

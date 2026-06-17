@@ -1,353 +1,256 @@
-import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { FiClock, FiMail, FiMessageCircle, FiPhone, FiShield } from 'react-icons/fi';
+import axios from 'axios';
 
-const Contact = () => {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    company: '',
-    message: ''
-  })
+const Input = ({ label, type = 'text', value, onChange }) => (
+  <div style={{ width: '100%' }}>
+    <label style={{ display: 'block', marginBottom: 6, fontSize: '0.825rem', fontWeight: 600, color: '#374151' }}>{label}</label>
+    <input
+      type={type}
+      value={value}
+      onChange={onChange}
+      style={{
+        width: '100%',
+        padding: '10px 14px',
+        border: '1.5px solid #e5e7eb',
+        borderRadius: 8,
+        fontSize: '0.9rem',
+        fontFamily: "'DM Sans', sans-serif",
+        color: '#111827',
+        outline: 'none',
+        boxSizing: 'border-box',
+        transition: 'border-color 0.2s, box-shadow 0.2s',
+      }}
+      onFocus={e => { e.target.style.borderColor = '#6366f1'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.12)'; }}
+      onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.boxShadow = 'none'; }}
+    />
+  </div>
+);
 
-  const [isSubmitting, setIsSubmitting] = useState(false)
+export default function ContactPage() {
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({ 
+    fullName: '', 
+    companyName: '', 
+    phone: '', 
+    email: '', 
+    message: '' 
+  });
+  
+  const update = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    })
-  }
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setIsSubmitting(true)
+  // Function to submit to backend API
+  const submitToBackend = async (formData) => {
+    // Use relative URL or environment variable with fallback
+    const API_URL = import.meta.env?.VITE_API_URL || 'http://localhost:5000/api';
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
-    console.log('Form submitted:', formData)
-    alert('Thank you for your message! We will get back to you soon.')
-    setFormData({ name: '', email: '', company: '', message: '' })
-    setIsSubmitting(false)
-  }
+    const response = await axios.post(`${API_URL}/contact`, formData, {
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
 
-  const contactMethods = [
-    {
-      icon: '📧',
-      title: 'Email Us',
-      details: ['info@hrmpro.com', 'support@hrmpro.com'],
-      description: 'Send us an email anytime',
-      gradient: 'from-fuchsia-500 to-pink-600'
-    },
-    {
-      icon: '📞',
-      title: 'Call Us',
-      details: ['+1 (555) 123-4567', '+1 (555) 987-6543'],
-      description: 'Mon-Fri from 9am to 6pm',
-      gradient: 'from-indigo-500 to-blue-600'
-    },
-    {
-      icon: '💬',
-      title: 'Live Chat',
-      details: ['Available 24/7', 'Instant support'],
-      description: 'Get immediate assistance',
-      gradient: 'from-amber-500 to-orange-500'
-    },
-    {
-      icon: '🏢',
-      title: 'Visit Us',
-      details: ['123 Business Street', 'City, State 12345'],
-      description: 'Schedule an office visit',
-      gradient: 'from-green-500 to-emerald-600'
+    return response.data;
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    
+    // Validation
+    if (!form.fullName || !form.email) { 
+      alert('Please fill required fields'); 
+      return; 
     }
-  ]
+
+    // Email validation
+    const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
+    if (!emailRegex.test(form.email)) {
+      alert('Please provide a valid email address');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const result = await submitToBackend({
+        fullName: form.fullName,
+        email: form.email,
+        companyName: form.companyName,
+        phone: form.phone,
+        message: form.message
+      });
+      
+      alert(result.message || 'Thanks! Your request is submitted successfully.');
+      
+      // Reset form
+      setForm({ 
+        fullName: '', 
+        email: '', 
+        phone: '', 
+        companyName: '', 
+        message: '' 
+      });
+      
+    } catch (error) {
+      console.error('Submission error:', error);
+      if (error.response?.data?.error) {
+        alert(error.response.data.error);
+      } else {
+        alert('Failed to submit. Please try again later.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cardStyle = {
+    display: 'flex', gap: 16, borderRadius: 14,
+    border: '1px solid rgba(255,255,255,0.1)',
+    background: 'rgba(255,255,255,0.06)',
+    padding: '20px', backdropFilter: 'blur(8px)',
+  };
+
+  const smallCardStyle = {
+    borderRadius: 14, border: '1px solid rgba(255,255,255,0.1)',
+    background: 'rgba(255,255,255,0.06)', padding: '20px',
+    backdropFilter: 'blur(8px)',
+  };
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Hero Section */}
-      <section className="relative bg-gradient-to-br from-indigo-950 via-purple-900 to-fuchsia-900 text-white overflow-hidden">
-        {/* Animated Background Particles */}
-        <div className="absolute inset-0">
-          {[...Array(10)].map((_, i) => (
-            <div
-              key={i}
-              className="absolute rounded-full bg-gradient-to-r from-fuchsia-400/20 to-indigo-400/20 animate-float"
-              style={{
-                width: Math.random() * 60 + 20,
-                height: Math.random() * 60 + 20,
-                top: `${Math.random() * 100}%`,
-                left: `${Math.random() * 100}%`,
-                animationDelay: `${Math.random() * 5}s`,
-                animationDuration: `${15 + Math.random() * 10}s`
-              }}
-            />
-          ))}
-        </div>
-        
-        {/* Floating Elements */}
-        <div className="absolute top-20 left-10 w-4 h-4 bg-fuchsia-400 rounded-full animate-pulse shadow-lg shadow-fuchsia-400/25"></div>
-        <div className="absolute top-40 right-20 w-6 h-6 bg-indigo-400 rounded-full animate-bounce shadow-lg shadow-indigo-400/25"></div>
-        
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-32">
-          <div className="text-center">
-            {/* Enhanced Badge */}
-            <div className="inline-flex items-center px-6 py-3 rounded-full bg-white/10 border border-white/20 mb-8 backdrop-blur-sm shadow-lg">
-              <span className="w-2 h-2 bg-fuchsia-400 rounded-full mr-3 animate-pulse shadow-sm shadow-fuchsia-400"></span>
-              <span className="text-fuchsia-200 text-sm font-semibold">💬 LET'S TALK AI HR SOLUTIONS</span>
-            </div>
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #1a1040 0%, #2d1b69 40%, #3b1fa8 70%, #1e1060 100%)',
+      fontFamily: "'DM Sans', sans-serif",
+      color: '#fff',
+    }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');`}</style>
 
-            <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-tight">
-              <span className="bg-gradient-to-r from-fuchsia-300 via-indigo-300 to-amber-200 bg-clip-text text-transparent">
-                Get In
-              </span>
-              <br />
-              <span className="bg-gradient-to-r from-white to-gray-200 bg-clip-text text-transparent">
-                Touch
-              </span>
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px' }}>
+        <section style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          gap: 40,
+          padding: '72px 0',
+          alignItems: 'center',
+        }}>
+          {/* Left Column */}
+          <div>
+            <p style={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase', color: '#a5b4fc', margin: '0 0 16px' }}>
+              Contact
+            </p>
+            <h1 style={{ fontSize: 'clamp(1.8rem, 4vw, 3rem)', fontWeight: 800, lineHeight: 1.15, margin: '0 0 16px', letterSpacing: '-0.5px' }}>
+              Let us help you set up AI-HRM
             </h1>
-            
-            <p className="text-xl md:text-2xl mb-8 text-indigo-100 max-w-3xl mx-auto leading-relaxed font-light">
-              Ready to transform your HR operations? Let's discuss how our AI-powered solutions can drive your business forward.
+            <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.7, margin: '0 0 28px' }}>
+              Share your details and our team will help with trial access, subscription questions, and company onboarding.
             </p>
-          </div>
-        </div>
-      </section>
 
-      {/* Contact Methods */}
-      <section className="py-20 bg-gradient-to-b from-slate-50 to-white relative overflow-hidden">
-        {/* Geometric Background */}
-        <div className="absolute inset-0 opacity-5">
-          <div className="absolute inset-0 bg-[linear-gradient(30deg,_transparent_49%,_#f0f_50%,_transparent_51%),_linear-gradient(-30deg,_transparent_49%,_#f0f_50%,_transparent_51%)] bg-[length:60px_60px]"></div>
-        </div>
-        
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
-              Multiple Ways to
-              <span className="block bg-gradient-to-r from-fuchsia-600 via-indigo-600 to-amber-500 bg-clip-text text-transparent mt-2">
-                Connect
-              </span>
-            </h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
-              Choose the most convenient way to reach out to our team
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-20">
-            {contactMethods.map((method, index) => (
-              <div 
-                key={index}
-                className="group relative bg-white/80 backdrop-blur-sm rounded-3xl p-6 shadow-2xl hover:shadow-3xl transition-all duration-500 hover:-translate-y-2 border border-white/20 text-center"
-              >
-                {/* Animated Background Gradient */}
-                <div className={`absolute inset-0 bg-gradient-to-r ${method.gradient} rounded-3xl opacity-0 group-hover:opacity-10 transition-all duration-500`}></div>
-                
-                {/* Icon Container */}
-                <div className={`relative inline-flex p-4 rounded-2xl bg-gradient-to-r ${method.gradient} text-white mb-4 group-hover:scale-110 group-hover:rotate-12 transition-all duration-500 shadow-2xl text-2xl`}>
-                  {method.icon}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={cardStyle}>
+                <FiMail style={{ width: 22, height: 22, color: '#a5b4fc', flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <h2 style={{ fontWeight: 600, fontSize: '0.95rem', margin: '0 0 6px' }}>Sales & Trial Requests</h2>
+                  <p style={{ fontSize: '0.825rem', color: 'rgba(255,255,255,0.55)', margin: 0, lineHeight: 1.6 }}>
+                    Request a free trial, ask about plans, or discuss your company setup.
+                  </p>
                 </div>
-                
-                <h3 className="text-xl font-bold text-gray-900 mb-3 relative z-10">
-                  {method.title}
-                </h3>
-                
-                <div className="space-y-1 mb-3 relative z-10">
-                  {method.details.map((detail, idx) => (
-                    <p key={idx} className="text-gray-600 text-sm">{detail}</p>
-                  ))}
-                </div>
-                
-                <p className="text-gray-500 text-sm relative z-10">{method.description}</p>
               </div>
-            ))}
+
+              <div style={cardStyle}>
+                <FiMessageCircle style={{ width: 22, height: 22, color: '#a5b4fc', flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <h2 style={{ fontWeight: 600, fontSize: '0.95rem', margin: '0 0 6px' }}>Product Questions</h2>
+                  <p style={{ fontSize: '0.825rem', color: 'rgba(255,255,255,0.55)', margin: 0, lineHeight: 1.6 }}>
+                    Learn how recruitment, payroll, attendance, analytics, and AI interviews work together.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div style={smallCardStyle}>
+                  <FiClock style={{ width: 20, height: 20, color: '#a5b4fc', marginBottom: 10 }} />
+                  <h2 style={{ fontWeight: 600, fontSize: '0.9rem', margin: '0 0 6px' }}>Quick Response</h2>
+                  <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.55)', margin: 0, lineHeight: 1.6 }}>We review access requests as soon as possible.</p>
+                </div>
+                <div style={smallCardStyle}>
+                  <FiShield style={{ width: 20, height: 20, color: '#a5b4fc', marginBottom: 10 }} />
+                  <h2 style={{ fontWeight: 600, fontSize: '0.9rem', margin: '0 0 6px' }}>Secure Setup</h2>
+                  <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.55)', margin: 0, lineHeight: 1.6 }}>Company data stays isolated with role-based access.</p>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Contact Form & Info */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-            {/* Contact Information */}
-            <div className="space-y-8">
-              <div>
-                <h2 className="text-3xl font-bold text-gray-900 mb-6">Let's Start a Conversation</h2>
-                <p className="text-lg text-gray-600 leading-relaxed mb-8">
-                  Whether you're looking to implement AI-powered HR solutions or have questions about our platform, 
-                  we're here to help you every step of the way.
+          {/* Right Column - Form */}
+          <div style={{
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 20,
+            padding: 8,
+            boxShadow: '0 25px 60px rgba(0,0,0,0.3)',
+            backdropFilter: 'blur(12px)',
+          }}>
+            <form onSubmit={submit} style={{ background: '#fff', borderRadius: 14, padding: '32px', color: '#111827' }}>
+              <div style={{ marginBottom: 24 }}>
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  background: '#eff6ff', color: '#3b82f6', borderRadius: 100,
+                  padding: '5px 12px', fontSize: '0.8rem', fontWeight: 600, marginBottom: 12,
+                }}>
+                  <FiPhone style={{ width: 14, height: 14 }} /> Talk to us
+                </div>
+                <h2 style={{ fontSize: '1.4rem', fontWeight: 700, margin: '0 0 8px' }}>Send your request</h2>
+                <p style={{ fontSize: '0.825rem', color: '#6b7280', margin: 0 }}>
+                  Provide your details and our team will help you get started with AI-HRM.
                 </p>
               </div>
 
-              <div className="space-y-6">
-                <div className="bg-gradient-to-r from-fuchsia-50 to-pink-50 rounded-2xl p-6 border border-fuchsia-100">
-                  <h3 className="font-semibold text-gray-900 mb-4 text-lg">📍 Headquarters</h3>
-                  <p className="text-gray-600 leading-relaxed">
-                    123 Innovation Drive<br />
-                    Suite 500<br />
-                    San Francisco, CA 94105<br />
-                    United States
-                  </p>
-                </div>
-
-                <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-2xl p-6 border border-indigo-100">
-                  <h3 className="font-semibold text-gray-900 mb-4 text-lg">🕒 Business Hours</h3>
-                  <div className="space-y-2 text-gray-600">
-                    <p>Monday - Friday: 9:00 AM - 6:00 PM PST</p>
-                    <p>Saturday: 10:00 AM - 2:00 PM PST</p>
-                    <p>Sunday: Closed</p>
-                  </div>
-                </div>
-
-                <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl p-6 border border-amber-100">
-                  <h3 className="font-semibold text-gray-900 mb-4 text-lg">⚡ Quick Response</h3>
-                  <p className="text-gray-600">
-                    We typically respond to all inquiries within 2 business hours during our working days.
-                  </p>
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <Input label="Full Name *" value={form.fullName} onChange={update('fullName')} />
+                <Input label="Work Email *" type="email" value={form.email} onChange={update('email')} />
+                <Input label="Company Name" value={form.companyName} onChange={update('companyName')} />
+                <Input label="Phone" value={form.phone} onChange={update('phone')} />
               </div>
-            </div>
 
-            {/* Contact Form */}
-            <div className="relative">
-              <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-8 shadow-2xl border border-white/20">
-                <h2 className="text-3xl font-bold text-gray-900 mb-2">Send us a Message</h2>
-                <p className="text-gray-600 mb-8">Fill out the form below and we'll get back to you promptly</p>
-                
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                        Full Name *
-                      </label>
-                      <input
-                        type="text"
-                        id="name"
-                        name="name"
-                        required
-                        value={formData.name}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-fuchsia-500 focus:border-fuchsia-500 transition-all duration-300 bg-white/50 backdrop-blur-sm"
-                        placeholder="Enter your full name"
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                        Email Address *
-                      </label>
-                      <input
-                        type="email"
-                        id="email"
-                        name="email"
-                        required
-                        value={formData.email}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-fuchsia-500 focus:border-fuchsia-500 transition-all duration-300 bg-white/50 backdrop-blur-sm"
-                        placeholder="Enter your email address"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label htmlFor="company" className="block text-sm font-medium text-gray-700 mb-2">
-                      Company Name
-                    </label>
-                    <input
-                      type="text"
-                      id="company"
-                      name="company"
-                      value={formData.company}
-                      onChange={handleChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-fuchsia-500 focus:border-fuchsia-500 transition-all duration-300 bg-white/50 backdrop-blur-sm"
-                      placeholder="Enter your company name"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="message" className="block text-sm font-medium text-gray-700 mb-2">
-                      Message *
-                    </label>
-                    <textarea
-                      id="message"
-                      name="message"
-                      required
-                      rows="5"
-                      value={formData.message}
-                      onChange={handleChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-fuchsia-500 focus:border-fuchsia-500 transition-all duration-300 bg-white/50 backdrop-blur-sm resize-none"
-                      placeholder="Tell us about your HR challenges and how we can help..."
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="group relative w-full bg-gradient-to-r from-fuchsia-500 to-indigo-500 text-white py-4 px-6 rounded-xl font-bold hover:from-fuchsia-600 hover:to-indigo-600 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-fuchsia-500/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                  >
-                    <span className="relative z-10 flex items-center justify-center">
-                      {isSubmitting ? (
-                        <>
-                          <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Sending...
-                        </>
-                      ) : (
-                        <>
-                          Send Message
-                          <svg className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                          </svg>
-                        </>
-                      )}
-                    </span>
-                    <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  </button>
-                </form>
+              <div style={{ marginTop: 14 }}>
+                <label style={{ display: 'block', marginBottom: 6, fontSize: '0.825rem', fontWeight: 600, color: '#374151' }}>Message</label>
+                <textarea
+                  style={{
+                    width: '100%', padding: '10px 14px', border: '1.5px solid #e5e7eb',
+                    borderRadius: 8, fontSize: '0.9rem', fontFamily: "'DM Sans', sans-serif",
+                    color: '#111827', outline: 'none', boxSizing: 'border-box',
+                    minHeight: 120, resize: 'vertical', transition: 'border-color 0.2s, box-shadow 0.2s',
+                  }}
+                  placeholder="Tell us about your company size, subscription questions, or HR needs."
+                  value={form.message}
+                  onChange={(e) => setForm((prev) => ({ ...prev, message: e.target.value }))}
+                  onFocus={e => { e.target.style.borderColor = '#6366f1'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.12)'; }}
+                  onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.boxShadow = 'none'; }}
+                />
               </div>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      {/* CTA Section */}
-      <section className="relative py-20 bg-gradient-to-br from-fuchsia-900 via-indigo-900 to-amber-900 text-white overflow-hidden">
-        {/* Animated Background */}
-        <div className="absolute inset-0">
-          <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2072&q=80')] opacity-10 bg-cover bg-center"></div>
-        </div>
-        
-        <div className="relative max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8">
-          <h2 className="text-4xl md:text-5xl font-bold mb-6">
-            Ready to <span className="bg-gradient-to-r from-fuchsia-300 via-amber-300 to-indigo-300 bg-clip-text text-transparent">Transform</span> Your HR?
-          </h2>
-          <p className="text-xl text-indigo-100 mb-8 max-w-2xl mx-auto leading-relaxed">
-            Schedule a personalized demo and see how our AI-powered platform can revolutionize your HR operations.
-          </p>
-          
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Link
-              to="/demo"
-              className="group bg-gradient-to-r from-fuchsia-500 to-indigo-500 text-white px-8 py-4 rounded-2xl font-bold text-lg hover:from-fuchsia-600 hover:to-indigo-600 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-fuchsia-500/40 flex items-center relative overflow-hidden"
-            >
-              <span className="relative z-10">Schedule Demo</span>
-              <svg className="w-5 h-5 ml-2 relative z-10 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-            </Link>
-            
-            <a
-              href="tel:+15551234567"
-              className="group border-2 border-indigo-400/50 text-indigo-100 px-8 py-4 rounded-2xl font-bold text-lg hover:border-amber-300 hover:text-amber-300 hover:bg-amber-300/5 transition-all duration-300 flex items-center backdrop-blur-sm hover:shadow-lg hover:shadow-amber-300/20"
-            >
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-              </svg>
-              Call Now
-            </a>
+              <div style={{ marginTop: 22, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    padding: '11px 26px', background: '#6366f1', color: '#fff',
+                    border: 'none', borderRadius: 8, fontWeight: 600, fontSize: '0.9rem',
+                    fontFamily: "'DM Sans', sans-serif", cursor: loading ? 'not-allowed' : 'pointer',
+                    opacity: loading ? 0.6 : 1, transition: 'background 0.2s',
+                    boxShadow: '0 4px 14px rgba(99,102,241,0.35)',
+                  }}
+                >
+                  {loading ? 'Submitting...' : 'Submit Request'}
+                </button>
+                <Link to="/" style={{ fontSize: '0.825rem', fontWeight: 500, color: '#9ca3af', textDecoration: 'none' }}>
+                  Back Home
+                </Link>
+              </div>
+            </form>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
     </div>
-  )
+  );
 }
-
-export default Contact

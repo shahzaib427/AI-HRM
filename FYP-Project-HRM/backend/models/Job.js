@@ -60,10 +60,10 @@ const jobSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  deadline: {
-    type: Date,
-    required: [true, 'Application deadline is required']
-  },
+ deadline: {
+  type: Date,
+  required: false,
+},
   publishedAt: Date,
   tags: [String],
   skillsRequired: [String]

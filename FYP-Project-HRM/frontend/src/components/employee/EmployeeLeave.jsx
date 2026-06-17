@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import axios from 'axios';
-import { FaCalendarAlt, FaFileAlt, FaExclamationTriangle, FaSync, FaPlus, FaEye, FaEdit, FaTrash, FaCheckCircle, FaClock } from 'react-icons/fa';
+import { 
+  FaCalendarAlt, FaFileAlt, FaExclamationTriangle, FaSync, 
+  FaPlus, FaEye, FaEdit, FaTrash, FaCheckCircle, FaClock
+} from 'react-icons/fa';
 
 // API Configuration
 const API_BASE_URL = 'http://localhost:5000/api/leaves';
@@ -119,7 +122,7 @@ const Badge = ({ children, variant = 'default' }) => {
 // Loading Spinner Component
 const LoadingSpinner = ({ text = 'Loading...' }) => (
   <div className="flex items-center justify-center py-8">
-    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
     <span className="ml-2 text-gray-600">{text}</span>
   </div>
 );
@@ -132,7 +135,7 @@ const ErrorMessage = ({ message, onRetry }) => (
     </div>
     <p className="text-lg text-gray-700 mb-4">{message}</p>
     {onRetry && (
-      <button onClick={onRetry} className="px-6 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors">
+      <button onClick={onRetry} className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors">
         Retry
       </button>
     )}
@@ -151,27 +154,29 @@ const SuccessMessage = ({ message }) => (
   </div>
 );
 
-// Monthly Leave Balance Card Component (Simplified)
+// Monthly Leave Balance Card Component
 const MonthlyLeaveBalanceCard = ({ balance, month, year, isLoading }) => {
   const percentage = Math.min((balance / MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth) * 100, 100);
   
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-6">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <p className="text-xs text-gray-400 font-medium mb-1">Monthly Leave Balance</p>
-          <p className="text-2xl font-semibold text-gray-900">
+          <p className="text-sm text-gray-500 mb-1">Monthly Leave Balance</p>
+          <p className="text-2xl font-bold text-gray-800">
             {isLoading ? '...' : `${balance} / ${MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth}`}
           </p>
           <p className="text-xs text-gray-400 mt-1">{month} {year}</p>
         </div>
-        <div className="text-3xl">📅</div>
+        <div className="w-12 h-12 rounded-xl bg-indigo-500 flex items-center justify-center">
+          <FaCalendarAlt className="w-6 h-6 text-white" />
+        </div>
       </div>
       
       <div className="space-y-2">
         <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
           <div 
-            className="h-full bg-gray-900 rounded-full transition-all duration-1000 ease-out"
+            className="h-full bg-indigo-600 rounded-full transition-all duration-1000 ease-out"
             style={{ width: `${percentage}%` }}
           ></div>
         </div>
@@ -189,7 +194,7 @@ const LeaveRequestCard = ({ request, onEdit, onCancel, onViewDetails }) => {
   const statusConfig = STATUS_CONFIG[request.status] || STATUS_CONFIG.pending;
   
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-4 hover:border-gray-200 transition-all">
+    <div className="bg-white rounded-xl border border-gray-100 p-4 hover:border-indigo-200 hover:shadow-md transition-all">
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center space-x-3">
           <div className="text-2xl">{typeInfo?.icon}</div>
@@ -231,13 +236,13 @@ const LeaveRequestCard = ({ request, onEdit, onCancel, onViewDetails }) => {
           <>
             <button 
               onClick={() => onEdit(request)}
-              className="flex-1 flex items-center justify-center gap-1 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-medium rounded-lg transition-colors border border-gray-200"
+              className="flex-1 flex items-center justify-center gap-1 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-medium rounded-lg transition-colors"
             >
               <FaEdit className="text-xs" /> Edit
             </button>
             <button 
               onClick={() => onCancel(request._id)}
-              className="flex-1 flex items-center justify-center gap-1 py-2 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-medium rounded-lg transition-colors border border-red-200"
+              className="flex-1 flex items-center justify-center gap-1 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-medium rounded-lg transition-colors"
             >
               <FaTrash className="text-xs" /> Cancel
             </button>
@@ -245,7 +250,7 @@ const LeaveRequestCard = ({ request, onEdit, onCancel, onViewDetails }) => {
         )}
         <button 
           onClick={() => onViewDetails(request._id)}
-          className={`flex-1 flex items-center justify-center gap-1 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-medium rounded-lg transition-colors border border-gray-200 ${request.status !== 'pending' ? 'flex-2' : ''}`}
+          className={`flex-1 flex items-center justify-center gap-1 py-2 bg-gray-50 hover:bg-gray-100 text-gray-600 text-xs font-medium rounded-lg transition-colors ${request.status !== 'pending' ? 'flex-2' : ''}`}
         >
           <FaEye className="text-xs" /> View
         </button>
@@ -254,7 +259,7 @@ const LeaveRequestCard = ({ request, onEdit, onCancel, onViewDetails }) => {
   );
 };
 
-// Leave Details Modal (UPDATED with Delete Button)
+// Leave Details Modal
 const LeaveDetailsModal = ({ isOpen, leaveId, onClose, onSuccess, onDelete }) => {
   const [loading, setLoading] = useState(false);
   const [leave, setLeave] = useState(null);
@@ -547,6 +552,7 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, initialData, monthlyBalance
       };
       
       await onSubmit(formattedData);
+      onClose();
     } catch (error) {
       const errorMessage = handleApiError(error, 'Failed to submit leave application');
       alert(errorMessage);
@@ -596,7 +602,7 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, initialData, monthlyBalance
           </div>
           
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="p-4 bg-gray-50 border border-gray-100 rounded-lg">
+            <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-lg">
               <div className="flex justify-between items-center">
                 <div>
                   <p className="text-sm font-medium text-gray-700">Monthly Leave Balance</p>
@@ -605,7 +611,7 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, initialData, monthlyBalance
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-lg font-bold text-gray-900">{monthlyBalance}/{MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth}</p>
+                  <p className="text-lg font-bold text-indigo-600">{monthlyBalance}/{MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth}</p>
                 </div>
               </div>
             </div>
@@ -622,8 +628,8 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, initialData, monthlyBalance
                     onClick={() => handleTypeSelect(type.id)}
                     className={`p-4 rounded-lg border transition-all duration-200 text-left ${
                       formData.type === type.id
-                        ? 'border-gray-900 bg-gray-50'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        ? 'border-indigo-600 bg-indigo-50'
+                        : 'border-gray-200 hover:border-indigo-300 hover:bg-indigo-50'
                     } ${initialData ? 'opacity-50 cursor-not-allowed' : ''}`}
                     disabled={!!initialData}
                   >
@@ -652,7 +658,7 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, initialData, monthlyBalance
                   value={formData.startDate}
                   onChange={handleInputChange}
                   min={new Date().toISOString().split('T')[0]}
-                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-gray-200 focus:border-gray-400 transition-colors ${
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-colors ${
                     errors.startDate ? 'border-red-400' : 'border-gray-200'
                   }`}
                 />
@@ -670,7 +676,7 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, initialData, monthlyBalance
                   value={formData.endDate}
                   onChange={handleInputChange}
                   min={formData.startDate || new Date().toISOString().split('T')[0]}
-                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-gray-200 focus:border-gray-400 transition-colors ${
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-colors ${
                     errors.endDate ? 'border-red-400' : 'border-gray-200'
                   }`}
                 />
@@ -692,7 +698,7 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, initialData, monthlyBalance
                     max={Math.min(monthlyBalance, MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth)}
                     value={formData.leaveCount}
                     onChange={handleInputChange}
-                    className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                   />
                   <div className="flex justify-between text-xs text-gray-400 mt-1">
                     <span>1 day</span>
@@ -718,7 +724,7 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, initialData, monthlyBalance
                 value={formData.reason}
                 onChange={handleInputChange}
                 rows={4}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-gray-200 focus:border-gray-400 transition-colors resize-none ${
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-colors resize-none ${
                   errors.reason ? 'border-red-400' : 'border-gray-200'
                 }`}
                 placeholder="Please provide details about your leave..."
@@ -730,7 +736,7 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, initialData, monthlyBalance
               <button type="button" onClick={handleClose} className="px-6 py-2.5 border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors font-medium" disabled={loading}>
                 Cancel
               </button>
-              <button type="submit" disabled={loading || formData.leaveCount > monthlyBalance} className="px-6 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+              <button type="submit" disabled={loading || formData.leaveCount > monthlyBalance} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed">
                 {loading ? (
                   <span className="flex items-center">
                     <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
@@ -939,26 +945,22 @@ const EmployeeLeave = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Page Header */}
-      <div className="bg-white border-b border-gray-100 px-6 py-5">
+      {/* Page Header - Matching Payroll Style */}
+      <div className="bg-white border-b border-gray-200 px-6 py-5 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-                <FaCalendarAlt className="text-gray-600 text-sm" />
-                Leave Management
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <FaCalendarAlt className="text-indigo-600" /> Leave Management
               </h1>
               <p className="text-sm text-gray-500 mt-1">
                 You have {MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth} leaves per month
               </p>
             </div>
-            <button 
-              onClick={() => setShowLeaveForm(true)} 
-              className="flex items-center gap-2 px-4 py-2.5 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-lg transition-colors"
-            >
-              <FaPlus className="text-xs" />
-              Apply Leave
-            </button>
+            <div className="flex items-center gap-2 text-gray-400">
+              <FaCalendarAlt className="w-5 h-5" />
+              <span className="text-sm">Leave Portal</span>
+            </div>
           </div>
         </div>
       </div>
@@ -967,20 +969,18 @@ const EmployeeLeave = () => {
         {/* Success Message */}
         {successMessage && <SuccessMessage message={successMessage} />}
 
-        {/* Monthly Leave Balance */}
-        {error.balances ? (
-          <ErrorMessage message={error.balances} onRetry={fetchMonthlyBalance} />
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <MonthlyLeaveBalanceCard
-              balance={monthlyBalance}
-              month={currentMonth}
-              year={currentYear}
-              isLoading={loading.balances}
-            />
-            
-            {/* Leave Usage Summary */}
-            <div className="bg-white rounded-xl border border-gray-100 p-6">
+        {/* Monthly Leave Balance and Apply Button Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <MonthlyLeaveBalanceCard
+            balance={monthlyBalance}
+            month={currentMonth}
+            year={currentYear}
+            isLoading={loading.balances}
+          />
+          
+          {/* Leave Usage Summary */}
+          {!error.balances && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
               <p className="text-sm font-semibold text-gray-800 mb-4">Leave Usage Summary</p>
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
@@ -1004,15 +1004,26 @@ const EmployeeLeave = () => {
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+
+        {/* Apply Leave Button Row */}
+        <div className="flex justify-end">
+          <button 
+            onClick={() => setShowLeaveForm(true)} 
+            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            <FaPlus className="text-xs" />
+            Apply for Leave
+          </button>
+        </div>
 
         {/* Leave Requests */}
-        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
-                <FaFileAlt className="text-gray-600 text-sm" />
+              <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
+                <FaFileAlt className="text-indigo-600 text-sm" />
               </div>
               <div>
                 <p className="text-sm font-semibold text-gray-800">My Leave Requests</p>
@@ -1036,7 +1047,7 @@ const EmployeeLeave = () => {
               </div>
               <p className="text-gray-700 font-medium">No leave requests</p>
               <p className="text-gray-400 text-sm mt-1">Get started by applying for a new leave</p>
-              <button onClick={() => setShowLeaveForm(true)} className="mt-4 px-4 py-2 bg-gray-900 text-white text-sm rounded-lg hover:bg-gray-800 transition-colors">
+              <button onClick={() => setShowLeaveForm(true)} className="mt-4 px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors">
                 Apply for Leave
               </button>
             </div>
@@ -1067,7 +1078,7 @@ const EmployeeLeave = () => {
         monthlyBalance={monthlyBalance}
       />
 
-      {/* Leave Details Modal with Delete Button */}
+      {/* Leave Details Modal */}
       <LeaveDetailsModal
         isOpen={showLeaveDetails}
         leaveId={selectedLeaveId}

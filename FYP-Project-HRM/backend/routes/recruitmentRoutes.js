@@ -19,12 +19,13 @@ const {
   getRecruitmentAnalytics,
   getDashboardStats,
   checkCandidateResume,
-  getCandidateResume
+  getCandidateResume,
+  deleteCandidate
 } = require('../controllers/recruitmentController');
 const { protect, authorize } = require('../utils/authMiddleware');
 const upload = require('../utils/uploadMiddleware');
 
-// Job routes
+// ── Job routes ────────────────────────────────────────────────────────────────
 router.route('/jobs')
   .get(protect, authorize('hr', 'admin'), getJobs)
   .post(protect, authorize('hr', 'admin'), createJob);
@@ -35,29 +36,37 @@ router.route('/jobs/:id')
   .delete(protect, authorize('hr', 'admin'), deleteJob);
 
 router.put('/jobs/:id/publish', protect, authorize('hr', 'admin'), publishJob);
-router.put('/jobs/:id/close', protect, authorize('hr', 'admin'), closeJob);
+router.put('/jobs/:id/close',   protect, authorize('hr', 'admin'), closeJob);
 
-// Candidate routes
+// ── Candidate routes ──────────────────────────────────────────────────────────
 router.route('/candidates')
   .get(protect, authorize('hr', 'admin'), getCandidates)
   .post(protect, authorize('hr', 'admin'), upload.single('resume'), addCandidate);
 
 router.route('/candidates/:id')
-  .get(protect, authorize('hr', 'admin'), getCandidate);
+  .get(protect,    authorize('hr', 'admin'), getCandidate)
+  .delete(protect, authorize('hr', 'admin'), deleteCandidate);
 
-router.put('/candidates/:id/status', protect, authorize('hr', 'admin'), updateCandidateStatus);
-router.post('/candidates/:id/interview', protect, authorize('hr', 'admin'), scheduleInterview);
-router.post('/candidates/:id/feedback', protect, authorize('hr', 'admin'), addInterviewFeedback);
-router.post('/candidates/:id/notes', protect, authorize('hr', 'admin'), addCandidateNote);
-router.post('/candidates/:id/resume', protect, authorize('hr', 'admin'), upload.single('resume'), uploadResume);
+router.put('/candidates/:id/status',
+  protect, authorize('hr', 'admin'), updateCandidateStatus);
+
+router.post('/candidates/:id/schedule-interview',
+  protect, authorize('hr', 'admin'), scheduleInterview);
+
+router.post('/candidates/:id/feedback',
+  protect, authorize('hr', 'admin'), addInterviewFeedback);
+
+router.post('/candidates/:id/notes',
+  protect, authorize('hr', 'admin'), addCandidateNote);
+
+// ✅ FIXED: merged all three resume methods into one route block (no conflict)
 router.route('/candidates/:id/resume')
-  .get(protect, authorize('hr', 'admin'), getCandidateResume)
-  .head(protect, authorize('hr', 'admin'), checkCandidateResume);
+  .get(protect,  authorize('hr', 'admin'), getCandidateResume)
+  .head(protect, authorize('hr', 'admin'), checkCandidateResume)
+  .post(protect, authorize('hr', 'admin'), upload.single('resume'), uploadResume);
 
-// Analytics routes
+// ── Analytics routes ──────────────────────────────────────────────────────────
 router.get('/analytics', protect, authorize('hr', 'admin'), getRecruitmentAnalytics);
 router.get('/dashboard', protect, authorize('hr', 'admin'), getDashboardStats);
-// Add this to your recruitment routes or create new public routes
-
 
 module.exports = router;

@@ -1,57 +1,74 @@
-# controllers/chat_controller.py (RAG version)
-from flask import session, jsonify, request
+# controllers/chat_controller.py
+from flask import jsonify, request
 from datetime import datetime
 from models.chat import ChatMessage
 from services.ai_service import AIService
+from models import db
+import uuid
+
 
 class ChatController:
-    
+
     @staticmethod
     def send_message():
-        """Send a chat message (HR Assistant RAG)"""
         try:
-            user_id = session.get('user_id')
-            if not user_id:
-                return jsonify({'error': 'Not authenticated'}), 401
-            
-            data = request.json
-            message = data.get('message')
-            
+            data       = request.get_json() or {}
+            message    = data.get('message', '').strip()
+            user_name  = data.get('user_name', 'anonymous')
+            session_id = data.get('session_id') or str(uuid.uuid4())
+
             if not message:
                 return jsonify({'error': 'No message provided'}), 400
-            
-            from models import db
-            
-            # Save user message
-            user_message = ChatMessage(
-                user_id=user_id,
+
+            # Save user message — no user_id needed
+            db.session.add(ChatMessage(
+                user_id=None,
+                session_id=session_id,
                 sender='user',
-                message=message
-            )
-            db.session.add(user_message)
+                message=message,
+                chat_type='hr'
+            ))
             db.session.commit()
-            
-            # --- CALL RAG BASED HR ASSISTANT ---
+
+            # Call RAG HR assistant
             result = AIService.chat_hr(message)
-            
-            # RAG output usually has 'answer' key
             answer = result.get('answer', 'Sorry, I could not find an answer in the HR docs.')
-            
+
             # Save AI response
-            ai_message = ChatMessage(
-                user_id=user_id,
+            db.session.add(ChatMessage(
+                user_id=None,
+                session_id=session_id,
                 sender='ai',
-                message=answer
-            )
-            db.session.add(ai_message)
+                message=answer,
+                chat_type='hr'
+            ))
             db.session.commit()
-            
+
             return jsonify({
-                'ai_response': {
-                    'text': answer,
-                    'timestamp': datetime.now().isoformat()
-                }
+                'answer':     answer,
+                'session_id': session_id,
+                'timestamp':  datetime.now().isoformat()
             })
-            
+
+        except Exception as e:
+            db.session.rollback()
+            print(f"[chat_controller] ERROR: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @staticmethod
+    def get_history():
+        try:
+            session_id = request.args.get('session_id')
+            if not session_id:
+                return jsonify({'messages': []})
+
+            messages = (
+                ChatMessage.query
+                .filter_by(session_id=session_id)
+                .order_by(ChatMessage.id.asc())
+                .all()
+            )
+            return jsonify({'messages': [m.to_dict() for m in messages]})
+
         except Exception as e:
             return jsonify({'error': str(e)}), 500

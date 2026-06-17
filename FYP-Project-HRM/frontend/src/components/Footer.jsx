@@ -16,9 +16,9 @@ const Footer = () => {
               </div>
               <div>
                 <h2 className="text-2xl font-bold bg-gradient-to-r from-white to-slate-200 bg-clip-text text-transparent">
-                  HRM Pro
+                  AI-HRM
                 </h2>
-                <p className="text-sm text-slate-400">Enterprise Solutions</p>
+                <p className="text-sm text-slate-400">Human Resource Management</p>
               </div>
             </div>
             <p className="text-slate-300 mb-6 leading-relaxed">
@@ -65,9 +65,7 @@ const Footer = () => {
               {[
                 { path: '/', label: 'Home' },
                 { path: '/about', label: 'About Us' },
-                { path: '/services', label: 'Services' },
-                { path: '/contact', label: 'Contact' },
-                { path: '/pricing', label: 'Pricing' }
+                { path: '/contact', label: 'Contact' }
               ].map((link) => (
                 <li key={link.path}>
                   <Link 
@@ -125,7 +123,7 @@ const Footer = () => {
                 </div>
                 <div>
                   <p className="text-slate-300 text-sm">Email</p>
-                  <p className="text-white group-hover:text-blue-400 transition-colors">info@hrmpro.com</p>
+                  <p className="text-white group-hover:text-blue-400 transition-colors">ai.hrm@hrmpro.com</p>
                 </div>
               </div>
               
@@ -137,7 +135,7 @@ const Footer = () => {
                 </div>
                 <div>
                   <p className="text-slate-300 text-sm">Phone</p>
-                  <p className="text-white group-hover:text-cyan-400 transition-colors">+1 (555) 123-4567</p>
+                  <p className="text-white group-hover:text-cyan-400 transition-colors">+92 300 1234567</p>
                 </div>
               </div>
               
@@ -150,25 +148,8 @@ const Footer = () => {
                 </div>
                 <div>
                   <p className="text-slate-300 text-sm">Address</p>
-                  <p className="text-white group-hover:text-emerald-400 transition-colors">123 Business District, Tech City, TC 12345</p>
+                  <p className="text-white group-hover:text-emerald-400 transition-colors">New Garden Town, Lahore, Pakistan</p>
                 </div>
-              </div>
-            </div>
-
-            {/* Newsletter Signup */}
-            <div className="mt-6">
-              <p className="text-slate-300 text-sm mb-3">Subscribe to our newsletter</p>
-              <div className="flex space-x-2">
-                <input 
-                  type="email" 
-                  placeholder="Enter your email"
-                  className="flex-1 bg-slate-700 border border-slate-600 rounded-xl px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                <button className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-4 py-2 rounded-xl hover:from-blue-600 hover:to-cyan-600 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/25">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                  </svg>
-                </button>
               </div>
             </div>
           </div>
@@ -177,7 +158,7 @@ const Footer = () => {
         {/* Bottom Bar */}
         <div className="border-t border-slate-700 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
           <p className="text-slate-400 text-sm">
-            &copy; 2024 HRM Pro. All rights reserved. | Enterprise HR Solutions
+            &copy; 2026 AI-HRM. All rights reserved. | Enterprise HR Solutions
           </p>
           <div className="flex space-x-6 mt-4 md:mt-0">
             <a href="#" className="text-slate-400 hover:text-white text-sm transition-colors duration-300">Privacy Policy</a>

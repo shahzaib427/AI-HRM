@@ -2,6 +2,7 @@ const User = require('../models/User');
 const Leave = require('../models/Leave');
 const fs = require('fs');
 const path = require('path');
+const NotificationService = require('../services/notificationService');
 
 exports.getHRProfile = async (req, res) => {
   try {
@@ -29,10 +30,14 @@ exports.getHRProfile = async (req, res) => {
   }
 };
 
+// UPDATE HR PROFILE - WITH NOTIFICATION
 exports.updateHRProfile = async (req, res) => {
   try {
     const userId = req.user.id;
     const updateData = req.body;
+
+    // Get old user data before update for comparison
+    const oldUser = await User.findById(userId).select('name email department position');
 
     const allowedFields = {
       name: updateData.name,
@@ -99,9 +104,46 @@ exports.updateHRProfile = async (req, res) => {
       { new: true, runValidators: true, context: 'query' }
     ).select('-password -passwordHistory');
 
+    // ✅ SEND NOTIFICATION to Admin about HR profile update
+    const io = req.app.get('io');
+    const notificationService = new NotificationService(io);
+    
+    const adminUsers = await User.find({ role: 'admin' });
+    
+    // Check what changed to send specific notification
+    let changeDescription = '';
+    if (oldUser.department !== updateData.department) {
+      changeDescription = `Department changed from ${oldUser.department} to ${updateData.department}`;
+    } else if (oldUser.position !== updateData.position) {
+      changeDescription = `Position changed from ${oldUser.position} to ${updateData.position}`;
+    } else {
+      changeDescription = 'Profile information updated';
+    }
+    
+    for (const admin of adminUsers) {
+      await notificationService.createNotification({
+        recipient: {
+          userId: admin._id,
+          userModel: 'User',
+          role: admin.role
+        },
+        type: 'employee_updated',
+        title: 'HR Profile Updated 📝',
+        message: `${updatedUser.name} (HR) has updated their profile. ${changeDescription}`,
+        data: {
+          userId: userId,
+          userName: updatedUser.name,
+          changes: changeDescription,
+          department: updateData.department,
+          position: updateData.position
+        },
+        priority: 'medium'
+      });
+    }
+
     res.status(200).json({
       success: true,
-      message: 'HR profile updated successfully',
+      message: 'HR profile updated successfully with notification to Admin',
       data: updatedUser
     });
   } catch (error) {
@@ -196,6 +238,7 @@ async function getDepartmentStats() {
   }
 }
 
+// UPLOAD PROFILE PICTURE - WITH NOTIFICATION
 exports.uploadProfilePicture = async (req, res) => {
   try {
     if (!req.file) {
@@ -220,9 +263,32 @@ exports.uploadProfilePicture = async (req, res) => {
       });
     }
 
+    // ✅ Send notification to Admin
+    const io = req.app.get('io');
+    const notificationService = new NotificationService(io);
+    
+    const adminUsers = await User.find({ role: 'admin' });
+    for (const admin of adminUsers) {
+      await notificationService.createNotification({
+        recipient: {
+          userId: admin._id,
+          userModel: 'User',
+          role: admin.role
+        },
+        type: 'employee_updated',
+        title: 'Profile Picture Updated 🖼️',
+        message: `${user.name} (HR) has updated their profile picture`,
+        data: {
+          userId: user._id,
+          userName: user.name
+        },
+        priority: 'low'
+      });
+    }
+
     res.status(200).json({
       success: true,
-      message: 'Profile picture uploaded successfully',
+      message: 'Profile picture uploaded successfully with notification',
       data: { profilePicture: profilePictureUrl }
     });
   } catch (error) {
@@ -281,7 +347,6 @@ exports.getDashboardStats = async (req, res) => {
     });
     const pendingLeaveRequests = await Leave.countDocuments({ status: 'pending' });
     
-    // Calculate turnover rate based on employees who left
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
     const employeesLeft = await User.countDocuments({
@@ -292,11 +357,11 @@ exports.getDashboardStats = async (req, res) => {
 
     const stats = {
       totalEmployees: totalEmployees,
-      openPositions: 0, // Will be updated when Job model is added
+      openPositions: 0,
       pendingLeave: pendingLeaveRequests,
       newHires: recentHires,
       turnoverRate: parseFloat(turnoverRate),
-      trainingProgress: 0 // Will be updated when Training model is added
+      trainingProgress: 0
     };
 
     res.status(200).json({
@@ -313,18 +378,16 @@ exports.getDashboardStats = async (req, res) => {
 };
 
 // Recent Activity - Real data only
-// Recent Activity - Real data only (without populate)
 exports.getRecentActivity = async (req, res) => {
   try {
     const activities = [];
 
-    // Get recent leave requests - without populate
+    // Get recent leave requests
     const recentLeaves = await Leave.find()
       .sort({ createdAt: -1 })
       .limit(5)
       .lean();
 
-    // Get user names separately for each leave
     for (const leave of recentLeaves) {
       if (leave.userId) {
         const user = await User.findById(leave.userId).select('name').lean();
@@ -362,10 +425,8 @@ exports.getRecentActivity = async (req, res) => {
       });
     });
 
-    // Sort by date (most recent first)
     activities.sort((a, b) => new Date(b.time) - new Date(a.time));
     
-    // Format time for display and limit to 10 items
     const formattedActivities = activities.slice(0, 10).map(activity => ({
       ...activity,
       time: formatTimeAgo(activity.time)
@@ -389,7 +450,6 @@ exports.getPendingApprovals = async (req, res) => {
   try {
     const approvals = [];
 
-    // Pending leave requests
     const pendingLeaves = await Leave.countDocuments({ status: 'pending' });
     if (pendingLeaves > 0) {
       approvals.push({
@@ -400,7 +460,6 @@ exports.getPendingApprovals = async (req, res) => {
       });
     }
 
-    // Employees on probation
     const probationEmployees = await User.countDocuments({
       isActive: true,
       employeeType: 'probation',
@@ -415,7 +474,6 @@ exports.getPendingApprovals = async (req, res) => {
       });
     }
 
-    // Contract renewals (expiring in next 30 days)
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
     const contractsExpiring = await User.countDocuments({
@@ -449,11 +507,9 @@ exports.getPendingApprovals = async (req, res) => {
   }
 };
 
-// Recruitment Data - Real data only (returns empty array if no data)
+// Recruitment Data - Real data only
 exports.getRecruitmentData = async (req, res) => {
   try {
-    // This endpoint will return real data when you have a Job/Recruitment model
-    // For now, return empty array - no mock data
     res.status(200).json({
       success: true,
       data: []
@@ -468,12 +524,10 @@ exports.getRecruitmentData = async (req, res) => {
 };
 
 // HR Metrics - Real data only
-// HR Metrics - Real data only
 exports.getHRMetrics = async (req, res) => {
   try {
     const metrics = [];
 
-    // Calculate time to hire (average days between joining date and creation)
     const timeToHireAgg = await User.aggregate([
       {
         $match: {
@@ -512,7 +566,6 @@ exports.getHRMetrics = async (req, res) => {
       });
     }
     
-    // Calculate retention rate
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
     
@@ -536,7 +589,6 @@ exports.getHRMetrics = async (req, res) => {
       });
     }
     
-    // Calculate diversity score (based on gender distribution)
     const genderStats = await User.aggregate([
       {
         $match: { 
@@ -567,7 +619,6 @@ exports.getHRMetrics = async (req, res) => {
       }
     }
 
-    // Only return metrics if there's at least one
     if (metrics.length === 0) {
       metrics.push({
         label: 'No Data Available',

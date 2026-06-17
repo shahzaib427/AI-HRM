@@ -11,7 +11,10 @@ import {
   FilterIcon,
   ExternalLinkIcon,
   CheckCircleIcon,
-  ArrowRightIcon
+  ArrowRightIcon,
+  TrashIcon,
+  EyeIcon,
+  XIcon
 } from '@heroicons/react/outline';
 
 const JobPortal = () => {
@@ -46,6 +49,24 @@ const JobPortal = () => {
     resume: null
   });
 
+  // Delete confirmation
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [jobToDelete, setJobToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // Job details modal
+  const [showJobDetails, setShowJobDetails] = useState(false);
+  const [selectedJobDetails, setSelectedJobDetails] = useState(null);
+
+  // Get current user from localStorage
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    // Get user from localStorage
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    setCurrentUser(user);
+  }, []);
+
   // Fetch jobs
   useEffect(() => {
     const fetchJobs = async () => {
@@ -68,6 +89,64 @@ const JobPortal = () => {
 
     fetchJobs();
   }, []);
+
+  // Delete job function
+  const handleDeleteJob = async () => {
+    if (!jobToDelete) return;
+    
+    setDeleting(true);
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        alert('Authentication required. Please login again.');
+        return;
+      }
+
+      await axios.delete(`http://localhost:5000/api/recruitment/jobs/${jobToDelete._id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      // Remove job from state
+      const updatedJobs = jobs.filter(job => job._id !== jobToDelete._id);
+      setJobs(updatedJobs);
+      setFilteredJobs(updatedJobs);
+      
+      // Show success message
+      alert('Job deleted successfully!');
+      setShowDeleteConfirm(false);
+      setJobToDelete(null);
+      
+    } catch (error) {
+      console.error('Error deleting job:', error);
+      if (error.response?.status === 401) {
+        alert('Unauthorized. Please login as HR or Admin to delete jobs.');
+      } else if (error.response?.status === 403) {
+        alert('Access denied. Only HR and Admin can delete jobs.');
+      } else {
+        alert(error.response?.data?.error || 'Failed to delete job');
+      }
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // Confirm delete
+  const confirmDelete = (job) => {
+    if (!currentUser || (currentUser.role !== 'hr' && currentUser.role !== 'admin')) {
+      alert('Only HR and Admin can delete jobs');
+      return;
+    }
+    setJobToDelete(job);
+    setShowDeleteConfirm(true);
+  };
+
+  // View job details
+  const viewJobDetails = (job) => {
+    setSelectedJobDetails(job);
+    setShowJobDetails(true);
+  };
 
   // Apply filters
   useEffect(() => {
@@ -115,66 +194,64 @@ const JobPortal = () => {
   };
 
   // Handle form submission with proper FormData
-const handleSubmitApplication = async (e) => {
-  e.preventDefault();
-  setSubmitting(true);
+  const handleSubmitApplication = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
 
-  try {
-    const formData = new FormData();
-    formData.append('jobId', selectedJob._id);
-    formData.append('firstName', applicationForm.firstName);
-    formData.append('lastName', applicationForm.lastName);
-    formData.append('email', applicationForm.email);
-    formData.append('phone', applicationForm.phone);
-    formData.append('currentCompany', applicationForm.currentCompany || '');
-    formData.append('currentPosition', applicationForm.currentPosition || '');
-    formData.append('totalExperience', applicationForm.totalExperience || '');
-    formData.append('currentSalary', applicationForm.currentSalary || '');
-    formData.append('expectedSalary', applicationForm.expectedSalary || '');
-    formData.append('noticePeriod', applicationForm.noticePeriod || '0');
-    formData.append('coverLetter', applicationForm.coverLetter || '');
-    formData.append('skills', applicationForm.skills || '');
+    try {
+      const formData = new FormData();
+      formData.append('jobId', selectedJob._id);
+      formData.append('firstName', applicationForm.firstName);
+      formData.append('lastName', applicationForm.lastName);
+      formData.append('email', applicationForm.email);
+      formData.append('phone', applicationForm.phone);
+      formData.append('currentCompany', applicationForm.currentCompany || '');
+      formData.append('currentPosition', applicationForm.currentPosition || '');
+      formData.append('totalExperience', applicationForm.totalExperience || '');
+      formData.append('currentSalary', applicationForm.currentSalary || '');
+      formData.append('expectedSalary', applicationForm.expectedSalary || '');
+      formData.append('noticePeriod', applicationForm.noticePeriod || '0');
+      formData.append('coverLetter', applicationForm.coverLetter || '');
+      formData.append('skills', applicationForm.skills || '');
 
-    if (applicationForm.resume) {
-      formData.append('resume', applicationForm.resume); // File object
-      console.log('📎 Attaching resume:', applicationForm.resume.name);
-    } else {
-      console.log('⚠️ No resume selected');
+      if (applicationForm.resume) {
+        formData.append('resume', applicationForm.resume);
+        console.log('📎 Attaching resume:', applicationForm.resume.name);
+      } else {
+        console.log('⚠️ No resume selected');
+      }
+
+      const response = await axios.post(
+        'http://localhost:5000/api/public/apply',
+        formData
+      );
+
+      if (response.data.success) {
+        alert('Application submitted successfully!');
+        setShowApplicationForm(false);
+        setApplicationForm({
+          firstName: '', lastName: '', email: '', phone: '',
+          currentCompany: '', currentPosition: '', totalExperience: '',
+          currentSalary: '', expectedSalary: '', noticePeriod: '',
+          coverLetter: '', skills: '', resume: null
+        });
+      }
+    } catch (error) {
+      console.error('Submission error:', error);
+      alert('Failed: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setSubmitting(false);
     }
+  };
 
-    // ✅ NO headers object — let axios set Content-Type with boundary automatically
-    const response = await axios.post(
-      'http://localhost:5000/api/public/apply',
-      formData
-    );
-
-    if (response.data.success) {
-      alert('Application submitted successfully!');
-      setShowApplicationForm(false);
-      setApplicationForm({
-        firstName: '', lastName: '', email: '', phone: '',
-        currentCompany: '', currentPosition: '', totalExperience: '',
-        currentSalary: '', expectedSalary: '', noticePeriod: '',
-        coverLetter: '', skills: '', resume: null
-      });
-    }
-  } catch (error) {
-    console.error('Submission error:', error);
-    alert('Failed: ' + (error.response?.data?.error || error.message));
-  } finally {
-    setSubmitting(false);
-  }
-};
   // Handle file selection
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      // Validate file size (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
         alert('File size should be less than 5MB');
         return;
       }
-      // Validate file type
       const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
       if (!allowedTypes.includes(file.type)) {
         alert('Only PDF, DOC, and DOCX files are allowed');
@@ -190,6 +267,11 @@ const handleSubmitApplication = async (e) => {
     if (!min) return `Up to $${Number(max).toLocaleString()}`;
     if (!max) return `From $${Number(min).toLocaleString()}`;
     return `$${Number(min).toLocaleString()} - $${Number(max).toLocaleString()}`;
+  };
+
+  // Check if user is HR or Admin
+  const isHRorAdmin = () => {
+    return currentUser && (currentUser.role === 'hr' || currentUser.role === 'admin');
   };
 
   // Get unique departments for filter
@@ -213,10 +295,20 @@ const handleSubmitApplication = async (e) => {
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-          <h1 className="text-4xl font-bold mb-4">Join Our Team</h1>
-          <p className="text-xl opacity-90 mb-8">
-            Discover exciting career opportunities and be part of something great
-          </p>
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-4xl font-bold mb-4">Join Our Team</h1>
+              <p className="text-xl opacity-90 mb-8">
+                Discover exciting career opportunities and be part of something great
+              </p>
+            </div>
+            {isHRorAdmin() && (
+              <div className="bg-white/20 backdrop-blur-sm rounded-lg px-4 py-2">
+                <p className="text-sm font-medium">HR/Admin Mode</p>
+                <p className="text-xs opacity-75">You can delete jobs</p>
+              </div>
+            )}
+          </div>
           
           {/* Search Bar */}
           <div className="max-w-2xl">
@@ -399,7 +491,7 @@ const handleSubmitApplication = async (e) => {
                     )}
                   </div>
                   
-                  <div className="lg:ml-6 lg:pl-6 lg:border-l lg:border-gray-200 mt-4 lg:mt-0 lg:w-64 flex-shrink-0">
+                  <div className="lg:ml-6 lg:pl-6 lg:border-l lg:border-gray-200 mt-4 lg:mt-0 lg:w-72 flex-shrink-0">
                     <div className="space-y-3">
                       <button
                         onClick={() => handleApply(job)}
@@ -408,14 +500,21 @@ const handleSubmitApplication = async (e) => {
                         Apply Now
                       </button>
                       <button
-                        onClick={() => {
-                          // Show job details in a modal or navigate
-                          alert(`Job Details:\n\nTitle: ${job.title}\nDepartment: ${job.department}\nLocation: ${job.location || 'Remote'}\n\nDescription: ${job.description}`);
-                        }}
-                        className="w-full border border-gray-300 hover:bg-gray-50 py-3 px-4 rounded-lg font-medium transition-colors"
+                        onClick={() => viewJobDetails(job)}
+                        className="w-full border border-gray-300 hover:bg-gray-50 py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center"
                       >
+                        <EyeIcon className="h-5 w-5 mr-2" />
                         View Details
                       </button>
+                      {isHRorAdmin() && (
+                        <button
+                          onClick={() => confirmDelete(job)}
+                          className="w-full bg-red-600 hover:bg-red-700 text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center"
+                        >
+                          <TrashIcon className="h-5 w-5 mr-2" />
+                          Delete Job
+                        </button>
+                      )}
                     </div>
                     
                     <div className="mt-6 pt-6 border-t border-gray-200">
@@ -438,6 +537,147 @@ const handleSubmitApplication = async (e) => {
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && jobToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-6">
+            <div className="text-center">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                <TrashIcon className="h-6 w-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Job</h3>
+              <p className="text-gray-600 mb-4">
+                Are you sure you want to delete <span className="font-semibold">"{jobToDelete.title}"</span>?
+              </p>
+              <p className="text-sm text-red-600 mb-6">
+                ⚠️ Warning: This action cannot be undone. All applications for this job will also be deleted.
+              </p>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setJobToDelete(null);
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteJob}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {deleting ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Job Details Modal */}
+      {showJobDetails && selectedJobDetails && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">{selectedJobDetails.title}</h2>
+                <p className="text-gray-600">{selectedJobDetails.department} • {selectedJobDetails.jobType}</p>
+              </div>
+              <button
+                onClick={() => setShowJobDetails(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-80px)]">
+              <div className="space-y-6">
+                {/* Job Details Sections */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Description</h3>
+                  <p className="text-gray-700 whitespace-pre-wrap">{selectedJobDetails.description}</p>
+                </div>
+                
+                {selectedJobDetails.responsibilities && selectedJobDetails.responsibilities.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Key Responsibilities</h3>
+                    <ul className="list-disc list-inside space-y-1">
+                      {selectedJobDetails.responsibilities.map((resp, idx) => (
+                        <li key={idx} className="text-gray-700">{resp}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                
+                {selectedJobDetails.requirements && selectedJobDetails.requirements.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Requirements</h3>
+                    <ul className="list-disc list-inside space-y-1">
+                      {selectedJobDetails.requirements.map((req, idx) => (
+                        <li key={idx} className="text-gray-700">{req}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                
+                {selectedJobDetails.benefits && selectedJobDetails.benefits.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Benefits</h3>
+                    <ul className="list-disc list-inside space-y-1">
+                      {selectedJobDetails.benefits.map((benefit, idx) => (
+                        <li key={idx} className="text-gray-700">{benefit}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Additional Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-600">Experience Level</p>
+                      <p className="font-medium">{selectedJobDetails.experienceLevel}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Salary Range</p>
+                      <p className="font-medium">{formatSalary(selectedJobDetails.salaryRange?.min, selectedJobDetails.salaryRange?.max)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Location</p>
+                      <p className="font-medium">{selectedJobDetails.location || 'Remote'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Posted Date</p>
+                      <p className="font-medium">{new Date(selectedJobDetails.createdAt).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 sticky bottom-0 bg-white">
+              <button
+                onClick={() => setShowJobDetails(false)}
+                className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  setShowJobDetails(false);
+                  handleApply(selectedJobDetails);
+                }}
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+              >
+                Apply Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Application Form Modal */}
       {showApplicationForm && selectedJob && (

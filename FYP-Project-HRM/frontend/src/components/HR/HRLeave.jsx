@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
+import { 
+  FaUsers, FaCheckCircle, FaTimesCircle, FaClock, FaFilter, 
+  FaSearch, FaDownload, FaSync, FaPlus, FaCalendarAlt, 
+  FaUser, FaBriefcase, FaExclamationTriangle, FaChevronDown, 
+  FaChevronUp, FaSpinner, FaEnvelope
+} from 'react-icons/fa';
 
 // API Configuration
 const API_BASE_URL = 'http://localhost:5000/api/leaves';
@@ -28,8 +34,7 @@ const decodeToken = () => {
   } catch { return null; }
 };
 
-const getUserId   = () => decodeToken()?._id   || null;
-const getUserRole = () => decodeToken()?.role   || 'employee';
+const getUserId = () => decodeToken()?._id || null;
 
 const MONTHLY_LEAVE_CONFIG = {
   TOTAL_LEAVES_PER_MONTH: 2,
@@ -41,10 +46,10 @@ const MONTHLY_LEAVE_CONFIG = {
 };
 
 const STATUS_CONFIG = {
-  pending:   { label: 'Pending',   className: 'bg-yellow-100 text-yellow-800' },
-  approved:  { label: 'Approved',  className: 'bg-green-100  text-green-800'  },
-  rejected:  { label: 'Rejected',  className: 'bg-red-100    text-red-800'    },
-  cancelled: { label: 'Cancelled', className: 'bg-gray-100   text-gray-800'   }
+  pending:   { label: 'Pending',   variant: 'warning' },
+  approved:  { label: 'Approved',  variant: 'success' },
+  rejected:  { label: 'Rejected',  variant: 'danger' },
+  cancelled: { label: 'Cancelled', variant: 'default' }
 };
 
 const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A';
@@ -53,11 +58,12 @@ const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'n
 const Badge = ({ children, variant = 'default' }) => {
   const v = {
     default: 'bg-gray-100 text-gray-600',
-    success: 'bg-green-50 text-green-700',
-    warning: 'bg-yellow-50 text-yellow-700',
+    success: 'bg-emerald-50 text-emerald-700',
+    warning: 'bg-amber-50 text-amber-700',
     info:    'bg-blue-50 text-blue-700',
     danger:  'bg-red-50 text-red-700',
-    purple:  'bg-purple-50 text-purple-700'
+    purple:  'bg-purple-50 text-purple-700',
+    primary: 'bg-indigo-50 text-indigo-700'
   };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${v[variant]}`}>
@@ -67,16 +73,16 @@ const Badge = ({ children, variant = 'default' }) => {
 };
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
-const KpiCard = ({ label, value, sub, iconBg, icon }) => (
-  <div className="bg-white rounded-xl border border-gray-100 p-5 hover:shadow-md transition-all duration-200">
+const KpiCard = ({ icon: Icon, label, value, sub, iconBg }) => (
+  <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow">
     <div className="flex items-center justify-between">
       <div>
-        <p className="text-xs text-gray-500 font-medium mb-2">{label}</p>
-        <p className="text-2xl font-semibold text-gray-900">{value}</p>
+        <p className="text-sm text-gray-500 mb-1">{label}</p>
+        <p className="text-2xl font-bold text-gray-800">{value}</p>
         {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
       </div>
-      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${iconBg}`}>
-        <span className="text-white text-lg">{icon}</span>
+      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${iconBg}`}>
+        <Icon className="text-white text-sm" />
       </div>
     </div>
   </div>
@@ -151,7 +157,6 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, monthlyBalance }) => {
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
         </div>
         <div className="p-6">
-          {/* Balance info */}
           <div className="mb-5 p-3 bg-indigo-50 border border-indigo-100 rounded-lg flex justify-between items-center">
             <div>
               <p className="text-sm font-medium text-indigo-900">Monthly Balance</p>
@@ -164,16 +169,13 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, monthlyBalance }) => {
             </span>
           </div>
 
-          {/* ── IMPORTANT NOTE for HR ── */}
           <div className="mb-5 p-3 bg-amber-50 border border-amber-200 rounded-lg">
             <p className="text-xs text-amber-800 font-medium">
               ℹ️ Your leave request will be reviewed and approved by an <strong>Admin</strong>.
-              HR members cannot approve their own leave requests.
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Leave type */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Leave Type *</label>
               <div className="grid grid-cols-2 gap-3">
@@ -188,7 +190,6 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, monthlyBalance }) => {
               </div>
             </div>
 
-            {/* Dates */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
@@ -206,16 +207,13 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, monthlyBalance }) => {
               </div>
             </div>
 
-            {/* Duration preview */}
             {calculatedDays > 0 && (
               <div className={`p-3 rounded-lg text-sm ${calculatedDays > MONTHLY_LEAVE_CONFIG.MAX_CONSECUTIVE_DAYS ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'}`}>
                 Duration: {calculatedDays} calendar days
                 {calculatedDays > MONTHLY_LEAVE_CONFIG.MAX_CONSECUTIVE_DAYS && ` (max ${MONTHLY_LEAVE_CONFIG.MAX_CONSECUTIVE_DAYS})`}
               </div>
             )}
-            {errors.days && <p className="text-xs text-red-500">{errors.days}</p>}
 
-            {/* Leave count slider */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Leaves to Use *</label>
               <div className="flex items-center gap-4">
@@ -237,7 +235,6 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, monthlyBalance }) => {
               {errors.leaveCount && <p className="mt-1 text-xs text-red-500">{errors.leaveCount}</p>}
             </div>
 
-            {/* Reason */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Reason *</label>
               <textarea name="reason" value={formData.reason} onChange={handleChange} rows={3}
@@ -253,6 +250,7 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, monthlyBalance }) => {
               </button>
               <button type="submit" disabled={loading || formData.leaveCount > monthlyBalance}
                 className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50">
+                {loading ? <FaSpinner className="animate-spin inline mr-1" /> : null}
                 {loading ? 'Submitting...' : 'Submit Application'}
               </button>
             </div>
@@ -267,7 +265,7 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, monthlyBalance }) => {
 const ExportModal = ({ isOpen, onClose, onExportCSV, onExportMonthlyReport, exporting }) => {
   const [exportType, setExportType] = useState('csv');
   const [month, setMonth] = useState(String(new Date().getMonth() + 1));
-  const [year, setYear]   = useState(String(new Date().getFullYear()));
+  const [year, setYear] = useState(String(new Date().getFullYear()));
 
   const handleSubmit = () => {
     if (exportType === 'csv') onExportCSV();
@@ -303,7 +301,7 @@ const ExportModal = ({ isOpen, onClose, onExportCSV, onExportMonthlyReport, expo
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Month</label>
                 <select value={month} onChange={e => setMonth(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg">
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500">
                   {['January','February','March','April','May','June','July','August','September','October','November','December']
                     .map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
                 </select>
@@ -312,7 +310,7 @@ const ExportModal = ({ isOpen, onClose, onExportCSV, onExportMonthlyReport, expo
                 <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
                 <input type="number" value={year} onChange={e => setYear(e.target.value)}
                   min="2000" max="2100"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg" />
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500" />
               </div>
             </div>
           )}
@@ -324,6 +322,7 @@ const ExportModal = ({ isOpen, onClose, onExportCSV, onExportMonthlyReport, expo
             </button>
             <button onClick={handleSubmit} disabled={exporting}
               className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50">
+              {exporting ? <FaSpinner className="animate-spin inline mr-1" /> : <FaDownload className="inline mr-1 text-xs" />}
               {exporting ? 'Exporting...' : 'Export'}
             </button>
           </div>
@@ -335,18 +334,20 @@ const ExportModal = ({ isOpen, onClose, onExportCSV, onExportMonthlyReport, expo
 
 // ─── Main HRLeave Component ───────────────────────────────────────────────────
 const HRLeave = () => {
-  const [leaveRequests, setLeaveRequests]       = useState([]);
-  const [myLeaves, setMyLeaves]                 = useState([]);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [myLeaves, setMyLeaves] = useState([]);
   const [myMonthlyBalance, setMyMonthlyBalance] = useState(MONTHLY_LEAVE_CONFIG.TOTAL_LEAVES_PER_MONTH);
-  const [leaveStats, setLeaveStats]             = useState({ pending: 0, approved: 0, rejected: 0, totalRequests: 0 });
-  const [loading, setLoading]                   = useState({ requests: true, myLeaves: true, balance: true });
-  const [filter, setFilter]                     = useState('all');
-  const [searchTerm, setSearchTerm]             = useState('');
-  const [showLeaveForm, setShowLeaveForm]        = useState(false);
-  const [activeTab, setActiveTab]               = useState('manage');
-  const [showExportModal, setShowExportModal]   = useState(false);
-  const [successMessage, setSuccessMessage]     = useState('');
-  const [exporting, setExporting]               = useState(false);
+  const [leaveStats, setLeaveStats] = useState({ pending: 0, approved: 0, rejected: 0, totalRequests: 0 });
+  const [loading, setLoading] = useState({ requests: true, myLeaves: true, balance: true });
+  const [filter, setFilter] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showLeaveForm, setShowLeaveForm] = useState(false);
+  const [activeTab, setActiveTab] = useState('manage');
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const [showAllRequests, setShowAllRequests] = useState(false);
+  const [showAllMyLeaves, setShowAllMyLeaves] = useState(false);
 
   // ── Data fetching ──────────────────────────────────────────────────────────
   const fetchLeaveRequests = useCallback(async () => {
@@ -355,7 +356,6 @@ const HRLeave = () => {
       const res = await api.get('/all');
       if (res.data?.success) {
         const hrUserId = getUserId();
-        // HR sees all leaves EXCEPT their own (handled separately in "My Leaves" tab)
         setLeaveRequests((res.data.data || []).filter(l => l.employee?._id !== hrUserId));
         const allLeaves = res.data.data || [];
         const empLeaves = allLeaves.filter(l => l.employee?._id !== hrUserId);
@@ -388,14 +388,10 @@ const HRLeave = () => {
   const fetchMyMonthlyBalance = useCallback(async () => {
     try {
       setLoading(prev => ({ ...prev, balance: true }));
-      // FIX: Use /balance (not /monthly-balance) — matches the backend route
-      // Both endpoints return the same data; /balance is the correct one here.
       const res = await api.get('/balance');
       if (res.data?.success) {
         const d = res.data.data;
-        setMyMonthlyBalance(
-          d?.leavesAvailable ?? d?.monthly ?? MONTHLY_LEAVE_CONFIG.TOTAL_LEAVES_PER_MONTH
-        );
+        setMyMonthlyBalance(d?.leavesAvailable ?? d?.monthly ?? MONTHLY_LEAVE_CONFIG.TOTAL_LEAVES_PER_MONTH);
       }
     } catch (err) {
       console.error('Fetch balance error:', err);
@@ -421,12 +417,8 @@ const HRLeave = () => {
   }, [successMessage]);
 
   // ── Actions ────────────────────────────────────────────────────────────────
-
-  // HR can only approve/reject employees & managers — NOT other HR/admin, NOT own leave.
-  // The backend enforces this, but we also hide the buttons on the frontend for clarity.
   const canHRReview = (request) => {
     const applicantRole = request.employee?.role;
-    // HR cannot approve their own leave or other HR/admin leaves
     if (request.employee?._id === getUserId()) return false;
     if (['admin', 'hr'].includes(applicantRole)) return false;
     return true;
@@ -439,7 +431,6 @@ const HRLeave = () => {
       if (res.data.success) { setSuccessMessage('Leave approved successfully!'); refreshAllData(); }
       else alert(res.data.message || 'Failed to approve');
     } catch (err) {
-      // Show the exact backend error message — it explains why (e.g. "HR cannot approve other HR leaves")
       alert(err.response?.data?.message || 'Failed to approve leave');
     }
   };
@@ -518,6 +509,9 @@ const HRLeave = () => {
     return true;
   });
 
+  const displayedRequests = showAllRequests ? filteredRequests : filteredRequests.slice(0, 5);
+  const displayedMyLeaves = showAllMyLeaves ? myLeaves : myLeaves.slice(0, 5);
+
   const myUsedLeavesThisMonth = useMemo(() => {
     const m = new Date().getMonth();
     const y = new Date().getFullYear();
@@ -535,8 +529,8 @@ const HRLeave = () => {
   };
 
   const getTypeBadge = (type) => (
-    <Badge variant={type === 'monthly' ? 'info' : 'danger'}>
-      {type === 'monthly' ? '📅 Monthly' : '🚨 Emergency'}
+    <Badge variant={type === 'monthly' ? 'primary' : 'danger'}>
+      {type === 'monthly' ? 'Monthly Leave' : 'Emergency Leave'}
     </Badge>
   );
 
@@ -544,27 +538,21 @@ const HRLeave = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-100 px-6 py-5">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-              <span className="text-indigo-500">📋</span> HR Leave Management
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Review employee leaves · Your own leaves require Admin approval
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={refreshAllData} disabled={loading.requests}
-              className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
-              🔄 Refresh
-            </button>
-            {activeTab === 'myLeaves' && (
-              <button onClick={() => setShowLeaveForm(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors">
-                + Apply Leave
-              </button>
-            )}
+      <div className="bg-white border-b border-gray-200 px-6 py-5 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <FaCalendarAlt className="text-indigo-600" /> HR Leave Management
+              </h1>
+              <p className="text-sm text-gray-500 mt-1">
+                Review employee leaves · Your own leaves require Admin approval
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-gray-400">
+              <FaCalendarAlt className="w-5 h-5" />
+              <span className="text-sm">Leave Portal</span>
+            </div>
           </div>
         </div>
       </div>
@@ -572,16 +560,16 @@ const HRLeave = () => {
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {/* Success */}
         {successMessage && (
-          <div className="bg-green-50 border border-green-100 rounded-lg p-4 flex items-center gap-3">
-            <span className="text-green-500">✅</span>
-            <p className="text-sm text-green-700">{successMessage}</p>
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 flex items-center gap-3">
+            <FaCheckCircle className="text-emerald-500" />
+            <p className="text-sm text-emerald-700">{successMessage}</p>
           </div>
         )}
 
-        {/* ── HR Leave Approval Policy Banner ───────────────────────────── */}
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+        {/* Policy Banner */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex gap-3">
-            <span className="text-blue-500 text-lg">ℹ️</span>
+            <FaExclamationTriangle className="text-blue-500 text-lg" />
             <div>
               <p className="text-sm font-semibold text-blue-800 mb-1">Leave Approval Policy</p>
               <ul className="text-xs text-blue-700 space-y-0.5">
@@ -594,12 +582,20 @@ const HRLeave = () => {
         </div>
 
         {/* Tabs */}
-        <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="flex border-b border-gray-100">
-            {[['manage', 'Manage Employee Leaves'], ['myLeaves', 'My Leaves']].map(([id, label]) => (
-              <button key={id} onClick={() => setActiveTab(id)}
-                className={`flex-1 px-6 py-3 text-sm font-medium transition-colors ${activeTab === id ? 'bg-indigo-50 text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}>
-                {label}
+            {[
+              { id: 'manage', label: 'Manage Employee Leaves', icon: FaUsers },
+              { id: 'myLeaves', label: 'My Leaves', icon: FaUser }
+            ].map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-6 py-3.5 text-sm font-medium transition-all ${
+                  activeTab === tab.id 
+                    ? 'bg-indigo-50 text-indigo-600 border-b-2 border-indigo-600' 
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}>
+                <tab.icon className="text-sm" />
+                {tab.label}
               </button>
             ))}
           </div>
@@ -609,119 +605,142 @@ const HRLeave = () => {
         {activeTab === 'manage' && (
           <>
             {/* Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <KpiCard label="Pending Requests" value={leaveStats.pending}       sub="Awaiting approval" iconBg="bg-amber-500"   icon="⏳" />
-              <KpiCard label="Approved"          value={leaveStats.approved}      sub="Confirmed"         iconBg="bg-emerald-500" icon="✅" />
-              <KpiCard label="Rejected"          value={leaveStats.rejected}      sub="Declined"          iconBg="bg-red-500"     icon="❌" />
-              <KpiCard label="Total Requests"    value={leaveStats.totalRequests} sub="All time"          iconBg="bg-indigo-500"  icon="📊" />
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+              <KpiCard icon={FaClock} label="Pending Requests" value={leaveStats.pending} sub="Awaiting approval" iconBg="bg-amber-500" />
+              <KpiCard icon={FaCheckCircle} label="Approved" value={leaveStats.approved} sub="Confirmed" iconBg="bg-emerald-500" />
+              <KpiCard icon={FaTimesCircle} label="Rejected" value={leaveStats.rejected} sub="Declined" iconBg="bg-red-500" />
+              <KpiCard icon={FaUsers} label="Total Requests" value={leaveStats.totalRequests} sub="All time" iconBg="bg-indigo-500" />
             </div>
 
             {/* Filters */}
-            <div className="bg-white rounded-lg border border-gray-100 p-5">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
               <div className="flex flex-col md:flex-row gap-4">
                 <div className="relative flex-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
                   <input type="text" placeholder="Search by employee name..."
                     value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
                     className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500" />
                 </div>
                 <select value={filter} onChange={e => setFilter(e.target.value)}
-                  className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                  className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500">
                   <option value="all">All Requests</option>
                   <option value="pending">Pending</option>
                   <option value="approved">Approved</option>
                   <option value="rejected">Rejected</option>
                 </select>
                 <button onClick={() => setShowExportModal(true)}
-                  className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
-                  Export Data
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+                  <FaDownload className="text-xs" /> Export Data
+                </button>
+                <button onClick={refreshAllData} disabled={loading.requests}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50">
+                  <FaSync className="text-xs" /> Refresh
                 </button>
               </div>
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
-              <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center gap-3">
-                <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
-                  <span className="text-indigo-500 text-sm">📋</span>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-800">Employee Leave Requests</p>
-                  <p className="text-xs text-gray-400">{filteredRequests.length} requests</p>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
+                    <FaUsers className="text-indigo-600 text-sm" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">Employee Leave Requests</p>
+                    <p className="text-xs text-gray-400">{filteredRequests.length} requests</p>
+                  </div>
                 </div>
               </div>
 
               {loading.requests ? (
-                <div className="py-16 text-center text-gray-400 text-sm">Loading...</div>
+                <div className="py-16 text-center">
+                  <FaSpinner className="w-12 h-12 text-indigo-600 animate-spin mx-auto mb-4" />
+                  <p className="text-gray-400 text-sm">Loading...</p>
+                </div>
               ) : filteredRequests.length === 0 ? (
                 <div className="py-16 text-center">
-                  <div className="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                    <span className="text-2xl">📝</span>
+                  <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <FaCalendarAlt className="text-gray-400 text-2xl" />
                   </div>
                   <p className="text-gray-500 font-medium">No leave requests found</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 border-b border-gray-100">
-                      <tr>
-                        {['Employee', 'Type', 'Dates', 'Days', 'Status', 'Actions'].map(h => (
-                          <th key={h} className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {filteredRequests.map(req => (
-                        <tr key={req._id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-5 py-4">
-                            <div className="flex items-center gap-3">
-                              <div className="h-8 w-8 rounded-full bg-indigo-500 flex items-center justify-center text-white text-sm font-bold">
-                                {req.employee?.name?.charAt(0) || '?'}
-                              </div>
-                              <div>
-                                <p className="font-medium text-sm text-gray-900">{req.employee?.name || 'Unknown'}</p>
-                                <p className="text-xs text-gray-400">{req.employee?.employeeId || 'N/A'} · {req.employee?.department || 'N/A'}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-5 py-4">{getTypeBadge(req.type)}</td>
-                          <td className="px-5 py-4">
-                            <div className="text-sm text-gray-800">{formatDate(req.startDate)}</div>
-                            <div className="text-xs text-gray-400">to {formatDate(req.endDate)}</div>
-                          </td>
-                          <td className="px-5 py-4">
-                            <span className="font-medium text-gray-800">{req.days || 0}</span>
-                            <span className="text-xs text-gray-400 ml-1">days</span>
-                          </td>
-                          <td className="px-5 py-4">{getStatusBadge(req.status)}</td>
-                          <td className="px-5 py-4">
-                            {req.status === 'pending' ? (
-                              canHRReview(req) ? (
-                                <div className="flex gap-2">
-                                  <button onClick={() => handleApprove(req._id)}
-                                    className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
-                                    Approve
-                                  </button>
-                                  <button onClick={() => handleReject(req._id)}
-                                    className="px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-colors">
-                                    Reject
-                                  </button>
-                                </div>
-                              ) : (
-                                // HR/Admin leaves — HR cannot act, only admin can
-                                <span className="text-xs text-gray-400 italic">
-                                  Admin approval required
-                                </span>
-                              )
-                            ) : (
-                              <span className="text-xs text-gray-500 capitalize">{req.status}</span>
-                            )}
-                          </td>
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b border-gray-100">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Employee</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Type</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Dates</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Days</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {displayedRequests.map(req => (
+                          <tr key={req._id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 text-sm font-bold">
+                                  {req.employee?.name?.charAt(0) || '?'}
+                                </div>
+                                <div>
+                                  <p className="font-medium text-sm text-gray-900">{req.employee?.name || 'Unknown'}</p>
+                                  <p className="text-xs text-gray-400">{req.employee?.employeeId || 'N/A'}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">{getTypeBadge(req.type)}</td>
+                            <td className="px-4 py-3">
+                              <div className="text-sm text-gray-800">{formatDate(req.startDate)}</div>
+                              <div className="text-xs text-gray-400">to {formatDate(req.endDate)}</div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="font-medium text-gray-800">{req.days || 0}</span>
+                              <span className="text-xs text-gray-400 ml-1">days</span>
+                            </td>
+                            <td className="px-4 py-3">{getStatusBadge(req.status)}</td>
+                            <td className="px-4 py-3">
+                              {req.status === 'pending' ? (
+                                canHRReview(req) ? (
+                                  <div className="flex gap-2">
+                                    <button onClick={() => handleApprove(req._id)}
+                                      className="px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors">
+                                      Approve
+                                    </button>
+                                    <button onClick={() => handleReject(req._id)}
+                                      className="px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-colors">
+                                      Reject
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-gray-400 italic">Admin approval required</span>
+                                )
+                              ) : (
+                                <span className="text-xs text-gray-500 capitalize">{req.status}</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {filteredRequests.length > 5 && (
+                    <button
+                      onClick={() => setShowAllRequests(!showAllRequests)}
+                      className="w-full py-3 text-center text-sm text-indigo-600 hover:text-indigo-700 font-medium flex items-center justify-center gap-1 transition-colors border-t border-gray-100 bg-gray-50"
+                    >
+                      {showAllRequests ? (
+                        <>Show Less <FaChevronUp className="text-xs" /></>
+                      ) : (
+                        <>Show All ({filteredRequests.length}) <FaChevronDown className="text-xs" /></>
+                      )}
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </>
@@ -730,71 +749,84 @@ const HRLeave = () => {
         {/* ── MY LEAVES TAB ── */}
         {activeTab === 'myLeaves' && (
           <>
-            {/* My balance cards */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-xl border border-gray-100 p-6">
-                <div className="flex justify-between items-start mb-4">
+            {/* Balance Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-4">
                   <div>
-                    <p className="text-xs text-gray-400 font-medium mb-1">Monthly Leave Balance</p>
-                    <p className="text-2xl font-semibold text-gray-900">
+                    <p className="text-sm text-gray-500 mb-1">Monthly Leave Balance</p>
+                    <p className="text-2xl font-bold text-gray-800">
                       {myMonthlyBalance} / {MONTHLY_LEAVE_CONFIG.TOTAL_LEAVES_PER_MONTH}
                     </p>
                     <p className="text-xs text-gray-400 mt-1">
                       {new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}
                     </p>
                   </div>
-                  <span className="text-3xl">📅</span>
+                  <div className="w-12 h-12 rounded-xl bg-indigo-500 flex items-center justify-center">
+                    <FaCalendarAlt className="text-white text-sm" />
+                  </div>
                 </div>
-                <div className="w-full bg-gray-100 rounded-full h-1.5 mb-2">
+                <div className="w-full bg-gray-200 rounded-full h-1.5 mb-2">
                   <div className="h-full bg-indigo-600 rounded-full transition-all"
                     style={{ width: `${Math.min((myUsedLeavesThisMonth / MONTHLY_LEAVE_CONFIG.TOTAL_LEAVES_PER_MONTH) * 100, 100)}%` }} />
                 </div>
                 <p className="text-xs text-gray-400">
                   {myUsedLeavesThisMonth} used · {myMonthlyBalance} remaining
                 </p>
-                {/* Reminder */}
                 <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                   <p className="text-xs text-amber-800">
                     ⚠️ Your leave requests are pending <strong>Admin</strong> approval.
-                    HR members cannot approve their own leaves.
                   </p>
                 </div>
               </div>
 
-              <div className="bg-white rounded-xl border border-gray-100 p-6">
-                <p className="text-xs text-gray-400 font-medium mb-1">My Leave Summary</p>
-                <p className="text-2xl font-semibold text-gray-900 mb-4">{myLeaves.length} total</p>
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <p className="text-sm text-gray-500 mb-1">My Leave Summary</p>
+                <p className="text-2xl font-bold text-gray-800 mb-4">{myLeaves.length} total</p>
                 <div className="space-y-2">
                   {[
-                    { label: 'Pending',  color: 'bg-amber-50 text-amber-800',  status: 'pending'   },
-                    { label: 'Approved', color: 'bg-green-50 text-green-800',  status: 'approved'  },
-                    { label: 'Rejected', color: 'bg-red-50   text-red-800',    status: 'rejected'  }
+                    { label: 'Pending',  color: 'bg-amber-50 text-amber-800', status: 'pending', icon: FaClock },
+                    { label: 'Approved', color: 'bg-emerald-50 text-emerald-800', status: 'approved', icon: FaCheckCircle },
+                    { label: 'Rejected', color: 'bg-red-50 text-red-800', status: 'rejected', icon: FaTimesCircle }
                   ].map(item => (
-                    <div key={item.status} className={`flex justify-between p-3 rounded-lg ${item.color}`}>
-                      <span className="text-sm">{item.label}</span>
-                      <span className="font-semibold">{myLeaves.filter(l => l.status === item.status).length}</span>
+                    <div key={item.status} className={`flex justify-between items-center p-3 rounded-lg ${item.color}`}>
+                      <div className="flex items-center gap-2">
+                        <item.icon className="text-sm" />
+                        <span className="text-sm">{item.label}</span>
+                      </div>
+                      <span className="font-semibold text-lg">{myLeaves.filter(l => l.status === item.status).length}</span>
                     </div>
                   ))}
                 </div>
               </div>
             </div>
 
-            {/* My leaves list */}
-            <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
-              <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center gap-3">
-                <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
-                  <span className="text-indigo-500 text-sm">📋</span>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-800">My Leave Applications</p>
-                  <p className="text-xs text-gray-400">{myLeaves.length} applications</p>
+            {/* Apply Leave Button */}
+            <div className="flex justify-end">
+              <button onClick={() => setShowLeaveForm(true)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors">
+                <FaPlus className="text-xs" /> Apply for Leave
+              </button>
+            </div>
+
+            {/* My Leaves List */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
+                    <FaUser className="text-indigo-600 text-sm" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">My Leave Applications</p>
+                    <p className="text-xs text-gray-400">{myLeaves.length} applications</p>
+                  </div>
                 </div>
               </div>
 
               {myLeaves.length === 0 ? (
                 <div className="py-16 text-center">
-                  <div className="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                    <span className="text-2xl">📝</span>
+                  <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <FaCalendarAlt className="text-gray-400 text-2xl" />
                   </div>
                   <p className="text-gray-500 font-medium mb-2">No leave applications yet</p>
                   <button onClick={() => setShowLeaveForm(true)}
@@ -803,53 +835,60 @@ const HRLeave = () => {
                   </button>
                 </div>
               ) : (
-                <div className="p-5 space-y-4">
-                  {myLeaves.map(leave => (
-                    <div key={leave._id} className="border border-gray-100 rounded-lg p-4 hover:border-gray-200 transition-all">
-                      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            {getStatusBadge(leave.status)}
-                            {getTypeBadge(leave.type)}
-                          </div>
-                          <p className="text-sm font-medium text-gray-800">
-                            {formatDate(leave.startDate)} — {formatDate(leave.endDate)}
-                            <span className="text-gray-400 ml-2">({leave.days} days)</span>
-                          </p>
-                          <p className="text-xs text-gray-400 mt-1">
-                            Applied: {formatDate(leave.appliedAt || leave.createdAt)}
-                          </p>
-                          <p className="text-sm text-gray-600 mt-2">{leave.reason}</p>
-
-                          {leave.status === 'pending' && (
-                            <p className="text-xs text-amber-600 mt-2 font-medium">
-                              ⏳ Awaiting Admin approval
-                            </p>
-                          )}
-                          {leave.status === 'approved' && leave.approvedBy && (
-                            <p className="text-xs text-green-600 mt-2">
-                              ✅ Approved by {leave.approvedBy?.name || 'Admin'}
-                            </p>
-                          )}
-                          {leave.rejectionReason && (
-                            <div className="mt-2 p-2 bg-red-50 rounded border border-red-100">
-                              <p className="text-xs text-red-600">
-                                <span className="font-medium">Rejection reason:</span> {leave.rejectionReason}
-                              </p>
+                <>
+                  <div className="p-5 space-y-4">
+                    {displayedMyLeaves.map(leave => (
+                      <div key={leave._id} className="border border-gray-200 rounded-lg p-4 hover:border-indigo-200 transition-all">
+                        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2 flex-wrap">
+                              {getStatusBadge(leave.status)}
+                              {getTypeBadge(leave.type)}
                             </div>
+                            <p className="text-sm font-medium text-gray-800">
+                              {formatDate(leave.startDate)} — {formatDate(leave.endDate)}
+                              <span className="text-gray-400 ml-2">({leave.days} days)</span>
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              Applied: {formatDate(leave.appliedAt || leave.createdAt)}
+                            </p>
+                            <p className="text-sm text-gray-600 mt-2">{leave.reason}</p>
+                            {leave.status === 'pending' && (
+                              <p className="text-xs text-amber-600 mt-2 font-medium">
+                                ⏳ Awaiting Admin approval
+                              </p>
+                            )}
+                            {leave.rejectionReason && (
+                              <div className="mt-2 p-2 bg-red-50 rounded-lg border border-red-100">
+                                <p className="text-xs text-red-600">
+                                  <span className="font-medium">Rejection reason:</span> {leave.rejectionReason}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                          {leave.status === 'pending' && (
+                            <button onClick={() => handleCancelMyLeave(leave._id)}
+                              className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors whitespace-nowrap">
+                              Cancel Leave
+                            </button>
                           )}
                         </div>
-
-                        {leave.status === 'pending' && (
-                          <button onClick={() => handleCancelMyLeave(leave._id)}
-                            className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors whitespace-nowrap">
-                            Cancel Leave
-                          </button>
-                        )}
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                  {myLeaves.length > 5 && (
+                    <button
+                      onClick={() => setShowAllMyLeaves(!showAllMyLeaves)}
+                      className="w-full py-3 text-center text-sm text-indigo-600 hover:text-indigo-700 font-medium flex items-center justify-center gap-1 transition-colors border-t border-gray-100 bg-gray-50"
+                    >
+                      {showAllMyLeaves ? (
+                        <>Show Less <FaChevronUp className="text-xs" /></>
+                      ) : (
+                        <>Show All ({myLeaves.length}) <FaChevronDown className="text-xs" /></>
+                      )}
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </>

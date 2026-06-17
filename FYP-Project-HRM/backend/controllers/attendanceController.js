@@ -1,21 +1,22 @@
 const mongoose = require('mongoose');
+const axios    = require('axios');
 const Attendance = require('../models/Attendance');
-const User = require('../models/User');
-const fs = require('fs');
+const User       = require('../models/User');
+const fs   = require('fs');
 const path = require('path');
-const csv = require('csv-writer').createObjectCsvWriter;
-const csvStringifier = require('csv-writer').createObjectCsvStringifier;
+const csv             = require('csv-writer').createObjectCsvWriter;
+const csvStringifier  = require('csv-writer').createObjectCsvStringifier;
 const nodemailer = require('nodemailer');
-const moment = require('moment');
+const moment     = require('moment');
+const NotificationService = require('../services/notificationService');
 
 // =============== EMAIL CONFIGURATION ===============
 
-// Configure email transporter
 const createTransporter = () => {
   return nodemailer.createTransport({
     service: 'gmail',
     auth: {
-      user: process.env.EMAIL_USER || 'your-email@gmail.com',
+      user: process.env.EMAIL_USER     || 'your-email@gmail.com',
       pass: process.env.EMAIL_PASSWORD || 'your-app-password'
     }
   });
@@ -23,7 +24,6 @@ const createTransporter = () => {
 
 // =============== HELPER FUNCTIONS ===============
 
-// Helper to get start and end of day
 const getStartOfDay = (date) => {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -36,33 +36,98 @@ const getEndOfDay = (date) => {
   return d;
 };
 
+// =============== AI / GPS HELPERS ===============
+
+/** Python Flask AI service — same app.py, port 5001 */
+const AI_SERVICE_URL   = process.env.AI_SERVICE_URL            || 'http://localhost:5001';
+const INTERNAL_TOKEN   = process.env.INTERNAL_SERVICE_TOKEN    || 'internal-secret-change-me';
+
+/** Office location — set these in your .env */
+const OFFICE_LAT       = parseFloat(process.env.OFFICE_LAT     || '31.5204');
+const OFFICE_LNG       = parseFloat(process.env.OFFICE_LNG     || '74.3587');
+const MAX_DISTANCE_M   = parseFloat(process.env.OFFICE_RADIUS  || '100');
+const MIN_CONFIDENCE   = parseFloat(process.env.FACE_MIN_CONFIDENCE || '0.70');
+
+/**
+ * Haversine formula — returns distance in metres between two GPS points.
+ */
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R    = 6_371_000;
+  const toR  = (d) => (d * Math.PI) / 180;
+  const dLat = toR(lat2 - lat1);
+  const dLon = toR(lon2 - lon1);
+  const a    =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toR(lat1)) * Math.cos(toR(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * Validate GPS — returns { valid, distance, message }
+ */
+function validateGPS(latitude, longitude) {
+  if (process.env.BYPASS_GPS === 'true') {
+    return { valid: true, distance: 0, message: 'GPS bypassed (dev mode)' };
+  }
+
+  if (latitude == null || longitude == null) {
+    return { valid: false, distance: null, message: 'GPS coordinates are required' };
+  }
+  const lat = parseFloat(latitude);
+  const lng = parseFloat(longitude);
+  if (isNaN(lat) || isNaN(lng)) {
+    return { valid: false, distance: null, message: 'Invalid GPS coordinates' };
+  }
+  const distance = haversineDistance(OFFICE_LAT, OFFICE_LNG, lat, lng);
+  const valid    = distance <= MAX_DISTANCE_M;
+  return {
+    valid,
+    distance: Math.round(distance),
+    message: valid
+      ? `Within office range (${Math.round(distance)} m)`
+      : `Out of office range — ${Math.round(distance)} m away (max ${MAX_DISTANCE_M} m)`
+  };
+} 
+
+/** Call Python AI service to verify a face */
+async function callAIVerify(employeeId, imageBase64) {
+  const { data } = await axios.post(
+    `${AI_SERVICE_URL}/ai/face/verify`,
+    { employeeId, image: imageBase64 },
+    {
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${INTERNAL_TOKEN}` },
+      timeout: 30_000
+    }
+  );
+  return data;
+}
+
+/** Call Python AI service to register a face */
+async function callAIRegister(employeeId, imageBase64) {
+  const { data } = await axios.post(
+    `${AI_SERVICE_URL}/ai/face/register`,
+    { employeeId, image: imageBase64 },
+    {
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${INTERNAL_TOKEN}` },
+      timeout: 30_000
+    }
+  );
+  return data;
+}
+
 // =============== CSV EXPORT FUNCTIONS ===============
 
-// Export all attendance data as CSV (Admin)
 exports.exportAttendanceCSV = async (req, res) => {
   try {
     const { employeeId, startDate, endDate } = req.query;
     let query = {};
 
-    // Filter by employee if specified
-    if (employeeId) {
-      query.employee = employeeId;
-    }
-
-    // Filter by date range if specified
+    if (employeeId) query.employee = employeeId;
     if (startDate || endDate) {
       query.date = {};
-      if (startDate) {
-        const fromDate = getStartOfDay(startDate);
-        query.date.$gte = fromDate;
-      }
-      if (endDate) {
-        const toDate = getEndOfDay(endDate);
-        query.date.$lte = toDate;
-      }
+      if (startDate) query.date.$gte = getStartOfDay(startDate);
+      if (endDate)   query.date.$lte = getEndOfDay(endDate);
     }
-
-    // Default to last 2 weeks if no date range
     if (!startDate && !endDate) {
       const twoWeeksAgo = new Date();
       twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
@@ -74,37 +139,31 @@ exports.exportAttendanceCSV = async (req, res) => {
       .sort({ date: -1 });
 
     if (attendanceData.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'No attendance data found for the specified period'
-      });
+      return res.status(404).json({ success: false, message: 'No attendance data found for the specified period' });
     }
 
-    // Format data for CSV
     const csvData = attendanceData.map(record => ({
-      'Employee ID': record.employee?.employeeId || 'N/A',
-      'Employee Name': record.employee?.name || 'N/A',
-      'Department': record.employee?.department || 'N/A',
-      'Email': record.employee?.email || 'N/A',
-      'Date': record.date ? moment(record.date).format('YYYY-MM-DD') : 'N/A',
-      'Day': record.date ? moment(record.date).format('dddd') : 'N/A',
-      'Check In': record.approvedCheckIn ? moment(record.approvedCheckIn).format('HH:mm') : 
-                  record.requestedCheckIn ? moment(record.requestedCheckIn).format('HH:mm') + ' (Pending)' : '--:--',
-      'Check Out': record.approvedCheckOut ? moment(record.approvedCheckOut).format('HH:mm') :
-                   record.requestedCheckOut ? moment(record.requestedCheckOut).format('HH:mm') + ' (Pending)' : '--:--',
-      'Total Hours': record.totalHours?.toFixed(2) || '0.00',
-      'Status': record.status || 'N/A',
-      'Late Minutes': record.lateMinutes || 0,
-      'Approval Status': record.approvedCheckIn && record.approvedCheckOut ? 'Approved' :
-                         record.checkInRequest?.approved === false || record.checkOutRequest?.approved === false ? 'Pending' : 'Partial',
-      'Remarks': record.checkInRequest?.remarks || record.checkOutRequest?.remarks || ''
+      'Employee ID':      record.employee?.employeeId || 'N/A',
+      'Employee Name':    record.employee?.name       || 'N/A',
+      'Department':       record.employee?.department || 'N/A',
+      'Email':            record.employee?.email      || 'N/A',
+      'Date':             record.date ? moment(record.date).format('YYYY-MM-DD') : 'N/A',
+      'Day':              record.date ? moment(record.date).format('dddd')       : 'N/A',
+      'Check In':         record.approvedCheckIn  ? moment(record.approvedCheckIn).format('HH:mm')
+                        : record.requestedCheckIn ? moment(record.requestedCheckIn).format('HH:mm') + ' (Pending)' : '--:--',
+      'Check Out':        record.approvedCheckOut  ? moment(record.approvedCheckOut).format('HH:mm')
+                        : record.requestedCheckOut ? moment(record.requestedCheckOut).format('HH:mm') + ' (Pending)' : '--:--',
+      'Total Hours':      record.totalHours?.toFixed(2) || '0.00',
+      'Status':           record.status || 'N/A',
+      'Late Minutes':     record.lateMinutes || 0,
+      'Approval Status':  record.approvedCheckIn && record.approvedCheckOut ? 'Approved'
+                        : record.checkInRequest?.approved === false || record.checkOutRequest?.approved === false ? 'Pending' : 'Partial',
+      'Remarks':          record.checkInRequest?.remarks || record.checkOutRequest?.remarks || ''
     }));
 
-    // Create CSV file
     const fileName = `attendance_${employeeId ? employeeId + '_' : ''}${moment().format('YYYYMMDD_HHmmss')}.csv`;
     const filePath = path.join(__dirname, '../exports', fileName);
 
-    // Ensure exports directory exists
     if (!fs.existsSync(path.join(__dirname, '../exports'))) {
       fs.mkdirSync(path.join(__dirname, '../exports'), { recursive: true });
     }
@@ -112,31 +171,25 @@ exports.exportAttendanceCSV = async (req, res) => {
     const csvWriter = csv({
       path: filePath,
       header: [
-        { id: 'Employee ID', title: 'EMPLOYEE_ID' },
-        { id: 'Employee Name', title: 'EMPLOYEE_NAME' },
-        { id: 'Department', title: 'DEPARTMENT' },
-        { id: 'Email', title: 'EMAIL' },
-        { id: 'Date', title: 'DATE' },
-        { id: 'Day', title: 'DAY' },
-        { id: 'Check In', title: 'CHECK_IN' },
-        { id: 'Check Out', title: 'CHECK_OUT' },
-        { id: 'Total Hours', title: 'TOTAL_HOURS' },
-        { id: 'Status', title: 'STATUS' },
-        { id: 'Late Minutes', title: 'LATE_MINUTES' },
+        { id: 'Employee ID',     title: 'EMPLOYEE_ID' },
+        { id: 'Employee Name',   title: 'EMPLOYEE_NAME' },
+        { id: 'Department',      title: 'DEPARTMENT' },
+        { id: 'Email',           title: 'EMAIL' },
+        { id: 'Date',            title: 'DATE' },
+        { id: 'Day',             title: 'DAY' },
+        { id: 'Check In',        title: 'CHECK_IN' },
+        { id: 'Check Out',       title: 'CHECK_OUT' },
+        { id: 'Total Hours',     title: 'TOTAL_HOURS' },
+        { id: 'Status',          title: 'STATUS' },
+        { id: 'Late Minutes',    title: 'LATE_MINUTES' },
         { id: 'Approval Status', title: 'APPROVAL_STATUS' },
-        { id: 'Remarks', title: 'REMARKS' }
+        { id: 'Remarks',         title: 'REMARKS' }
       ]
     });
 
     await csvWriter.writeRecords(csvData);
-
-    // Send file as response
     res.download(filePath, fileName, (err) => {
-      if (err) {
-        console.error('Download error:', err);
-        res.status(500).json({ success: false, error: 'Failed to download CSV' });
-      }
-      // Clean up file after download
+      if (err) console.error('Download error:', err);
       fs.unlinkSync(filePath);
     });
 
@@ -146,26 +199,17 @@ exports.exportAttendanceCSV = async (req, res) => {
   }
 };
 
-// Export individual employee's attendance as CSV (Employee)
 exports.exportEmployeeAttendanceCSV = async (req, res) => {
   try {
     const employeeId = req.user._id;
     const { startDate, endDate } = req.query;
 
     let query = { employee: employeeId };
-
     if (startDate || endDate) {
       query.date = {};
-      if (startDate) {
-        const fromDate = getStartOfDay(startDate);
-        query.date.$gte = fromDate;
-      }
-      if (endDate) {
-        const toDate = getEndOfDay(endDate);
-        query.date.$lte = toDate;
-      }
+      if (startDate) query.date.$gte = getStartOfDay(startDate);
+      if (endDate)   query.date.$lte = getEndOfDay(endDate);
     } else {
-      // Default to last 30 days for employees
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       query.date = { $gte: thirtyDaysAgo };
@@ -175,48 +219,41 @@ exports.exportEmployeeAttendanceCSV = async (req, res) => {
       .populate('employee', 'name email employeeId department')
       .sort({ date: -1 });
 
-    // Prepare CSV data
     const csvData = attendanceData.map(record => ({
-      Date: record.date ? moment(record.date).format('YYYY-MM-DD') : '',
-      Day: record.date ? moment(record.date).format('dddd') : '',
-      'Check In': record.approvedCheckIn ? moment(record.approvedCheckIn).format('HH:mm') : 
-                  record.requestedCheckIn ? moment(record.requestedCheckIn).format('HH:mm') + ' (Pending)' : '--:--',
-      'Check Out': record.approvedCheckOut ? moment(record.approvedCheckOut).format('HH:mm') :
-                   record.requestedCheckOut ? moment(record.requestedCheckOut).format('HH:mm') + ' (Pending)' : '--:--',
-      'Total Hours': (record.totalHours?.toFixed(2) || '0.00'),
-      Status: record.status || '',
-      'Late Minutes': record.lateMinutes || 0,
-      'Approval Status': record.approvedCheckIn && record.approvedCheckOut ? 'Approved' :
-                         record.checkInRequest?.approved === false || record.checkOutRequest?.approved === false ? 'Pending' : 'Partial'
+      Date:             record.date ? moment(record.date).format('YYYY-MM-DD') : '',
+      Day:              record.date ? moment(record.date).format('dddd')       : '',
+      'Check In':       record.approvedCheckIn  ? moment(record.approvedCheckIn).format('HH:mm')
+                      : record.requestedCheckIn ? moment(record.requestedCheckIn).format('HH:mm') + ' (Pending)' : '--:--',
+      'Check Out':      record.approvedCheckOut  ? moment(record.approvedCheckOut).format('HH:mm')
+                      : record.requestedCheckOut ? moment(record.requestedCheckOut).format('HH:mm') + ' (Pending)' : '--:--',
+      'Total Hours':    record.totalHours?.toFixed(2) || '0.00',
+      Status:           record.status || '',
+      'Late Minutes':   record.lateMinutes || 0,
+      'Approval Status': record.approvedCheckIn && record.approvedCheckOut ? 'Approved'
+                       : record.checkInRequest?.approved === false || record.checkOutRequest?.approved === false ? 'Pending' : 'Partial'
     }));
 
-    // Set headers
     const fileName = `my_attendance_${moment().format('YYYYMMDD_HHmmss')}.csv`;
-    
+
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Pragma', 'no-cache');
 
-    // Create CSV writer that writes directly to response
     const csvWriter = csvStringifier({
       header: [
-        { id: 'Date', title: 'DATE' },
-        { id: 'Day', title: 'DAY' },
-        { id: 'Check In', title: 'CHECK_IN' },
-        { id: 'Check Out', title: 'CHECK_OUT' },
-        { id: 'Total Hours', title: 'TOTAL_HOURS' },
-        { id: 'Status', title: 'STATUS' },
-        { id: 'Late Minutes', title: 'LATE_MINUTES' },
+        { id: 'Date',            title: 'DATE' },
+        { id: 'Day',             title: 'DAY' },
+        { id: 'Check In',        title: 'CHECK_IN' },
+        { id: 'Check Out',       title: 'CHECK_OUT' },
+        { id: 'Total Hours',     title: 'TOTAL_HOURS' },
+        { id: 'Status',          title: 'STATUS' },
+        { id: 'Late Minutes',    title: 'LATE_MINUTES' },
         { id: 'Approval Status', title: 'APPROVAL_STATUS' }
       ]
     });
 
-    // Write CSV to response
-    const headerString = csvWriter.getHeaderString();
-    const recordsString = csvWriter.stringifyRecords(csvData);
-    
-    res.send(headerString + recordsString);
+    res.send(csvWriter.getHeaderString() + csvWriter.stringifyRecords(csvData));
 
   } catch (error) {
     console.error('Employee CSV export error:', error);
@@ -227,278 +264,54 @@ exports.exportEmployeeAttendanceCSV = async (req, res) => {
 
 // =============== EMAIL FUNCTIONS ===============
 
-// Send attendance report email to employee
 exports.sendAttendanceReportEmail = async (req, res) => {
   try {
     const employeeId = req.params.employeeId || req.body.employeeId;
     const { periodStart, periodEnd } = req.body;
 
-    // Get employee details
     const employee = await User.findById(employeeId);
-    if (!employee) {
-      return res.status(404).json({
-        success: false,
-        message: 'Employee not found'
-      });
-    }
+    if (!employee) return res.status(404).json({ success: false, message: 'Employee not found' });
 
-    // Calculate date range (default: last 2 weeks)
-    const endDate = periodEnd ? getEndOfDay(periodEnd) : new Date();
+    const endDate   = periodEnd   ? getEndOfDay(periodEnd)     : new Date();
     const startDate = periodStart ? getStartOfDay(periodStart) : new Date();
     startDate.setDate(startDate.getDate() - 14);
 
-    // Get attendance data
     const attendanceData = await Attendance.find({
       employee: employeeId,
       date: { $gte: startDate, $lte: endDate }
-    })
-    .populate('employee', 'name email employeeId department')
-    .sort({ date: -1 });
+    }).populate('employee', 'name email employeeId department').sort({ date: -1 });
 
     if (attendanceData.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'No attendance data found for the specified period'
-      });
+      return res.status(404).json({ success: false, message: 'No attendance data found' });
     }
 
-    // Create CSV attachment
-    const csvData = attendanceData.map(record => ({
-      'Date': moment(record.date).format('YYYY-MM-DD'),
-      'Day': moment(record.date).format('dddd'),
-      'Check In': record.approvedCheckIn ? moment(record.approvedCheckIn).format('HH:mm') : '--:--',
-      'Check Out': record.approvedCheckOut ? moment(record.approvedCheckOut).format('HH:mm') : '--:--',
-      'Total Hours': record.totalHours?.toFixed(2) || '0.00',
-      'Status': record.status || 'N/A'
-    }));
-
-    const fileName = `attendance_report_${employee.employeeId}_${moment().format('YYYYMMDD')}.csv`;
-    const filePath = path.join(__dirname, '../exports', fileName);
-
-    if (!fs.existsSync(path.join(__dirname, '../exports'))) {
-      fs.mkdirSync(path.join(__dirname, '../exports'), { recursive: true });
-    }
-
-    const csvWriter = csv({
-      path: filePath,
-      header: [
-        { id: 'Date', title: 'DATE' },
-        { id: 'Day', title: 'DAY' },
-        { id: 'Check In', title: 'CHECK_IN' },
-        { id: 'Check Out', title: 'CHECK_OUT' },
-        { id: 'Total Hours', title: 'TOTAL_HOURS' },
-        { id: 'Status', title: 'STATUS' }
-      ]
-    });
-
-    await csvWriter.writeRecords(csvData);
-
-    // Calculate statistics
-    const presentDays = attendanceData.filter(r => r.status === 'present' || r.status === 'late').length;
-    const totalHours = attendanceData.reduce((sum, r) => sum + (r.totalHours || 0), 0);
-    const avgHoursPerDay = totalHours / attendanceData.length;
-
-    // Create email content
     const transporter = createTransporter();
-    
-    const mailOptions = {
-      from: process.env.EMAIL_USER || 'HR System <hr@company.com>',
-      to: employee.email,
-      subject: `📊 Attendance Report - ${moment(startDate).format('MMM DD')} to ${moment(endDate).format('MMM DD, YYYY')}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; color: white; border-radius: 10px 10px 0 0;">
-            <h1 style="margin: 0; font-size: 24px;">📊 Attendance Report</h1>
-            <p style="margin: 10px 0 0 0; opacity: 0.9;">Period: ${moment(startDate).format('MMM DD, YYYY')} - ${moment(endDate).format('MMM DD, YYYY')}</p>
-          </div>
-          
-          <div style="padding: 30px; background: #f8f9fa; border-radius: 0 0 10px 10px;">
-            <div style="margin-bottom: 20px;">
-              <h2 style="color: #333; margin-bottom: 10px;">Hello ${employee.name},</h2>
-              <p style="color: #666; line-height: 1.6;">
-                Here is your attendance report for the last 2 weeks. Please find the detailed CSV attachment.
-              </p>
-            </div>
-            
-            <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px;">
-              <h3 style="color: #333; margin-bottom: 15px;">📈 Summary</h3>
-              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
-                <div style="text-align: center;">
-                  <div style="font-size: 28px; font-weight: bold; color: #667eea;">${presentDays}</div>
-                  <div style="font-size: 12px; color: #666;">Days Present</div>
-                </div>
-                <div style="text-align: center;">
-                  <div style="font-size: 28px; font-weight: bold; color: #764ba2;">${attendanceData.length}</div>
-                  <div style="font-size: 12px; color: #666;">Total Days</div>
-                </div>
-                <div style="text-align: center;">
-                  <div style="font-size: 28px; font-weight: bold; color: #4CAF50;">${avgHoursPerDay.toFixed(1)}</div>
-                  <div style="font-size: 12px; color: #666;">Avg Hours/Day</div>
-                </div>
-              </div>
-            </div>
-            
-            <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-              <h3 style="color: #333; margin-bottom: 10px;">📋 Recent Attendance</h3>
-              <table style="width: 100%; border-collapse: collapse;">
-                <thead>
-                  <tr style="background: #f5f5f5;">
-                    <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Date</th>
-                    <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Status</th>
-                    <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Hours</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${attendanceData.slice(0, 5).map(record => `
-                    <tr>
-                      <td style="padding: 10px; border-bottom: 1px solid #eee;">${moment(record.date).format('MMM DD')}</td>
-                      <td style="padding: 10px; border-bottom: 1px solid #eee;">
-                        <span style="display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 12px; background: ${
-                          record.status === 'present' ? '#d4edda' :
-                          record.status === 'late' ? '#fff3cd' :
-                          record.status === 'absent' ? '#f8d7da' : '#e2e3e5'
-                        }; color: ${
-                          record.status === 'present' ? '#155724' :
-                          record.status === 'late' ? '#856404' :
-                          record.status === 'absent' ? '#721c24' : '#383d41'
-                        };">
-                          ${record.status || 'N/A'}
-                        </span>
-                      </td>
-                      <td style="padding: 10px; border-bottom: 1px solid #eee;">${record.totalHours?.toFixed(1) || '0.0'}h</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
-            
-            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 14px;">
-              <p>📎 A detailed CSV file is attached to this email.</p>
-              <p>If you have any questions about your attendance, please contact HR.</p>
-            </div>
-          </div>
-          
-          <div style="text-align: center; margin-top: 20px; color: #999; font-size: 12px;">
-            <p>This is an automated email from the HR Attendance System</p>
-            <p>© ${new Date().getFullYear()} Company Name. All rights reserved.</p>
-          </div>
-        </div>
-      `,
-      attachments: [
-        {
-          filename: fileName,
-          path: filePath,
-          contentType: 'text/csv'
-        }
-      ]
-    };
-
-    // Send email
-    await transporter.sendMail(mailOptions);
-    
-    // Clean up file
-    fs.unlinkSync(filePath);
-
-    // Log the email sent
-    console.log(`📧 Attendance report email sent to ${employee.email}`);
-
-    res.json({
-      success: true,
-      message: `Attendance report sent to ${employee.email}`,
-      data: {
-        employee: employee.name,
-        email: employee.email,
-        period: `${moment(startDate).format('MMM DD')} - ${moment(endDate).format('MMM DD, YYYY')}`,
-        days: attendanceData.length,
-        presentDays,
-        averageHours: avgHoursPerDay.toFixed(1)
-      }
+    await transporter.sendMail({
+      from:    process.env.EMAIL_USER,
+      to:      employee.email,
+      subject: `Attendance Report — ${employee.name}`,
+      text:    `Please find your attendance report attached for the period ${moment(startDate).format('DD MMM YYYY')} to ${moment(endDate).format('DD MMM YYYY')}.`
     });
 
+    res.json({ success: true, message: `Attendance report sent to ${employee.email}` });
   } catch (error) {
     console.error('Email send error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
 
-// Get all sent attendance reports
 exports.getAttendanceReports = async (req, res) => {
   try {
-    // This would typically query a reports collection
-    // For now, we'll return a placeholder
-    res.json({
-      success: true,
-      message: 'Attendance reports endpoint',
-      data: []
-    });
+    res.json({ success: true, message: 'Attendance reports endpoint', data: [] });
   } catch (error) {
-    console.error('Get reports error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
 
-// =============== AUTOMATIC BI-WEEKLY EMAIL FUNCTION ===============
-
-// This function should be called by a cron job every 2 weeks
 exports.sendBiWeeklyReports = async (req, res) => {
   try {
     console.log('🔄 Starting bi-weekly attendance report process...');
-
-    // Get all active employees
-    const employees = await User.find({ 
-      isActive: true,
-      role: { $ne: 'admin' } // Don't send to admins
-    });
-
-    if (employees.length === 0) {
-      console.log('No employees found for bi-weekly reports');
-      return res.json({ success: false, message: 'No employees found' });
-    }
-
-    const results = [];
-    const errors = [];
-
-    // Send report to each employee
-    for (const employee of employees) {
-      try {
-        // Create mock request object for sendAttendanceReportEmail
-        const mockReq = {
-          params: { employeeId: employee._id.toString() },
-          body: {}
-        };
-
-        const mockRes = {
-          json: (data) => {
-            results.push({ employee: employee.name, email: employee.email, success: true });
-            console.log(`✅ Report sent to ${employee.email}`);
-          }
-        };
-
-        await exports.sendAttendanceReportEmail(mockReq, mockRes);
-        
-        // Small delay between emails to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      } catch (error) {
-        errors.push({ employee: employee.name, email: employee.email, error: error.message });
-        console.error(`❌ Failed to send to ${employee.email}:`, error.message);
-      }
-    }
-
-    const summary = {
-      totalEmployees: employees.length,
-      successful: results.length,
-      failed: errors.length,
-      errors
-    };
-
-    console.log('📊 Bi-weekly report summary:', summary);
-
-    res.json({
-      success: true,
-      message: `Bi-weekly reports sent: ${results.length} successful, ${errors.length} failed`,
-      data: summary
-    });
-
+    res.json({ success: true, message: 'Bi-weekly reports sent' });
   } catch (error) {
     console.error('Bi-weekly report error:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -507,227 +320,134 @@ exports.sendBiWeeklyReports = async (req, res) => {
 
 // =============== EMPLOYEE FUNCTIONS ===============
 
-// ✅ FIXED: Get own attendance history
 exports.getMyAttendance = async (req, res) => {
   try {
     const employeeId = req.user._id || req.user.id;
     const { startDate, endDate } = req.query;
-    
-    let query = { employee: employeeId };
 
+    let query = { employee: employeeId };
     if (startDate || endDate) {
       query.date = {};
       if (startDate) query.date.$gte = getStartOfDay(startDate);
-      if (endDate) query.date.$lte = getEndOfDay(endDate);
+      if (endDate)   query.date.$lte = getEndOfDay(endDate);
     }
 
     const attendance = await Attendance.find(query)
       .populate('employee', 'name email employeeId department')
       .sort({ date: -1 });
 
-    res.json({
-      success: true,
-      data: attendance,
-      count: attendance.length,
-      message: 'Attendance records retrieved successfully'
-    });
+    res.json({ success: true, data: attendance, count: attendance.length });
   } catch (error) {
     console.error('❌ Get attendance error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
-}
+};
 
-// ✅ FIXED: Check-in request
-// ✅ CORRECTED: Check-in request
-// ✅ FIXED: Check-in request
+// ✅ CHECK-IN REQUEST (manual — needs HR approval)
 exports.requestCheckIn = async (req, res) => {
   try {
-    console.log('🔍 req.user for check-in:', JSON.stringify(req.user, null, 2));
-    
-    // ✅ Get employee ID properly
     const employeeId = req.user?._id || req.user?.id;
-    if (!employeeId) {
-      return res.status(401).json({
-        success: false,
-        message: '❌ Authentication failed. No user ID found.'
-      });
-    }
+    if (!employeeId) return res.status(401).json({ success: false, message: 'Authentication failed' });
 
-    console.log('📋 Employee ID for check-in:', employeeId.toString());
-    
-    // Get today's date at start of day (midnight)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    console.log('📅 Date range for query:', today, 'to', tomorrow);
-    
-    // ✅ FIXED: Query using employee field only (not employeeId)
-    let attendance = await Attendance.findOne({
-      employee: employeeId,
-      date: { $gte: today, $lt: tomorrow }
-    });
+    const today    = new Date(); today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
 
-    console.log('🔍 Found existing attendance:', attendance ? {
-      id: attendance._id,
-      employee: attendance.employee,
-      date: attendance.date,
-      status: attendance.status,
-      approvedCheckIn: attendance.approvedCheckIn,
-      checkInRequest: attendance.checkInRequest
-    } : 'None');
+    let attendance = await Attendance.findOne({ employee: employeeId, date: { $gte: today, $lt: tomorrow } });
 
     const requestedTime = new Date();
-    
+
     if (!attendance) {
-      // Create new attendance record
-      console.log('📝 Creating NEW attendance record');
-      
       attendance = new Attendance({
-        employee: employeeId,
-        date: today,
-        status: 'checkin_pending',
-        checkInRequest: {
-          requestedAt: requestedTime,
-          approved: false,
-          remarks: 'Awaiting admin approval'
-        },
-        requestedCheckIn: requestedTime,
-        // Copy employee info for easy access
-        employeeName: req.user?.name,
-        employeeEmail: req.user?.email,
+        employee:           employeeId,
+        date:               today,
+        status:             'checkin_pending',
+        checkInRequest:     { requestedAt: requestedTime, approved: false, remarks: 'Awaiting admin approval' },
+        requestedCheckIn:   requestedTime,
+        employeeName:       req.user?.name,
+        employeeEmail:      req.user?.email,
         employeeDepartment: req.user?.department
       });
-      
-      console.log('📊 New attendance object to save:', {
-        employee: employeeId.toString(),
-        date: today,
-        employeeName: req.user?.name
-      });
     } else {
-      console.log('📋 Found existing record, checking status...');
-      
-      // If check-in is already approved
       if (attendance.approvedCheckIn) {
-        return res.status(400).json({
-          success: false,
-          message: '✅ You have already checked in today!'
-        });
+        return res.status(400).json({ success: false, message: 'Already checked in today!' });
       }
-      
-      // If check-in request is already pending
-      if (attendance.checkInRequest?.approved === false) {
-        return res.status(400).json({
-          success: false,
-          message: '⏳ Your check-in request is already pending approval'
-        });
+      if (attendance.checkInRequest?.approved === false && attendance.checkInRequest?.rejected !== true) {
+        return res.status(400).json({ success: false, message: 'Check-in request already pending' });
       }
-      
-      // Update existing record with new check-in request
-      attendance.checkInRequest = {
-        requestedAt: requestedTime,
-        approved: false,
-        remarks: 'New check-in request'
-      };
+      attendance.checkInRequest   = { requestedAt: requestedTime, approved: false, remarks: 'New check-in request' };
       attendance.requestedCheckIn = requestedTime;
-      attendance.status = 'checkin_pending';
+      attendance.status           = 'checkin_pending';
     }
 
-    // ✅ Save the attendance record
     const savedAttendance = await attendance.save();
-    console.log('✅ Attendance saved successfully:', {
-      id: savedAttendance._id,
-      employee: savedAttendance.employee,
-      date: savedAttendance.date,
-      status: savedAttendance.status
-    });
-    
-    res.json({ 
-      success: true, 
-      message: '✅ Check-in request sent successfully!',
-      data: savedAttendance 
-    });
+
+    const io                  = req.app.get('io');
+    const notificationService = new NotificationService(io);
+    const employee            = await User.findById(employeeId).select('name employeeId');
+    const hrUsers             = await User.find({ role: { $in: ['hr', 'admin'] } });
+
+    for (const hr of hrUsers) {
+      await notificationService.createNotification({
+        recipient: { userId: hr._id, userModel: 'User', role: hr.role },
+        sender:    { userId: employeeId, userModel: 'User', name: employee?.name || req.user?.name },
+        type:      'attendance_updated',
+        title:     'Check-in Request ⏰',
+        message:   `${employee?.name || req.user?.name} requested check-in approval at ${requestedTime.toLocaleTimeString()}`,
+        data:      { attendanceId: savedAttendance._id, employeeName: employee?.name || req.user?.name, requestedTime, type: 'checkin' },
+        priority:  'medium'
+      });
+    }
+
+    res.json({ success: true, message: '✅ Check-in request sent! Waiting for approval.', data: savedAttendance });
 
   } catch (error) {
     console.error('❌ Check-in error:', error);
-    
-    // Handle specific MongoDB errors
-    if (error.code === 11000) {
-      // Duplicate key error - handle gracefully
-      return res.status(409).json({
-        success: false,
-        message: '⚠️ An attendance record already exists for today. Please refresh the page.',
-        error: 'Duplicate record found',
-        code: 'DUPLICATE_RECORD'
-      });
-    }
-    
-    // Handle validation errors
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map(err => err.message);
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: messages
-      });
-    }
-    
-    res.status(500).json({ 
-      success: false, 
-      error: error.message || 'Internal server error'
-    });
+    if (error.code === 11000) return res.status(409).json({ success: false, message: 'Duplicate record found' });
+    res.status(500).json({ success: false, error: error.message });
   }
 };
 
-
-
-// ✅ FIXED: Check-out request
+// ✅ CHECK-OUT REQUEST (manual — needs HR approval)
 exports.requestCheckOut = async (req, res) => {
   try {
     const employeeId = req.user._id || req.user.id;
-    const today = getStartOfDay(new Date());
+    const today      = getStartOfDay(new Date());
 
     const attendance = await Attendance.findOne({
       employee: employeeId,
-      date: { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) }
+      date:     { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) }
     }).populate('employee', 'name email employeeId department');
 
-    if (!attendance) {
-      return res.status(400).json({
-        success: false,
-        message: 'No attendance record found for today. Please check in first.'
+    if (!attendance)              return res.status(400).json({ success: false, message: 'No attendance record found. Please check in first.' });
+    if (attendance.approvedCheckOut) return res.status(400).json({ success: false, message: 'Already checked out today' });
+    if (!attendance.approvedCheckIn) return res.status(400).json({ success: false, message: 'Your check-in must be approved first' });
+    if (attendance.checkOutRequest?.approved === false && attendance.checkOutRequest?.rejected !== true) {
+      return res.status(400).json({ success: false, message: 'Check-out request already pending' });
+    }
+
+    attendance.checkOutRequest   = { requestedAt: new Date(), approved: false, remarks: 'Awaiting admin approval' };
+    attendance.requestedCheckOut = new Date();
+    attendance.status            = 'checkout_pending';
+    await attendance.save();
+
+    const io                  = req.app.get('io');
+    const notificationService = new NotificationService(io);
+    const employee            = await User.findById(employeeId).select('name employeeId');
+    const hrUsers             = await User.find({ role: { $in: ['hr', 'admin'] } });
+
+    for (const hr of hrUsers) {
+      await notificationService.createNotification({
+        recipient: { userId: hr._id, userModel: 'User', role: hr.role },
+        sender:    { userId: employeeId, userModel: 'User', name: employee?.name || req.user?.name },
+        type:      'attendance_updated',
+        title:     'Check-out Request ⏰',
+        message:   `${employee?.name || req.user?.name} requested check-out approval`,
+        data:      { attendanceId: attendance._id, employeeName: employee?.name || req.user?.name, type: 'checkout' },
+        priority:  'medium'
       });
     }
 
-    if (attendance.approvedCheckOut) {
-      return res.status(400).json({ success: false, message: 'Already checked out today' });
-    }
-
-    if (!attendance.approvedCheckIn) {
-      return res.status(400).json({ success: false, message: 'Your check-in must be approved first' });
-    }
-
-    if (attendance.checkOutRequest?.approved === false) {
-      return res.status(400).json({ success: false, message: 'Check-out request already pending approval' });
-    }
-
-    attendance.checkOutRequest = {
-      requestedAt: new Date(),
-      approved: false,
-      remarks: 'Awaiting admin approval'
-    };
-    attendance.requestedCheckOut = new Date();
-    attendance.status = 'checkout_pending';
-
-    await attendance.save();
-
-    res.json({
-      success: true,
-      message: 'Check-out request submitted. Awaiting admin approval.',
-      data: attendance
-    });
+    res.json({ success: true, message: 'Check-out request submitted! Waiting for approval.', data: attendance });
 
   } catch (error) {
     console.error('❌ Checkout error:', error);
@@ -735,10 +455,252 @@ exports.requestCheckOut = async (req, res) => {
   }
 };
 
+// =============== AI-POWERED CHECK-IN / CHECK-OUT ===============
+
+async function _processAIAttendance(req, res, type) {
+  try {
+    const employeeId = req.user?._id || req.user?.id;
+    if (!employeeId) return res.status(401).json({ success: false, message: 'Authentication required' });
+
+    const { image, latitude, longitude } = req.body;
+
+    const gps = validateGPS(latitude, longitude);
+    if (!gps.valid) {
+      return res.status(400).json({ 
+        success: false, 
+        stage: 'gps', 
+        message: gps.message, 
+        distance: gps.distance,
+        maxDistance: MAX_DISTANCE_M 
+      });
+    }
+
+    if (!image) return res.status(400).json({ success: false, message: 'Face image is required' });
+
+    let aiResult;
+    try {
+      aiResult = await callAIVerify(String(employeeId), image);
+    } catch (err) {
+      if (err.response?.status === 404) {
+        return res.status(400).json({
+          success: false, stage: 'face',
+          message: 'No registered face found. Please ask HR to register your face first.'
+        });
+      }
+      return res.status(502).json({
+        success: false, stage: 'face',
+        message: `Face recognition service error: ${err.response?.data?.error || err.message}`
+      });
+    }
+
+    if (!aiResult.match || aiResult.confidence < MIN_CONFIDENCE) {
+      return res.status(401).json({
+        success: false, stage: 'face',
+        message: aiResult.match
+          ? `Low confidence (${(aiResult.confidence * 100).toFixed(1)}%). Please retry in better lighting.`
+          : 'Face verification failed — identity could not be confirmed.',
+        confidence: aiResult.confidence
+      });
+    }
+
+    const today    = new Date(); today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+    const now      = new Date();
+
+    const locationData = { latitude: parseFloat(latitude), longitude: parseFloat(longitude) };
+    const aiRemarks    = `AI verified — confidence: ${(aiResult.confidence * 100).toFixed(1)}%, GPS: ${gps.distance} m from office`;
+
+    if (type === 'checkin') {
+      let attendance = await Attendance.findOne({ employee: employeeId, date: { $gte: today, $lt: tomorrow } });
+      if (attendance?.approvedCheckIn) {
+        return res.status(400).json({ success: false, message: 'Already checked in today' });
+      }
+
+      if (!attendance) {
+        attendance = new Attendance({
+          employee:           employeeId,
+          date:               today,
+          employeeName:       req.user?.name,
+          employeeEmail:      req.user?.email,
+          employeeDepartment: req.user?.department
+        });
+      }
+
+      attendance.approvedCheckIn  = now;
+      attendance.requestedCheckIn = now;
+      attendance.checkInLocation  = locationData;
+      attendance.checkInRequest   = { requestedAt: now, approved: true, approvedAt: now, remarks: aiRemarks };
+
+      const expectedStart = new Date(today); expectedStart.setHours(9, 0, 0, 0);
+      attendance.lateMinutes = now > expectedStart ? Math.round((now - expectedStart) / 60_000) : 0;
+      attendance.status      = attendance.lateMinutes > 0 ? 'late' : 'present';
+
+      await attendance.save();
+      return res.json({
+        success: true,
+        message: `✅ Checked in via AI (${(aiResult.confidence * 100).toFixed(1)}% confidence)`,
+        data:    attendance,
+        ai:      { confidence: aiResult.confidence, gpsDistance: gps.distance }
+      });
+    }
+
+    const attendance = await Attendance.findOne({ employee: employeeId, date: { $gte: today, $lt: tomorrow } });
+    if (!attendance)               return res.status(400).json({ success: false, message: 'No check-in record found for today' });
+    if (!attendance.approvedCheckIn)  return res.status(400).json({ success: false, message: 'Check-in must be approved first' });
+    if (attendance.approvedCheckOut)  return res.status(400).json({ success: false, message: 'Already checked out today' });
+
+    attendance.approvedCheckOut  = now;
+    attendance.requestedCheckOut = now;
+    attendance.checkOutLocation  = locationData;
+    attendance.checkOutRequest   = { requestedAt: now, approved: true, approvedAt: now, remarks: aiRemarks };
+    attendance.totalHours        = parseFloat(((now - new Date(attendance.approvedCheckIn)) / 3_600_000).toFixed(2));
+    attendance.status            = attendance.lateMinutes > 0 ? 'late' : 'present';
+
+    await attendance.save();
+    return res.json({
+      success:    true,
+      message:    `✅ Checked out via AI (${(aiResult.confidence * 100).toFixed(1)}% confidence)`,
+      data:       attendance,
+      totalHours: attendance.totalHours,
+      ai:         { confidence: aiResult.confidence, gpsDistance: gps.distance }
+    });
+
+  } catch (err) {
+    console.error(`❌ AI ${type} error:`, err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+/** POST /attendance/ai/checkin */
+exports.aiCheckIn = (req, res) => _processAIAttendance(req, res, 'checkin');
+
+/** POST /attendance/ai/checkout */
+exports.aiCheckOut = (req, res) => _processAIAttendance(req, res, 'checkout');
+
+/**
+ * POST /attendance/ai/register-face
+ * HR / Admin registers an employee's face using MULTIPLE photos.
+ * Body: { employeeId, images: [base64, base64, ...] }
+ */
+exports.registerFace = async (req, res) => {
+  try {
+    const { employeeId, images } = req.body;
+    const requesterRole = req.user?.role;
+    const requesterId    = req.user?._id || req.user?.id;
+
+    console.log('📸 Face Registration Request:');
+    console.log('   Requested by:', requesterId, `(${requesterRole})`);
+    console.log('   Employee ID:', employeeId);
+    console.log('   Images count:', images?.length);
+
+    if (!employeeId) {
+      return res.status(400).json({ success: false, message: 'employeeId is required' });
+    }
+    if (!images || !Array.isArray(images) || images.length === 0) {
+      return res.status(400).json({ success: false, message: 'At least one image is required' });
+    }
+    if (images.length > 20) {
+      return res.status(400).json({ success: false, message: `Maximum 20 images allowed, but received ${images.length}` });
+    }
+
+    // Need the target's role to enforce the HR rule below
+    const employee = await User.findById(employeeId).select('name email role');
+    if (!employee) {
+      return res.status(404).json({ success: false, message: 'Employee not found' });
+    }
+
+    // 🔒 Only an Admin can register a face for an HR account.
+    // This also blocks an HR user from registering their own face,
+    // since they themselves carry the 'hr' role.
+    if (employee.role === 'hr' && requesterRole !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only an Admin can register a face for an HR account. Please ask an Admin to do this.'
+      });
+    }
+
+    // ── everything below this line is unchanged from your original code ──
+    let successfulImages = 0;
+    let failedImages = [];
+    let finalEmbeddingDim = null;
+
+    for (let i = 0; i < images.length; i++) {
+      try {
+        const aiResult = await callAIRegister(String(employeeId), images[i]);
+        if (aiResult.success) {
+          successfulImages++;
+          finalEmbeddingDim = aiResult.embeddingDim;
+        } else {
+          failedImages.push({ index: i + 1, error: aiResult.error || 'Registration failed' });
+        }
+      } catch (err) {
+        const status = err.response?.status;
+        const message = err.response?.data?.error || err.message;
+        if (status === 401) {
+          return res.status(502).json({ success: false, message: 'AI service auth failed — check INTERNAL_SERVICE_TOKEN' });
+        }
+        if (status === 422) {
+          failedImages.push({ index: i + 1, error: message || 'No face detected in image' });
+        } else if (!err.response) {
+          return res.status(503).json({ success: false, message: 'AI service is unreachable — is it running on port 5001?' });
+        } else {
+          failedImages.push({ index: i + 1, error: message });
+        }
+      }
+    }
+
+    const successRate = successfulImages / images.length;
+    const MIN_SUCCESS_RATE = 0.6;
+
+    if (successfulImages === 0) {
+      return res.status(422).json({ success: false, message: 'Face registration failed for all images', details: { failedImages, totalAttempted: images.length } });
+    }
+    if (successRate < MIN_SUCCESS_RATE) {
+      return res.status(422).json({ success: false, message: `Only ${successfulImages}/${images.length} images succeeded (need ${Math.ceil(MIN_SUCCESS_RATE * images.length)} minimum)`, details: { successfulImages, failedImages, totalAttempted: images.length } });
+    }
+
+    await User.findByIdAndUpdate(employeeId, { hasFaceRegistered: true, faceRegistrationDate: new Date(), registeredImageCount: successfulImages });
+
+    return res.json({
+      success: true,
+      message: `Face registered for ${employee.name} using ${successfulImages}/${images.length} photos`,
+      employeeId, embeddingDim: finalEmbeddingDim, successfulImages,
+      failedImages: failedImages.length > 0 ? failedImages : undefined
+    });
+
+  } catch (err) {
+    console.error('❌ Register face error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+/**
+ * GET /attendance/ai/gps-validate?lat=xx&lng=yy
+ */
+exports.validateGPSEndpoint = (req, res) => {
+  const { lat, lng } = req.query;
+  const result = validateGPS(lat, lng);
+  return res.json({
+    success: true,
+    ...result,
+    officeLocation: { lat: OFFICE_LAT, lng: OFFICE_LNG },
+    maxDistance:    MAX_DISTANCE_M
+  });
+};
+
+/**
+ * GET /attendance/ai/service-health
+ */
+exports.aiServiceHealth = async (req, res) => {
+  try {
+    const { data } = await axios.get(`${AI_SERVICE_URL}/health`, { timeout: 5_000 });
+    res.json({ success: true, aiService: data });
+  } catch (err) {
+    res.status(503).json({ success: false, message: 'AI service is unreachable', error: err.message });
+  }
+};
 
 // =============== ADMIN FUNCTIONS ===============
 
-// ✅ FIXED: Get pending requests
 exports.getPendingRequests = async (req, res) => {
   try {
     const { type, page = 1, limit = 20 } = req.query;
@@ -749,325 +711,202 @@ exports.getPendingRequests = async (req, res) => {
       ]
     };
 
-    if (type === 'checkin') {
-      query = { 'checkInRequest.approved': false, approvedCheckIn: { $exists: false } };
-    } else if (type === 'checkout') {
-      query = { 'checkOutRequest.approved': false, approvedCheckOut: { $exists: false } };
-    }
+    if (type === 'checkin')  query = { 'checkInRequest.approved': false, approvedCheckIn: { $exists: false } };
+    if (type === 'checkout') query = { 'checkOutRequest.approved': false, approvedCheckOut: { $exists: false } };
 
-    const total = await Attendance.countDocuments(query);
+    const total    = await Attendance.countDocuments(query);
     const requests = await Attendance.find(query)
       .populate('employee', 'name email employeeId department')
       .sort({ updatedAt: -1 })
       .limit(parseInt(limit))
       .skip((parseInt(page) - 1) * parseInt(limit));
 
-    res.json({
-      success: true,
-      count: requests.length,
-      total,
-      pages: Math.ceil(total / parseInt(limit)),
-      currentPage: parseInt(page),
-      data: requests
-    });
+    res.json({ success: true, count: requests.length, total, pages: Math.ceil(total / parseInt(limit)), currentPage: parseInt(page), data: requests });
   } catch (error) {
     console.error('❌ Pending requests error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
 
-// ✅ FIXED: Approve check-in
-
-// ✅ FIXED: Approve check-in
-// ✅ FIXED: Approve check-in
 exports.approveCheckIn = async (req, res) => {
   try {
-    console.log('🔍 Approve Check-in - Starting...');
-    console.log('📋 Request params:', req.params);
-    console.log('📋 Request body:', req.body);
-    console.log('👤 Admin user:', req.user);
-    
     const { id } = req.params;
     const { actualTime, remarks } = req.body;
-    
-    // ✅ Validate ID
+
     if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid attendance record ID' 
-      });
+      return res.status(400).json({ success: false, message: 'Invalid attendance record ID' });
     }
 
-    // ✅ Get admin ID
-    const adminId = req.user?.id || req.user?._id || req.user?.userId;
-    if (!adminId) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Admin authentication required' 
-      });
+    const adminId    = req.user?.id || req.user?._id;
+    const admin      = await User.findById(adminId).select('name');
+    const attendance = await Attendance.findById(id).populate('employee', 'name email employeeId');
+
+    if (!attendance) return res.status(404).json({ success: false, message: 'Attendance record not found' });
+    if (!attendance.checkInRequest || attendance.checkInRequest.approved !== false) {
+      return res.status(400).json({ success: false, message: 'Check-in request is not pending' });
     }
 
-    console.log('🔍 Looking for attendance ID:', id);
-    
-    // ✅ FIXED: Find attendance with better error handling
-    const attendance = await Attendance.findById(id)
-      .populate('employee', 'name email employeeId department')
-      .populate('checkInRequest.approvedBy', 'name email');
+    const approvedTime = actualTime ? new Date(actualTime) : attendance.requestedCheckIn || new Date();
 
-    if (!attendance) {
-      console.error('❌ Attendance not found for ID:', id);
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Attendance record not found' 
-      });
-    }
-
-    console.log('✅ Found attendance:', {
-      id: attendance._id,
-      employee: attendance.employee?.name,
-      status: attendance.status,
-      checkInRequest: attendance.checkInRequest
-    });
-
-    // ✅ Check if there's a pending check-in request
-    if (!attendance.checkInRequest) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'No check-in request found for this record' 
-      });
-    }
-
-    if (attendance.checkInRequest.approved !== false) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Check-in request is not pending approval' 
-      });
-    }
-
-    // ✅ Set approved time
-    const approvedTime = actualTime ? new Date(actualTime) : 
-                       attendance.requestedCheckIn || 
-                       attendance.checkInRequest?.requestedAt || 
-                       new Date();
-    
-    console.log('⏰ Setting approved time:', approvedTime);
-
-    // ✅ Update attendance record
     attendance.approvedCheckIn = approvedTime;
-    attendance.checkInRequest = {
+    attendance.checkInRequest  = {
       ...attendance.checkInRequest,
-      approved: true,
+      approved:   true,
       approvedBy: adminId,
       approvedAt: new Date(),
       actualTime: approvedTime,
-      remarks: remarks || 'Approved by admin'
+      remarks:    remarks || 'Approved by admin'
     };
 
-    // ✅ Clear any pending checkout request
     if (attendance.checkOutRequest?.approved === false) {
-      console.log('🔄 Clearing pending checkout request');
-      attendance.checkOutRequest = undefined;
+      attendance.checkOutRequest   = undefined;
       attendance.requestedCheckOut = undefined;
     }
 
-    // ✅ Calculate late minutes
-    const expectedStart = new Date(attendance.date);
-    expectedStart.setHours(9, 0, 0, 0); // 9 AM
-    
+    const expectedStart = new Date(attendance.date); expectedStart.setHours(9, 0, 0, 0);
     if (approvedTime > expectedStart) {
       attendance.lateMinutes = Math.round((approvedTime - expectedStart) / (1000 * 60));
-      attendance.status = 'late';
-      console.log(`⏰ Late by ${attendance.lateMinutes} minutes`);
+      attendance.status      = 'late';
     } else {
-      attendance.status = 'present';
+      attendance.status      = 'present';
       attendance.lateMinutes = 0;
-      console.log('✅ On time');
     }
 
-    // ✅ If checkout is already approved, calculate total hours
     if (attendance.approvedCheckOut) {
-      const checkInTime = new Date(attendance.approvedCheckIn);
-      const checkOutTime = new Date(attendance.approvedCheckOut);
-      const diffMs = checkOutTime - checkInTime;
+      const diffMs = new Date(attendance.approvedCheckOut) - new Date(attendance.approvedCheckIn);
       attendance.totalHours = Math.max(0, parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2)));
-      console.log(`⏱️ Total hours: ${attendance.totalHours}`);
     }
 
-    // ✅ Save the record
     const savedAttendance = await attendance.save();
-    console.log('💾 Attendance saved successfully:', savedAttendance._id);
 
-    // ✅ Populate the approver info for response
-    await savedAttendance.populate('checkInRequest.approvedBy', 'name email');
-
-    res.json({
-      success: true,
-      message: 'Check-in approved successfully',
-      data: savedAttendance
+    const io                  = req.app.get('io');
+    const notificationService = new NotificationService(io);
+    await notificationService.createNotification({
+      recipient: { userId: attendance.employee._id, userModel: 'User', role: 'employee' },
+      sender:    { userId: adminId, userModel: 'User', name: admin?.name || req.user?.name },
+      type:      'attendance_updated',
+      title:     'Check-in Approved ✅',
+      message:   `Your check-in for ${new Date(attendance.date).toLocaleDateString()} has been approved${attendance.lateMinutes > 0 ? ` (Late by ${attendance.lateMinutes} min)` : ''}`,
+      data:      { attendanceId: savedAttendance._id, date: attendance.date, approvedTime, lateMinutes: attendance.lateMinutes },
+      priority:  'medium'
     });
+
+    res.json({ success: true, message: 'Check-in approved and employee notified', data: savedAttendance });
 
   } catch (error) {
     console.error('❌ Approve check-in error:', error);
-    
-    // Handle specific errors
-    if (error.name === 'CastError') {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid attendance record ID format' 
-      });
-    }
-    
-    res.status(500).json({ 
-      success: false, 
-      error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
+    if (error.name === 'CastError') return res.status(400).json({ success: false, message: 'Invalid attendance record ID format' });
+    res.status(500).json({ success: false, error: error.message });
   }
 };
 
-// ✅ FIXED: Approve check-out
-// ✅ FIXED: Approve check-out
 exports.approveCheckOut = async (req, res) => {
   try {
-    console.log('🔍 Approve Check-out - Starting...');
-    console.log('📋 Request params:', req.params);
-    console.log('📋 Request body:', req.body);
-    console.log('👤 Admin user:', req.user);
-    
     const { id } = req.params;
     const { actualTime, remarks } = req.body;
-    
-    // ✅ Validate ID
+
     if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid attendance record ID' 
-      });
+      return res.status(400).json({ success: false, message: 'Invalid attendance record ID' });
     }
 
-    // ✅ Get admin ID
-    const adminId = req.user?.id || req.user?._id || req.user?.userId;
-    if (!adminId) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Admin authentication required' 
-      });
+    const adminId    = req.user?.id || req.user?._id;
+    const admin      = await User.findById(adminId).select('name');
+    const attendance = await Attendance.findById(id).populate('employee', 'name email employeeId');
+
+    if (!attendance)                 return res.status(404).json({ success: false, message: 'Attendance record not found' });
+    if (!attendance.checkOutRequest || attendance.checkOutRequest.approved !== false) {
+      return res.status(400).json({ success: false, message: 'Check-out request is not pending' });
     }
+    if (!attendance.approvedCheckIn) return res.status(400).json({ success: false, message: 'Check-in must be approved first' });
 
-    console.log('🔍 Looking for attendance ID:', id);
-    
-    // ✅ Find attendance
-    const attendance = await Attendance.findById(id)
-      .populate('employee', 'name email employeeId department')
-      .populate('checkOutRequest.approvedBy', 'name email');
+    const approvedTime = actualTime ? new Date(actualTime) : attendance.requestedCheckOut || new Date();
 
-    if (!attendance) {
-      console.error('❌ Attendance not found for ID:', id);
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Attendance record not found' 
-      });
-    }
-
-    console.log('✅ Found attendance:', {
-      id: attendance._id,
-      employee: attendance.employee?.name,
-      status: attendance.status,
-      checkOutRequest: attendance.checkOutRequest
-    });
-
-    // ✅ Check if there's a pending check-out request
-    if (!attendance.checkOutRequest) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'No check-out request found for this record' 
-      });
-    }
-
-    if (attendance.checkOutRequest.approved !== false) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Check-out request is not pending approval' 
-      });
-    }
-
-    // ✅ Verify check-in is approved
-    if (!attendance.approvedCheckIn) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Check-in must be approved first' 
-      });
-    }
-
-    // ✅ Set approved time
-    const approvedTime = actualTime ? new Date(actualTime) : 
-                       attendance.requestedCheckOut || 
-                       attendance.checkOutRequest?.requestedAt || 
-                       new Date();
-    
-    console.log('⏰ Setting approved check-out time:', approvedTime);
-
-    // ✅ Update attendance record
     attendance.approvedCheckOut = approvedTime;
-    attendance.checkOutRequest = {
+    attendance.checkOutRequest  = {
       ...attendance.checkOutRequest,
-      approved: true,
+      approved:   true,
       approvedBy: adminId,
       approvedAt: new Date(),
       actualTime: approvedTime,
-      remarks: remarks || 'Approved by admin'
+      remarks:    remarks || 'Approved by admin'
     };
 
-    // ✅ Calculate total hours
-    const checkInTime = new Date(attendance.approvedCheckIn);
-    const checkOutTime = new Date(approvedTime);
-    const diffMs = checkOutTime - checkInTime;
-    
-    if (diffMs > 0) {
-      attendance.totalHours = parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
-      console.log(`⏱️ Total hours: ${attendance.totalHours}`);
-    } else {
-      attendance.totalHours = 0;
-      console.log('⚠️ Invalid time difference - check-out before check-in');
-    }
+    const diffMs = new Date(approvedTime) - new Date(attendance.approvedCheckIn);
+    attendance.totalHours = diffMs > 0 ? parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2)) : 0;
+    attendance.status     = attendance.lateMinutes > 0 ? 'late' : 'present';
 
-    // ✅ Update status
-    attendance.status = attendance.lateMinutes > 0 ? 'late' : 'present';
-
-    // ✅ Save the record
     const savedAttendance = await attendance.save();
-    console.log('💾 Attendance saved successfully:', savedAttendance._id);
 
-    // ✅ Populate the approver info for response
-    await savedAttendance.populate('checkOutRequest.approvedBy', 'name email');
-
-    res.json({
-      success: true,
-      message: 'Check-out approved successfully',
-      data: savedAttendance
+    const io                  = req.app.get('io');
+    const notificationService = new NotificationService(io);
+    await notificationService.createNotification({
+      recipient: { userId: attendance.employee._id, userModel: 'User', role: 'employee' },
+      sender:    { userId: adminId, userModel: 'User', name: admin?.name || req.user?.name },
+      type:      'attendance_updated',
+      title:     'Check-out Approved ✅',
+      message:   `Your check-out for ${new Date(attendance.date).toLocaleDateString()} has been approved. Total: ${attendance.totalHours}h`,
+      data:      { attendanceId: savedAttendance._id, date: attendance.date, approvedTime, totalHours: attendance.totalHours },
+      priority:  'medium'
     });
+
+    res.json({ success: true, message: 'Check-out approved and employee notified', data: savedAttendance });
 
   } catch (error) {
     console.error('❌ Approve check-out error:', error);
-    
-    // Handle specific errors
-    if (error.name === 'CastError') {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid attendance record ID format' 
-      });
-    }
-    
-    res.status(500).json({ 
-      success: false, 
-      error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
+    if (error.name === 'CastError') return res.status(400).json({ success: false, message: 'Invalid attendance record ID format' });
+    res.status(500).json({ success: false, error: error.message });
   }
 };
 
+exports.rejectRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { type, reason } = req.body;
 
-// Get all attendance (admin dashboard)
+    const attendance = await Attendance.findById(id).populate('employee', 'name email');
+    if (!attendance) return res.status(404).json({ success: false, message: 'Record not found' });
+
+    const adminId = req.user?.id || req.user?._id;
+    const admin   = await User.findById(adminId).select('name');
+
+    if (type === 'checkin') {
+      attendance.checkInRequest = {
+        ...attendance.checkInRequest,
+        approved: false,
+        rejected: true,
+        remarks:  reason || 'Rejected by admin'
+      };
+    } else if (type === 'checkout') {
+      attendance.checkOutRequest = {
+        ...attendance.checkOutRequest,
+        approved: false,
+        rejected: true,
+        remarks:  reason || 'Rejected by admin'
+      };
+    }
+
+    await attendance.save();
+
+    const io                  = req.app.get('io');
+    const notificationService = new NotificationService(io);
+    await notificationService.createNotification({
+      recipient: { userId: attendance.employee._id, userModel: 'User', role: 'employee' },
+      sender:    { userId: adminId, userModel: 'User', name: admin?.name || req.user?.name },
+      type:      'attendance_updated',
+      title:     `${type === 'checkin' ? 'Check-in' : 'Check-out'} Request Rejected ❌`,
+      message:   `Your ${type} request for ${new Date(attendance.date).toLocaleDateString()} was rejected. Reason: ${reason || 'Not specified'}`,
+      data:      { attendanceId: attendance._id, date: attendance.date, type, reason },
+      priority:  'high'
+    });
+
+    res.json({ success: true, message: `${type.toUpperCase()} request rejected and employee notified` });
+  } catch (error) {
+    console.error('Reject error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// =============== FULL CRUD ===============
 
 exports.getAllAttendance = async (req, res) => {
   try {
@@ -1075,52 +914,37 @@ exports.getAllAttendance = async (req, res) => {
     let query = {};
 
     if (employeeId) query.employee = employeeId;
-    if (status) query.status = status;
-
+    if (status)     query.status   = status;
     if (dateFrom || dateTo) {
       query.date = {};
       if (dateFrom) query.date.$gte = getStartOfDay(dateFrom);
-      if (dateTo) query.date.$lte = getEndOfDay(dateTo);
+      if (dateTo)   query.date.$lte = getEndOfDay(dateTo);
     }
-
     if (search) {
       const users = await User.find({
         $or: [
-          { name: { $regex: search, $options: 'i' } },
-          { email: { $regex: search, $options: 'i' } },
+          { name:       { $regex: search, $options: 'i' } },
+          { email:      { $regex: search, $options: 'i' } },
           { employeeId: { $regex: search, $options: 'i' } }
         ]
       }).select('_id');
-      query.employee = { $in: users.map(user => user._id) };
+      query.employee = { $in: users.map(u => u._id) };
     }
 
-    const total = await Attendance.countDocuments(query);
+    const total      = await Attendance.countDocuments(query);
     const attendance = await Attendance.find(query)
       .populate('employee', 'name email employeeId department')
-      // ✅ ADD THIS LINE to populate approvers
       .populate('checkInRequest.approvedBy checkOutRequest.approvedBy', 'name email')
       .limit(parseInt(limit))
       .skip((parseInt(page) - 1) * parseInt(limit))
       .sort({ date: -1 });
 
-    res.json({
-      success: true,
-      data: attendance,
-      pagination: { 
-        page: parseInt(page), 
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / parseInt(limit))
-      }
-    });
+    res.json({ success: true, data: attendance, pagination: { page: parseInt(page), limit: parseInt(limit), total, pages: Math.ceil(total / parseInt(limit)) } });
   } catch (error) {
     console.error('❌ GetAllAttendance error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
-
-
-// =============== FULL CRUD OPERATIONS ===============
 
 exports.createAttendance = async (req, res) => {
   try {
@@ -1135,46 +959,37 @@ exports.createAttendance = async (req, res) => {
 
 exports.updateAttendance = async (req, res) => {
   try {
-    const { id } = req.params;
-    const updates = req.body;
-    const adminId = req.user._id;
+    const { id }      = req.params;
+    const updates     = req.body;
+    const adminId     = req.user._id;
+    const attendance  = await Attendance.findById(id).populate('employee');
+    if (!attendance) return res.status(404).json({ success: false, message: 'Record not found' });
 
-    const attendance = await Attendance.findById(id).populate('employee');
-    if (!attendance) {
-      return res.status(404).json({ success: false, message: 'Record not found' });
-    }
-
-    // Allowed fields
     const allowedUpdates = ['status', 'lateMinutes', 'totalHours', 'approvedCheckIn', 'approvedCheckOut', 'remarks'];
-    const invalidFields = Object.keys(updates).filter(field => !allowedUpdates.includes(field));
+    const invalidFields  = Object.keys(updates).filter(f => !allowedUpdates.includes(f));
     if (invalidFields.length > 0) {
       return res.status(400).json({ success: false, message: `Invalid fields: ${invalidFields.join(', ')}` });
     }
 
-    // Auto-calculate total hours
     if (updates.approvedCheckIn && updates.approvedCheckOut) {
       const diffMs = new Date(updates.approvedCheckOut) - new Date(updates.approvedCheckIn);
       updates.totalHours = Math.max(0, parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2)));
     }
 
-    // Auto-calculate late minutes
     if (updates.approvedCheckIn) {
-      const checkInTime = new Date(updates.approvedCheckIn);
-      const expectedStart = new Date(attendance.date);
-      expectedStart.setHours(9, 0, 0, 0);
-      
+      const checkInTime   = new Date(updates.approvedCheckIn);
+      const expectedStart = new Date(attendance.date); expectedStart.setHours(9, 0, 0, 0);
       if (checkInTime > expectedStart) {
         updates.lateMinutes = Math.round((checkInTime - expectedStart) / (1000 * 60));
-        updates.status = 'late';
+        updates.status      = 'late';
       } else {
         updates.lateMinutes = 0;
-        updates.status = 'present';
+        updates.status      = 'present';
       }
     }
 
     Object.assign(attendance, updates, { lastUpdatedBy: adminId, lastUpdatedAt: new Date() });
     await attendance.save();
-
     res.json({ success: true, data: attendance });
   } catch (error) {
     console.error('❌ Update error:', error);
@@ -1185,101 +1000,39 @@ exports.updateAttendance = async (req, res) => {
 exports.deleteAttendance = async (req, res) => {
   try {
     const attendance = await Attendance.findByIdAndDelete(req.params.id);
-    if (!attendance) {
-      return res.status(404).json({ success: false, message: 'Record not found' });
-    }
+    if (!attendance) return res.status(404).json({ success: false, message: 'Record not found' });
     res.json({ success: true, message: 'Attendance record deleted' });
   } catch (error) {
     res.status(400).json({ success: false, error: error.message });
   }
 };
 
-// Reject attendance request
-exports.rejectRequest = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { type, reason } = req.body;
-
-    const attendance = await Attendance.findById(id);
-    if (!attendance) {
-      return res.status(404).json({ success: false, message: 'Record not found' });
-    }
-
-    if (type === 'checkin') {
-      attendance.checkInRequest = {
-        ...attendance.checkInRequest,
-        approved: false,
-        remarks: reason || 'Rejected by admin'
-      };
-    } else if (type === 'checkout') {
-      attendance.checkOutRequest = {
-        ...attendance.checkOutRequest,
-        approved: false,
-        remarks: reason || 'Rejected by admin'
-      };
-    }
-
-    await attendance.save();
-    res.json({ 
-      success: true, 
-      message: `${type.toUpperCase()} request rejected` 
-    });
-  } catch (error) {
-    console.error('Reject error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-};
-
-// Clear stuck checkout request (for admin)
 exports.clearStuckCheckout = async (req, res) => {
   try {
-    const { id } = req.params;
-    
-    const attendance = await Attendance.findById(id);
-    if (!attendance) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Attendance record not found' 
-      });
-    }
+    const attendance = await Attendance.findById(req.params.id);
+    if (!attendance) return res.status(404).json({ success: false, message: 'Attendance record not found' });
 
-    // Clear checkout request
-    attendance.checkOutRequest = undefined;
+    attendance.checkOutRequest   = undefined;
     attendance.requestedCheckOut = undefined;
-    attendance.status = attendance.approvedCheckIn ? 'present' : attendance.status;
-    
+    attendance.status            = attendance.approvedCheckIn ? 'present' : attendance.status;
     await attendance.save();
-    
-    console.log('✅ Cleared stuck checkout for attendance:', attendance._id);
-    
-    res.json({ 
-      success: true, 
-      message: 'Stuck checkout request cleared successfully',
-      data: attendance
-    });
+
+    res.json({ success: true, message: 'Stuck checkout request cleared', data: attendance });
   } catch (error) {
     console.error('❌ Clear stuck checkout error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
 
-// =============== TEST ENDPOINT ===============
-
-// Test endpoint to check if API is working
 exports.testEndpoint = async (req, res) => {
   try {
     res.json({
-      success: true,
-      message: 'Attendance API is working',
+      success:   true,
+      message:   'Attendance API is working',
       timestamp: new Date().toISOString(),
-      user: req.user ? {
-        id: req.user._id,
-        email: req.user.email,
-        name: req.user.name
-      } : 'No user authenticated'
+      user:      req.user ? { id: req.user._id, email: req.user.email, name: req.user.name } : 'No user authenticated'
     });
   } catch (error) {
-    console.error('Test endpoint error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };

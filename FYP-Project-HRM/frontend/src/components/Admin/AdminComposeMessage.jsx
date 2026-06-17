@@ -2,16 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import {
-  Send as SendIcon, AttachFile as AttachFileIcon, Delete as DeleteIcon,
-  Person as PersonIcon, DoneAll as DoneAllIcon, History as HistoryIcon,
-  Drafts as DraftsIcon, SmartToy as SmartToyIcon, AutoFixHigh as AutoFixHighIcon,
-  Psychology as PsychologyIcon, FileCopy as FileCopyIcon,
-  DriveFileRenameOutline as TemplateIcon, Close as CloseIcon,
-} from '@mui/icons-material';
-import { CircularProgress } from '@mui/material';
-import { FaEnvelope, FaUsers, FaClock, FaCheckCircle, FaUserPlus, FaChartLine } from 'react-icons/fa';
-// ✅ FIX 1A: import axiosInstance for authenticated API calls
+import { 
+  FaPaperPlane, FaPaperclip, FaTrash, FaUser, FaCheckDouble, 
+  FaHistory, FaSave, FaRobot, FaMagic, FaBrain, FaCopy, 
+  FaFileAlt, FaTimes, FaEnvelope, FaUsers, FaClock, FaCheckCircle, 
+  FaUserPlus, FaChartLine, FaSpinner, FaChevronDown, FaChevronUp,
+  FaRegFileAlt, FaRegSave, FaRegStar, FaArrowLeft, FaArrowRight
+} from 'react-icons/fa';
 import axiosInstance from '../../utils/axiosInstance';
 
 // ─── UI Primitives ────────────────────────────────────────────────────────────
@@ -19,16 +16,13 @@ import axiosInstance from '../../utils/axiosInstance';
 const Badge = ({ children, variant = 'default' }) => {
   const v = {
     default: 'bg-gray-100 text-gray-600',
-    success: 'bg-green-50 text-green-700',
-    warning: 'bg-yellow-50 text-yellow-700',
+    success: 'bg-emerald-50 text-emerald-700',
+    warning: 'bg-amber-50 text-amber-700',
     danger:  'bg-red-50 text-red-700',
-    info:    'bg-gray-100 text-gray-700',
-    low:     'bg-green-50 text-green-700',
-    normal:  'bg-gray-100 text-gray-700',
-    high:    'bg-yellow-50 text-yellow-700',
-    urgent:  'bg-red-50 text-red-700',
+    info:    'bg-blue-50 text-blue-700',
+    primary: 'bg-indigo-50 text-indigo-700'
   };
-  return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${v[variant] || v.default}`}>{children}</span>;
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${v[variant]}`}>{children}</span>;
 };
 
 const AvatarInitials = ({ name = 'U' }) => {
@@ -36,15 +30,15 @@ const AvatarInitials = ({ name = 'U' }) => {
 };
 
 const KpiCard = ({ icon: Icon, label, value, sub, iconBg }) => (
-  <div className="bg-white rounded-xl border border-gray-100 p-5 hover:shadow-md transition-all duration-200">
+  <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow">
     <div className="flex items-center justify-between">
       <div>
-        <p className="text-xs text-gray-500 font-medium mb-2">{label}</p>
-        <p className="text-2xl font-semibold text-gray-900">{value}</p>
+        <p className="text-sm text-gray-500 mb-1">{label}</p>
+        <p className="text-2xl font-bold text-gray-800">{value}</p>
         {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
       </div>
-      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${iconBg}`}>
-        <Icon className="w-5 h-5 text-white" />
+      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${iconBg}`}>
+        <Icon className="text-white text-sm" />
       </div>
     </div>
   </div>
@@ -52,7 +46,7 @@ const KpiCard = ({ icon: Icon, label, value, sub, iconBg }) => (
 
 const StepDot = ({ label, index, active, completed }) => (
   <div className="flex items-center gap-2">
-    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${completed ? 'bg-gray-900 text-white' : active ? 'bg-gray-100 text-gray-900 ring-2 ring-gray-900' : 'bg-gray-100 text-gray-400'}`}>
+    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${completed ? 'bg-indigo-600 text-white' : active ? 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-600' : 'bg-gray-100 text-gray-400'}`}>
       {completed ? (
         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
@@ -69,7 +63,7 @@ const FormLabel = ({ children, required }) => (
   </label>
 );
 
-const inputCls = (err) => `w-full text-sm border ${err ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-gray-200 focus:border-gray-400'} rounded-lg px-3.5 py-2.5 focus:outline-none focus:ring-2 bg-white text-gray-800 placeholder-gray-400 transition-colors`;
+const inputCls = (err) => `w-full text-sm border ${err ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-indigo-200 focus:border-indigo-400'} rounded-lg px-3.5 py-2.5 focus:outline-none focus:ring-2 bg-white text-gray-800 placeholder-gray-400 transition-colors`;
 
 // ─── Static data ──────────────────────────────────────────────────────────────
 
@@ -89,10 +83,10 @@ const CATEGORIES = [
 ];
 
 const PRIORITIES = [
-  { value: 'low',    label: 'Low' },
-  { value: 'normal', label: 'Normal' },
-  { value: 'high',   label: 'High' },
-  { value: 'urgent', label: 'Urgent' },
+  { value: 'low',    label: 'Low', variant: 'success' },
+  { value: 'normal', label: 'Normal', variant: 'default' },
+  { value: 'high',   label: 'High', variant: 'warning' },
+  { value: 'urgent', label: 'Urgent', variant: 'danger' },
 ];
 
 const DEFAULT_TEMPLATES = [
@@ -108,7 +102,6 @@ const DEFAULT_TEMPLATES = [
 ];
 
 const STEPS = ['Recipient', 'Details', 'Message', 'Review'];
-// API_URL kept only for fetchCurrentUser endpoint-discovery loop
 const API_URL = 'http://localhost:5000';
 
 // ─── Success Dialog ───────────────────────────────────────────────────────────
@@ -119,8 +112,8 @@ const SuccessDialog = ({ open, message, onViewMessages, onSendAnother }) => {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
       <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6 text-center">
-        <div className="w-16 h-16 bg-green-50 rounded-xl flex items-center justify-center mx-auto mb-4">
-          <DoneAllIcon className="text-green-600" style={{ fontSize: 28 }} />
+        <div className="w-16 h-16 bg-emerald-50 rounded-xl flex items-center justify-center mx-auto mb-4">
+          <FaCheckDouble className="text-emerald-600 text-2xl" />
         </div>
         <h3 className="text-lg font-semibold text-gray-900 mb-1">Message Sent!</h3>
         <p className="text-gray-500 text-sm mb-5">Your message has been delivered securely.</p>
@@ -136,10 +129,10 @@ const SuccessDialog = ({ open, message, onViewMessages, onSendAnother }) => {
         )}
         <div className="flex gap-3">
           <button onClick={onViewMessages} className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-            <HistoryIcon style={{ fontSize: 16 }} /> View Messages
+            <FaHistory className="text-xs" /> View Messages
           </button>
-          <button onClick={onSendAnother} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors">
-            <SendIcon style={{ fontSize: 16 }} /> Send Another
+          <button onClick={onSendAnother} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors">
+            <FaPaperPlane className="text-xs" /> Send Another
           </button>
         </div>
       </div>
@@ -189,6 +182,8 @@ const AdminComposeMessage = () => {
     templatesCount: 0,
     recentMessages: 0,
   });
+  const [showAllTemplates, setShowAllTemplates] = useState(false);
+  const [showAllDrafts, setShowAllDrafts] = useState(false);
 
   // ── Fetch current user ──────────────────────────────────────────────────────
   const fetchCurrentUser = useCallback(async () => {
@@ -263,7 +258,6 @@ const AdminComposeMessage = () => {
     }
   }, []);
 
-  // ✅ FIX 1C: use axiosInstance instead of bare axios
   const fetchAllUsers = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -277,7 +271,6 @@ const AdminComposeMessage = () => {
         setStats(prev => ({ ...prev, totalEmployees: mockUsers.length }));
         return;
       }
-      // ✅ FIX: axiosInstance handles auth headers automatically
       const response = await axiosInstance.get('/messages/users/list');
       if (response.data.success && response.data.data) {
         setAllUsers(response.data.data);
@@ -401,14 +394,15 @@ const AdminComposeMessage = () => {
     if (!formData.recipientId) errs.recipientId = 'Please select a recipient';
     if (!formData.category) errs.category = 'Please select a category';
     setFieldErrors(errs);
-    return Object.keys(errs).length === 0 ? null : 'Please fix the errors above';
+    return Object.keys(errs).length === 0;
   };
 
-  // ✅ FIX 1B: use axiosInstance — no manual auth header needed
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const err = validateForm();
-    if (err) { toast.error(err); setError(err); return; }
+    if (!validateForm()) {
+      toast.error('Please fix the errors above');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -448,7 +442,7 @@ const AdminComposeMessage = () => {
   const getRecipientOptions = () => allUsers.map(user => ({
     value: user._id,
     label: user.name,
-    subtext: `${user.department || 'N/A'} · ${user.role?.toUpperCase() || 'EMPLOYEE'}`,
+    subtext: `${user.department || 'N/A'} · ${(user.role || 'employee').toUpperCase()}`,
     email: user.email,
   }));
 
@@ -477,10 +471,14 @@ const AdminComposeMessage = () => {
     }
   }, [formData.subject, formData.message]);
 
+  // Display helpers
+  const displayedTemplates = showAllTemplates ? templates : templates.slice(0, 4);
+  const displayedDrafts = showAllDrafts ? drafts : drafts.slice(0, 4);
+
   if (userLoading) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="text-center">
-        <div className="w-10 h-10 border-4 border-gray-100 border-t-gray-900 rounded-full animate-spin mx-auto mb-3" />
+        <FaSpinner className="w-10 h-10 text-indigo-600 animate-spin mx-auto mb-3" />
         <p className="text-gray-600 text-sm">Loading your profile…</p>
       </div>
     </div>
@@ -489,32 +487,28 @@ const AdminComposeMessage = () => {
   const recipientOptions = getRecipientOptions();
 
   const TABS = [
-    { id: 'compose',   icon: SendIcon,     label: 'Compose' },
-    { id: 'templates', icon: TemplateIcon, label: 'Templates' },
-    { id: 'drafts',    icon: DraftsIcon,   label: `Drafts${drafts.length ? ` (${drafts.length})` : ''}` },
-    { id: 'ai',        icon: SmartToyIcon, label: 'AI Assistant' },
+    { id: 'compose',   icon: FaPaperPlane, label: 'Compose' },
+    { id: 'templates', icon: FaFileAlt,    label: 'Templates' },
+    { id: 'drafts',    icon: FaSave,       label: `Drafts${drafts.length ? ` (${drafts.length})` : ''}` },
+    { id: 'ai',        icon: FaRobot,      label: 'AI Assistant' },
   ];
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Page Header */}
-      <div className="bg-white border-b border-gray-100 px-6 py-5">
+      <div className="bg-white border-b border-gray-200 px-6 py-5 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-                <SendIcon className="text-gray-600 text-sm" />
-                Admin Compose Message
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <FaPaperPlane className="text-indigo-600" /> Admin Compose Message
               </h1>
               <p className="text-sm text-gray-500 mt-1">Send secure messages to employees</p>
             </div>
             {user && (
-              <div className="flex items-center gap-2">
-                <AvatarInitials name={user.name} />
-                <div className="hidden sm:block">
-                  <p className="text-sm font-medium text-gray-700">{user.name}</p>
-                  <p className="text-xs text-gray-400">{user.employeeId}</p>
-                </div>
+              <div className="flex items-center gap-2 text-gray-400">
+                <FaUser className="w-5 h-5" />
+                <span className="text-sm">{user.name}</span>
               </div>
             )}
           </div>
@@ -523,23 +517,27 @@ const AdminComposeMessage = () => {
 
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {/* KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
           <KpiCard icon={FaUsers} label="Total Employees" value={stats.totalEmployees} sub="Available recipients" iconBg="bg-indigo-500" />
-          <KpiCard icon={DraftsIcon} label="Saved Drafts" value={stats.draftsCount} sub="Continue later" iconBg="bg-amber-500" />
-          <KpiCard icon={TemplateIcon} label="Templates" value={stats.templatesCount} sub="Ready to use" iconBg="bg-emerald-500" />
+          <KpiCard icon={FaSave} label="Saved Drafts" value={stats.draftsCount} sub="Continue later" iconBg="bg-amber-500" />
+          <KpiCard icon={FaFileAlt} label="Templates" value={stats.templatesCount} sub="Ready to use" iconBg="bg-emerald-500" />
           <KpiCard icon={FaCheckCircle} label="Messages Sent" value={stats.recentMessages} sub="This session" iconBg="bg-purple-500" />
         </div>
 
         {/* Tab Bar */}
-        <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="flex border-b border-gray-100 overflow-x-auto">
             {TABS.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${activeTab === tab.id ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                className={`flex items-center gap-2 px-5 py-3.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                  activeTab === tab.id 
+                    ? 'border-indigo-600 text-indigo-600' 
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
               >
-                <tab.icon style={{ fontSize: 15 }} />
+                <tab.icon className="text-sm" />
                 {tab.label}
               </button>
             ))}
@@ -547,14 +545,14 @@ const AdminComposeMessage = () => {
 
           {/* ── Compose Tab ── */}
           {activeTab === 'compose' && (
-            <div className="p-5">
+            <div className="p-6">
               {/* Step Progress */}
               <div className="flex items-center gap-3 mb-6 overflow-x-auto pb-1">
                 {STEPS.map((label, i) => (
                   <React.Fragment key={label}>
                     <StepDot label={label} index={i} active={i === activeStep} completed={i < activeStep} />
                     {i < STEPS.length - 1 && (
-                      <div className={`flex-1 h-px min-w-[20px] ${i < activeStep ? 'bg-gray-900' : 'bg-gray-200'}`} />
+                      <div className={`flex-1 h-px min-w-[20px] ${i < activeStep ? 'bg-indigo-600' : 'bg-gray-200'}`} />
                     )}
                   </React.Fragment>
                 ))}
@@ -592,30 +590,21 @@ const AdminComposeMessage = () => {
                       {fieldErrors.recipientId && <p className="text-xs text-red-500 mt-1">{fieldErrors.recipientId}</p>}
                     </div>
 
-                    {/* Employee Cards */}
-                    {recipientOptions.length > 0 && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                        {recipientOptions.slice(0, 6).map(opt => (
-                          <button
-                            type="button"
-                            key={opt.value}
-                            onClick={() => setFormData(prev => ({ ...prev, recipient: opt.label, recipientId: opt.value }))}
-                            className={`flex items-center gap-3 p-3.5 rounded-lg border text-left transition-all ${formData.recipientId === opt.value ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
-                          >
-                            <AvatarInitials name={opt.label} />
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-gray-800 truncate">{opt.label}</p>
-                              <p className="text-xs text-gray-400 truncate">{opt.subtext}</p>
-                            </div>
-                            {formData.recipientId === opt.value && (
-                              <div className="ml-auto w-5 h-5 bg-gray-900 rounded-full flex items-center justify-center flex-shrink-0">
-                                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                </svg>
-                              </div>
-                            )}
-                          </button>
-                        ))}
+                    {/* Selected recipient info */}
+                    {formData.recipientId && (
+                      <div className="mt-4 p-4 bg-indigo-50 border border-indigo-100 rounded-lg">
+                        <p className="text-xs text-indigo-600 font-medium mb-2">Selected Recipient</p>
+                        <div className="flex items-center gap-3">
+                          <AvatarInitials name={recipientOptions.find(o => o.value === formData.recipientId)?.label || 'U'} />
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">
+                              {recipientOptions.find(o => o.value === formData.recipientId)?.label}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {recipientOptions.find(o => o.value === formData.recipientId)?.subtext}
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -638,7 +627,11 @@ const AdminComposeMessage = () => {
                           {PRIORITIES.map(p => (
                             <button type="button" key={p.value}
                               onClick={() => setFormData(prev => ({ ...prev, priority: p.value }))}
-                              className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all ${formData.priority === p.value ? 'border-gray-900 bg-gray-50 text-gray-900' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                              className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all ${
+                                formData.priority === p.value 
+                                  ? 'border-indigo-600 bg-indigo-50 text-indigo-700' 
+                                  : 'border-gray-200 text-gray-500 hover:border-indigo-300'
+                              }`}>
                               {p.label}
                             </button>
                           ))}
@@ -655,8 +648,13 @@ const AdminComposeMessage = () => {
                       <p className="text-sm font-medium text-gray-700 mb-3">Message options</p>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         {[['confidential', 'Confidential'], ['readReceipt', 'Read Receipt'], ['urgent', 'Urgent'], ['followUp', 'Follow-up']].map(([field, label]) => (
-                          <label key={field} className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${formData[field] ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:bg-gray-50'}`}>
-                            <input type="checkbox" name={field} checked={formData[field]} onChange={handleChange} className="rounded border-gray-300 text-gray-900 focus:ring-gray-500" />
+                          <label key={field} className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${
+                            formData[field] 
+                              ? 'border-indigo-600 bg-indigo-50' 
+                              : 'border-gray-200 hover:bg-gray-50'
+                          }`}>
+                            <input type="checkbox" name={field} checked={formData[field]} onChange={handleChange} 
+                              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
                             <span className="text-xs font-medium text-gray-700">{label}</span>
                           </label>
                         ))}
@@ -685,7 +683,7 @@ const AdminComposeMessage = () => {
                     <div>
                       <FormLabel>Attachments</FormLabel>
                       <label htmlFor="file-upload" className="flex items-center gap-2 w-fit px-4 py-2.5 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors">
-                        <AttachFileIcon style={{ fontSize: 16 }} /> Add files
+                        <FaPaperclip className="text-xs" /> Add files
                       </label>
                       <input accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx,.txt,.ppt,.pptx" style={{ display: 'none' }} id="file-upload" multiple type="file" onChange={handleFileUpload} />
                       {formData.attachments.length > 0 && (
@@ -693,14 +691,14 @@ const AdminComposeMessage = () => {
                           {formData.attachments.map(item => (
                             <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg">
                               <div className="flex items-center gap-2 min-w-0">
-                                <AttachFileIcon className="text-gray-400 flex-shrink-0" style={{ fontSize: 15 }} />
+                                <FaPaperclip className="text-gray-400 flex-shrink-0" />
                                 <div className="min-w-0">
                                   <p className="text-sm text-gray-800 truncate">{item.name}</p>
                                   <p className="text-xs text-gray-400">{item.size} MB · {item.type}</p>
                                 </div>
                               </div>
                               <button type="button" onClick={() => removeAttachment(item.id)} className="p-1 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-lg transition-colors flex-shrink-0">
-                                <DeleteIcon style={{ fontSize: 15 }} />
+                                <FaTrash className="text-xs" />
                               </button>
                             </div>
                           ))}
@@ -719,7 +717,7 @@ const AdminComposeMessage = () => {
                         <div key={k} className="flex items-center gap-4 px-4 py-3">
                           <span className="text-xs text-gray-400 w-20 flex-shrink-0">{k}</span>
                           <span className="text-sm text-gray-800 font-medium">
-                            {k === 'Priority' ? <Badge variant={v}>{v}</Badge> : v}
+                            {k === 'Priority' ? <Badge variant={v}>{v}</Badge> : v || '—'}
                           </span>
                         </div>
                       ))}
@@ -747,24 +745,24 @@ const AdminComposeMessage = () => {
                 <div className="flex items-center justify-between mt-6 pt-5 border-t border-gray-100">
                   <button type="button" onClick={activeStep > 0 ? handlePrevStep : () => navigate(-1)}
                     className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-                    {activeStep > 0 ? '← Back' : 'Cancel'}
+                    <FaArrowLeft className="text-xs" /> {activeStep > 0 ? 'Back' : 'Cancel'}
                   </button>
                   <div className="flex items-center gap-2">
                     {activeStep === 3 && (
                       <button type="button" onClick={() => setSaveAsDraftConfirm(true)}
                         className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-                        <DraftsIcon style={{ fontSize: 15 }} /> Save draft
+                        <FaSave className="text-xs" /> Save draft
                       </button>
                     )}
                     {activeStep < 3 ? (
                       <button type="button" onClick={handleNextStep}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors">
-                        Continue →
+                        className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors">
+                        Continue <FaArrowRight className="text-xs" />
                       </button>
                     ) : (
                       <button type="submit" disabled={loading}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
-                        {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <SendIcon style={{ fontSize: 15 }} />}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
+                        {loading ? <FaSpinner className="animate-spin text-xs" /> : <FaPaperPlane className="text-xs" />}
                         {loading ? 'Sending…' : 'Send Message'}
                       </button>
                     )}
@@ -776,24 +774,118 @@ const AdminComposeMessage = () => {
 
           {/* ── Templates Tab ── */}
           {activeTab === 'templates' && (
-            <div className="p-5">
+            <div className="p-6">
               <p className="text-sm font-semibold text-gray-800 mb-4">Message Templates</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {templates.map(template => (
-                  <div key={template.id} className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-all">
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <p className="text-sm font-semibold text-gray-800">{template.name}</p>
-                        <p className="text-xs text-gray-400">Used {template.usageCount || 0} times</p>
+              {templates.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                    <FaFileAlt className="text-gray-400 text-xl" />
+                  </div>
+                  <p className="text-gray-600 text-sm font-medium">No templates available</p>
+                  <p className="text-gray-400 text-xs mt-1 mb-4">Check back later for templates</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {displayedTemplates.map(template => (
+                    <div key={template.id} className="border border-gray-200 rounded-lg p-4 hover:border-indigo-300 transition-all">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800">{template.name}</p>
+                          <p className="text-xs text-gray-400">Used {template.usageCount || 0} times</p>
+                        </div>
+                        <Badge>{template.category}</Badge>
                       </div>
-                      <Badge>{template.category}</Badge>
+                      <p className="text-xs text-gray-500 mb-1 font-medium">Subject</p>
+                      <p className="text-xs text-gray-700 mb-3 truncate">{template.subject}</p>
+                      <p className="text-xs text-gray-500 line-clamp-3 mb-3">{template.message.substring(0, 120)}…</p>
+                      <button onClick={() => applyTemplate(template)}
+                        className="w-full flex items-center justify-center gap-1.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium transition-colors">
+                        <FaCopy className="text-xs" /> Use Template
+                      </button>
                     </div>
-                    <p className="text-xs text-gray-500 mb-1 font-medium">Subject</p>
-                    <p className="text-xs text-gray-700 mb-3 truncate">{template.subject}</p>
-                    <p className="text-xs text-gray-500 line-clamp-3 mb-3">{template.message.substring(0, 120)}…</p>
-                    <button onClick={() => applyTemplate(template)}
-                      className="w-full flex items-center justify-center gap-1.5 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-xs font-medium transition-colors">
-                      <FileCopyIcon style={{ fontSize: 13 }} /> Use Template
+                  ))}
+                </div>
+              )}
+              {templates.length > 4 && (
+                <button
+                  onClick={() => setShowAllTemplates(!showAllTemplates)}
+                  className="w-full mt-4 py-2 text-center text-sm text-indigo-600 hover:text-indigo-700 font-medium flex items-center justify-center gap-1 transition-colors"
+                >
+                  {showAllTemplates ? (
+                    <>Show Less <FaChevronUp className="text-xs" /></>
+                  ) : (
+                    <>Show All ({templates.length}) <FaChevronDown className="text-xs" /></>
+                  )}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* ── Drafts Tab ── */}
+          {activeTab === 'drafts' && (
+            <div className="p-6">
+              <p className="text-sm font-semibold text-gray-800 mb-4">Saved Drafts ({drafts.length})</p>
+              {drafts.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                    <FaSave className="text-gray-400 text-xl" />
+                  </div>
+                  <p className="text-gray-600 text-sm font-medium">No drafts yet</p>
+                  <p className="text-gray-400 text-xs mt-1 mb-4">Your saved drafts will appear here</p>
+                  <button onClick={() => setActiveTab('compose')} className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors">
+                    Compose Message
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {displayedDrafts.map(draft => (
+                    <div key={draft.id} className="flex items-start justify-between border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-800 truncate">{draft.subject || 'Untitled Draft'}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">To: {draft.recipient || 'No recipient'} · {new Date(draft.updatedAt).toLocaleDateString()}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 ml-3 flex-shrink-0">
+                        <button onClick={() => loadDraft(draft)} className="px-3 py-1.5 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-700 transition-colors">Edit</button>
+                        <button onClick={() => deleteDraft(draft.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                          <FaTrash className="text-xs" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {drafts.length > 4 && (
+                <button
+                  onClick={() => setShowAllDrafts(!showAllDrafts)}
+                  className="w-full mt-4 py-2 text-center text-sm text-indigo-600 hover:text-indigo-700 font-medium flex items-center justify-center gap-1 transition-colors"
+                >
+                  {showAllDrafts ? (
+                    <>Show Less <FaChevronUp className="text-xs" /></>
+                  ) : (
+                    <>Show All ({drafts.length}) <FaChevronDown className="text-xs" /></>
+                  )}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* ── AI Tab ── */}
+          {activeTab === 'ai' && (
+            <div className="p-6">
+              <p className="text-sm font-semibold text-gray-800 mb-4">AI Writing Assistant</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {[
+                  { icon: FaMagic, title: 'Smart Suggestions', sub: 'AI-powered improvements for clarity and tone.', btn: 'Generate Suggestions' },
+                  { icon: FaBrain, title: 'Tone Analysis', sub: 'Analyze if your message sounds professional.', btn: 'Analyze Tone' },
+                ].map(card => (
+                  <div key={card.title} className="border border-gray-200 rounded-lg p-4">
+                    <div className="w-9 h-9 bg-gray-100 rounded-lg flex items-center justify-center mb-3">
+                      <card.icon className="text-gray-600 text-lg" />
+                    </div>
+                    <p className="text-sm font-semibold text-gray-800 mb-1">{card.title}</p>
+                    <p className="text-xs text-gray-500 mb-4">{card.sub}</p>
+                    <button className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors">
+                      {card.btn}
                     </button>
                   </div>
                 ))}
@@ -801,66 +893,8 @@ const AdminComposeMessage = () => {
             </div>
           )}
 
-          {/* ── Drafts Tab ── */}
-          {activeTab === 'drafts' && (
-            <div className="p-5">
-              <p className="text-sm font-semibold text-gray-800 mb-4">Saved Drafts ({drafts.length})</p>
-              {drafts.length === 0 ? (
-                <div className="text-center py-12">
-                  <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-                    <DraftsIcon className="text-gray-400" style={{ fontSize: 22 }} />
-                  </div>
-                  <p className="text-gray-600 text-sm font-medium">No drafts yet</p>
-                  <p className="text-gray-400 text-xs mt-1 mb-4">Your saved drafts will appear here</p>
-                  <button onClick={() => setActiveTab('compose')} className="px-4 py-2 bg-gray-900 text-white text-sm rounded-lg hover:bg-gray-800 transition-colors">
-                    Compose Message
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {drafts.map(draft => (
-                    <div key={draft.id} className="flex items-start justify-between border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-gray-800 truncate">{draft.subject || 'Untitled Draft'}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">To: {draft.recipient || 'No recipient'} · {new Date(draft.updatedAt).toLocaleDateString()}</p>
-                      </div>
-                      <div className="flex items-center gap-1.5 ml-3 flex-shrink-0">
-                        <button onClick={() => loadDraft(draft)} className="px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg hover:bg-gray-800 transition-colors">Edit</button>
-                        <button onClick={() => deleteDraft(draft.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
-                          <DeleteIcon style={{ fontSize: 15 }} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── AI Tab ── */}
-          {activeTab === 'ai' && (
-            <div className="p-5">
-              <p className="text-sm font-semibold text-gray-800 mb-4">AI Writing Assistant</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {[
-                  { icon: AutoFixHighIcon, title: 'Smart Suggestions', sub: 'AI-powered improvements for clarity and tone.', btn: 'Generate Suggestions' },
-                  { icon: PsychologyIcon, title: 'Tone Analysis', sub: 'Analyze if your message sounds professional.', btn: 'Analyze Tone' },
-                ].map(card => (
-                  <div key={card.title} className="border border-gray-200 rounded-lg p-4">
-                    <div className="w-9 h-9 bg-gray-100 rounded-lg flex items-center justify-center mb-3">
-                      <card.icon className="text-gray-600" style={{ fontSize: 18 }} />
-                    </div>
-                    <p className="text-sm font-semibold text-gray-800 mb-1">{card.title}</p>
-                    <p className="text-xs text-gray-500 mb-4">{card.sub}</p>
-                    <button className="w-full py-2 bg-gray-900 hover:bg-gray-800 text-white text-xs font-medium rounded-lg transition-colors">{card.btn}</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* Footer */}
-          <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 text-center">
+          <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 text-center">
             <p className="text-xs text-gray-400">All messages are securely stored and encrypted.</p>
           </div>
         </div>
@@ -875,7 +909,7 @@ const AdminComposeMessage = () => {
             <p className="text-sm text-gray-500 mb-5">You can continue editing this message later.</p>
             <div className="flex gap-3">
               <button onClick={() => setSaveAsDraftConfirm(false)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">Cancel</button>
-              <button onClick={() => { saveDraft(); setSaveAsDraftConfirm(false); }} className="flex-1 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors">Save Draft</button>
+              <button onClick={() => { saveDraft(); setSaveAsDraftConfirm(false); }} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors">Save Draft</button>
             </div>
           </div>
         </div>

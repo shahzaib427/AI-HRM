@@ -1,526 +1,719 @@
 import React, { useState, useEffect } from 'react';
+import axiosInstance from '../../utils/axiosInstance';
+import {
+  DocumentTextIcon,
+  ChartBarIcon,
+  CalendarIcon,
+  ArrowPathIcon,
+  EyeIcon,
+  ArrowDownTrayIcon,
+  XMarkIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ShieldCheckIcon,
+  UserGroupIcon,
+  LockClosedIcon,
+  GlobeAltIcon,
+  TrashIcon,
+  PencilIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon
+} from '@heroicons/react/24/outline';
+
+// Light KPI Card
+const KpiCard = ({ title, value, icon: Icon, color, subtext }) => (
+  <div className="bg-white rounded-xl border border-gray-100 p-5 hover:shadow-md transition-all duration-300">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-2">{title}</p>
+        <p className="text-2xl font-bold text-gray-900">{value}</p>
+        {subtext && <p className="text-xs text-gray-400 mt-1">{subtext}</p>}
+      </div>
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${color}`}>
+        <Icon className="w-5 h-5 text-white" />
+      </div>
+    </div>
+  </div>
+);
 
 const AdminReports = () => {
+  const [reports, setReports] = useState([]);
   const [stats, setStats] = useState({
     totalReports: 0,
     generatedThisMonth: 0,
     automatedReports: 0,
-    scheduledReports: 0
+    scheduledReports: 0,
+    sharedReports: 0
   });
-  
-  const [reports, setReports] = useState([]);
-  const [darkMode, setDarkMode] = useState(false);
-  const [reportType, setReportType] = useState('All');
-  const [dateRange, setDateRange] = useState('last30days');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [reportType, setReportType] = useState('all');
+  const [visibilityFilter, setVisibilityFilter] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [showVisibilityModal, setShowVisibilityModal] = useState(false);
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [notification, setNotification] = useState(null);
+  const itemsPerPage = 8;
 
-  useEffect(() => {
-    const loadData = async () => {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      setStats({
-        totalReports: 156,
-        generatedThisMonth: 24,
-        automatedReports: 12,
-        scheduledReports: 8
-      });
-      
-      setReports([
-        { id: 1, name: 'Monthly Payroll Report', type: 'Payroll', date: '2024-03-15', size: '2.4 MB', status: 'Generated', downloads: 45 },
-        { id: 2, name: 'Q1 Performance Analytics', type: 'Performance', date: '2024-03-10', size: '3.1 MB', status: 'Generated', downloads: 32 },
-        { id: 3, name: 'Employee Attendance Summary', type: 'Attendance', date: '2024-03-08', size: '1.8 MB', status: 'Scheduled', downloads: 28 },
-        { id: 4, name: 'Recruitment Pipeline Analysis', type: 'Recruitment', date: '2024-03-05', size: '2.9 MB', status: 'Generated', downloads: 21 },
-        { id: 5, name: 'Training Completion Report', type: 'Training', date: '2024-03-01', size: '1.2 MB', status: 'Automated', downloads: 39 },
-        { id: 6, name: 'Budget Allocation Analysis', type: 'Finance', date: '2024-02-28', size: '4.2 MB', status: 'Generated', downloads: 18 },
-        { id: 7, name: 'System Usage Statistics', type: 'System', date: '2024-02-25', size: '1.5 MB', status: 'Automated', downloads: 27 },
-        { id: 8, name: 'Employee Satisfaction Survey', type: 'Survey', date: '2024-02-20', size: '2.1 MB', status: 'Generated', downloads: 56 }
-      ]);
-    };
-    
-    loadData();
-  }, []);
+  // New report form
+  const [newReport, setNewReport] = useState({
+    name: '',
+    type: 'Payroll',
+    dateRange: { start: '', end: '' },
+    format: 'PDF',
+    visibility: 'private'
+  });
 
-  const AnimatedCounter = ({ value, duration = 2000, suffix = '' }) => {
-    const [count, setCount] = useState(0);
-
-    useEffect(() => {
-      let start = 0;
-      const increment = value / (duration / 20);
-      const timer = setInterval(() => {
-        start += increment;
-        if (start >= value) {
-          setCount(value);
-          clearInterval(timer);
-        } else {
-          setCount(Math.floor(start));
-        }
-      }, 20);
-      
-      return () => clearInterval(timer);
-    }, [value, duration]);
-
-    return (
-      <span className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-        {count}{suffix}
-      </span>
-    );
-  };
-
-  const StatCard = ({ title, value, change, icon, color, suffix = '' }) => (
-    <div className={`rounded-2xl shadow-2xl border p-6 transition-all duration-300 hover:shadow-3xl transform hover:-translate-y-1 group ${
-      darkMode ? 'bg-gradient-to-br from-gray-800 to-gray-900 border-gray-700' : 'bg-white border-gray-100'
-    }`}>
-      <div className="flex items-center justify-between">
-        <div>
-          <p className={`text-sm font-medium mb-2 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>{title}</p>
-          <div className="flex items-baseline space-x-1">
-            <AnimatedCounter value={value} suffix={suffix} />
-          </div>
-          {change && (
-            <p className={`text-sm mt-2 flex items-center ${change.startsWith('+') ? 'text-green-500' : 'text-rose-500'}`}>
-              <span className={`mr-1 ${change.startsWith('+') ? 'animate-bounce' : ''}`}>
-                {change.startsWith('+') ? '↗' : '↘'}
-              </span>
-              {change}
-            </p>
-          )}
-        </div>
-        <div className={`p-3 rounded-xl ${color} text-white transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-6 shadow-lg`}>
-          <span className="text-2xl">{icon}</span>
-        </div>
-      </div>
-    </div>
-  );
-
-  const getReportTypeColor = (type) => {
-    const colors = {
-      Payroll: darkMode ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-100 text-blue-800',
-      Performance: darkMode ? 'bg-green-900/30 text-green-400' : 'bg-green-100 text-green-800',
-      Attendance: darkMode ? 'bg-yellow-900/30 text-yellow-400' : 'bg-yellow-100 text-yellow-800',
-      Recruitment: darkMode ? 'bg-purple-900/30 text-purple-400' : 'bg-purple-100 text-purple-800',
-      Training: darkMode ? 'bg-cyan-900/30 text-cyan-400' : 'bg-cyan-100 text-cyan-800',
-      Finance: darkMode ? 'bg-indigo-900/30 text-indigo-400' : 'bg-indigo-100 text-indigo-800',
-      System: darkMode ? 'bg-gray-900/30 text-gray-400' : 'bg-gray-100 text-gray-800',
-      Survey: darkMode ? 'bg-pink-900/30 text-pink-400' : 'bg-pink-100 text-pink-800'
-    };
-    return colors[type] || (darkMode ? 'bg-gray-900/30 text-gray-400' : 'bg-gray-100 text-gray-800');
-  };
-
-  const getStatusColor = (status) => {
-    switch(status) {
-      case 'Generated': return darkMode ? 'bg-green-900/30 text-green-400 border border-green-700' : 'bg-green-100 text-green-800';
-      case 'Scheduled': return darkMode ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-700' : 'bg-yellow-100 text-yellow-800';
-      case 'Automated': return darkMode ? 'bg-blue-900/30 text-blue-400 border border-blue-700' : 'bg-blue-100 text-blue-800';
-      default: return darkMode ? 'bg-gray-900/30 text-gray-400 border border-gray-700' : 'bg-gray-100 text-gray-800';
+  // Fetch all reports (Admin only)
+  const fetchReports = async () => {
+    try {
+      setLoading(true);
+      const response = await axiosInstance.get('/reports/all');
+      if (response.data.success) {
+        setReports(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching reports:', error);
+      setError('Failed to load reports');
+    } finally {
+      setLoading(false);
     }
   };
 
+  // Fetch stats
+  const fetchStats = async () => {
+    try {
+      const response = await axiosInstance.get('/reports/stats');
+      if (response.data.success) {
+        setStats(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchReports();
+    fetchStats();
+  }, []);
+
+  // Generate new report
+  const handleGenerateReport = async () => {
+    try {
+      setLoading(true);
+      const response = await axiosInstance.post('/reports/generate', newReport);
+      
+      if (response.data.success) {
+        showNotification('Report generated successfully!', 'success');
+        setShowGenerateModal(false);
+        setNewReport({ name: '', type: 'Payroll', dateRange: { start: '', end: '' }, format: 'PDF', visibility: 'private' });
+        fetchReports();
+        fetchStats();
+      }
+    } catch (error) {
+      showNotification(error.response?.data?.message || 'Failed to generate report', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Update report visibility
+  const handleUpdateVisibility = async () => {
+    if (!selectedReport) return;
+    
+    try {
+      const newVisibility = selectedReport.visibility === 'private' ? 'shared' : 'private';
+      const response = await axiosInstance.put(`/reports/${selectedReport._id}/visibility`, {
+        visibility: newVisibility
+      });
+      
+      if (response.data.success) {
+        showNotification(`Report visibility updated to ${newVisibility}`, 'success');
+        setShowVisibilityModal(false);
+        setSelectedReport(null);
+        fetchReports();
+      }
+    } catch (error) {
+      showNotification(error.response?.data?.message || 'Failed to update visibility', 'error');
+    }
+  };
+
+  // Delete report
+  const handleDeleteReport = async (reportId) => {
+    if (!window.confirm('Are you sure you want to delete this report?')) return;
+    
+    try {
+      const response = await axiosInstance.delete(`/reports/${reportId}`);
+      if (response.data.success) {
+        showNotification('Report deleted successfully', 'success');
+        fetchReports();
+        fetchStats();
+      }
+    } catch (error) {
+      showNotification(error.response?.data?.message || 'Failed to delete report', 'error');
+    }
+  };
+
+  // Download report
+  const handleDownload = async (report) => {
+    try {
+      await axiosInstance.put(`/reports/${report._id}/download`);
+      showNotification(`Downloading ${report.name}...`, 'success');
+      
+      const blob = new Blob([JSON.stringify(report.data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${report.name.replace(/\s/g, '_')}.${report.format.toLowerCase()}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      showNotification('Failed to download report', 'error');
+    }
+  };
+
+  const showNotification = (message, type) => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 5000);
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const getReportTypeColor = (type) => {
+    const colors = {
+      Payroll: 'bg-blue-100 text-blue-700',
+      Attendance: 'bg-green-100 text-green-700',
+      Leaves: 'bg-yellow-100 text-yellow-700',
+      Recruitment: 'bg-purple-100 text-purple-700',
+      Performance: 'bg-indigo-100 text-indigo-700',
+      Training: 'bg-cyan-100 text-cyan-700',
+      Finance: 'bg-pink-100 text-pink-700',
+      System: 'bg-gray-100 text-gray-700'
+    };
+    return colors[type] || 'bg-gray-100 text-gray-700';
+  };
+
+  // Filter reports
   const filteredReports = reports.filter(report => {
-    const matchesType = reportType === 'All' || report.type === reportType;
-    return matchesType;
+    const matchesType = reportType === 'all' || report.type === reportType;
+    const matchesVisibility = visibilityFilter === 'all' || report.visibility === visibilityFilter;
+    const matchesSearch = !searchTerm || report.name.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesType && matchesVisibility && matchesSearch;
   });
 
-  return (
-    <div className={`min-h-screen py-8 transition-all duration-500 ${
-      darkMode 
-        ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' 
-        : 'bg-gradient-to-br from-blue-50 via-white to-indigo-50/30'
-    }`}>
-      
-      {/* Animated Background */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className={`absolute -top-40 -right-40 w-80 h-80 rounded-full blur-3xl animate-pulse ${
-          darkMode ? 'bg-indigo-500/10' : 'bg-indigo-200/20'
-        }`}></div>
-        <div className={`absolute -bottom-40 -left-40 w-80 h-80 rounded-full blur-3xl animate-pulse delay-1000 ${
-          darkMode ? 'bg-rose-500/10' : 'bg-rose-200/20'
-        }`}></div>
+  // Pagination
+  const totalPages = Math.ceil(filteredReports.length / itemsPerPage);
+  const paginatedReports = filteredReports.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  if (loading && reports.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading reports...</p>
+        </div>
       </div>
+    );
+  }
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        {/* Header */}
-        <div className="mb-8 animate-fade-in-up">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className={`text-4xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                Reports & Analytics
-              </h1>
-              <p className={`mt-2 text-lg ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                Generate and analyze comprehensive HR reports
-              </p>
-            </div>
-            <div className="flex items-center space-x-4">
-              {/* Date Range Selector */}
-              <select 
-                value={dateRange}
-                onChange={(e) => setDateRange(e.target.value)}
-                className={`rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 ${
-                  darkMode 
-                    ? 'bg-gray-800 border-gray-700 text-white' 
-                    : 'bg-white border-gray-300 text-gray-900'
-                }`}
-              >
-                <option value="last7days">Last 7 Days</option>
-                <option value="last30days">Last 30 Days</option>
-                <option value="lastquarter">Last Quarter</option>
-                <option value="lastyear">Last Year</option>
-              </select>
-
-              {/* Theme Toggle */}
-              <button
-                onClick={() => setDarkMode(!darkMode)}
-                className={`p-3 rounded-xl transition-all duration-300 transform hover:scale-110 hover:rotate-12 ${
-                  darkMode 
-                    ? 'bg-gray-700 text-yellow-400 hover:bg-gray-600 shadow-lg' 
-                    : 'bg-white text-gray-600 hover:bg-gray-100 shadow-lg border border-gray-200'
-                }`}
-              >
-                <span className="text-xl">{darkMode ? '🌙' : '☀️'}</span>
-              </button>
-
-              <button 
-                onClick={() => setShowGenerateModal(true)}
-                className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2 shadow-lg"
-              >
-                <span className="text-lg">📄</span> Generate Report
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Notification */}
+      {notification && (
+        <div className="fixed top-4 right-4 z-50 animate-slide-in">
+          <div className={`rounded-lg shadow-lg p-4 ${
+            notification.type === 'success' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
+          }`}>
+            <div className="flex items-center gap-3">
+              {notification.type === 'success' ? (
+                <CheckCircleIcon className="w-5 h-5 text-green-600" />
+              ) : (
+                <ExclamationCircleIcon className="w-5 h-5 text-red-600" />
+              )}
+              <p className="text-sm text-gray-800">{notification.message}</p>
+              <button onClick={() => setNotification(null)} className="text-gray-400 hover:text-gray-600">
+                <XMarkIcon className="w-4 h-4" />
               </button>
             </div>
           </div>
         </div>
+      )}
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <StatCard
-            title="Total Reports"
-            value={stats.totalReports}
-            change="+12 this month"
-            icon="📊"
-            color="bg-gradient-to-br from-blue-500 to-cyan-500"
+      {/* Header */}
+      <div className="bg-white border-b border-gray-100 px-6 py-5">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Reports & Analytics</h1>
+              <p className="text-sm text-gray-500 mt-1">Manage and generate comprehensive HR reports</p>
+            </div>
+            <button
+              onClick={() => setShowGenerateModal(true)}
+              className="px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-sm"
+            >
+              <DocumentTextIcon className="w-4 h-4" />
+              Generate Report
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 py-6">
+        {/* Stats Cards - Light Theme */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5 mb-6">
+          <KpiCard 
+            title="Total Reports" 
+            value={stats.totalReports} 
+            icon={DocumentTextIcon}
+            color="bg-blue-500"
+            subtext="All time reports"
           />
-          <StatCard
-            title="Generated This Month"
-            value={stats.generatedThisMonth}
-            icon="📈"
-            color="bg-gradient-to-br from-green-500 to-emerald-500"
+          <KpiCard 
+            title="This Month" 
+            value={stats.generatedThisMonth} 
+            icon={CalendarIcon}
+            color="bg-green-500"
+            subtext="Generated in current month"
           />
-          <StatCard
-            title="Automated Reports"
-            value={stats.automatedReports}
-            icon="🤖"
-            color="bg-gradient-to-br from-purple-500 to-pink-500"
+          <KpiCard 
+            title="Automated" 
+            value={stats.automatedReports} 
+            icon={ArrowPathIcon}
+            color="bg-purple-500"
+            subtext="Auto-generated reports"
           />
-          <StatCard
-            title="Scheduled Reports"
-            value={stats.scheduledReports}
-            icon="⏰"
-            color="bg-gradient-to-br from-amber-500 to-orange-500"
+          <KpiCard 
+            title="Scheduled" 
+            value={stats.scheduledReports} 
+            icon={ChartBarIcon}
+            color="bg-amber-500"
+            subtext="Pending generation"
+          />
+          <KpiCard 
+            title="Shared Reports" 
+            value={stats.sharedReports} 
+            icon={UserGroupIcon}
+            color="bg-indigo-500"
+            subtext="Available to HR team"
           />
         </div>
 
-        {/* Report Types Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          {['Payroll', 'Performance', 'Attendance', 'Recruitment'].map((type) => (
-            <button
-              key={type}
-              onClick={() => setReportType(type)}
-              className={`p-4 rounded-xl border transition-all duration-300 transform hover:-translate-y-1 ${
-                reportType === type
-                  ? darkMode 
-                    ? 'bg-indigo-900/50 border-indigo-500' 
-                    : 'bg-indigo-50 border-indigo-300'
-                  : darkMode 
-                    ? 'bg-gray-800 border-gray-700 hover:bg-gray-700' 
-                    : 'bg-white border-gray-200 hover:bg-gray-50'
-              }`}
-            >
-              <div className="text-center">
-                <div className={`text-lg mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                  {type === 'Payroll' && '💰'}
-                  {type === 'Performance' && '📊'}
-                  {type === 'Attendance' && '👥'}
-                  {type === 'Recruitment' && '🎯'}
-                </div>
-                <div className={`text-sm font-medium ${reportType === type ? 'text-indigo-600 dark:text-indigo-400' : darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                  {type}
-                </div>
-              </div>
-            </button>
-          ))}
+        {/* Admin Controls Banner */}
+        <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 mb-6">
+          <div className="flex items-center gap-3">
+            <ShieldCheckIcon className="w-6 h-6 text-indigo-600" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-indigo-800">Admin Controls</p>
+              <p className="text-xs text-indigo-700">
+                You have full control over report visibility. Set reports as "Shared" to make them accessible to HR team members.
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Filters */}
-        <div className={`rounded-2xl shadow-2xl border p-6 mb-6 ${
-          darkMode ? 'bg-gradient-to-br from-gray-800 to-gray-900 border-gray-700' : 'bg-white border-gray-100'
-        }`}>
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="bg-white rounded-xl border border-gray-100 p-5 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <h3 className={`text-lg font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                Available Reports
-              </h3>
-              <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                Filter and manage your reports
-              </p>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Search</label>
+              <input
+                type="text"
+                placeholder="Search reports..."
+                className="w-full px-4 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
-            <div className="flex items-center space-x-4">
-              <select 
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Report Type</label>
+              <select
                 value={reportType}
                 onChange={(e) => setReportType(e.target.value)}
-                className={`rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 ${
-                  darkMode 
-                    ? 'bg-gray-800 border-gray-700 text-white' 
-                    : 'bg-white border-gray-300 text-gray-900'
-                }`}
+                className="w-full px-4 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
               >
-                <option value="All">All Report Types</option>
+                <option value="all">All Types</option>
                 <option value="Payroll">Payroll</option>
-                <option value="Performance">Performance</option>
                 <option value="Attendance">Attendance</option>
+                <option value="Leaves">Leaves</option>
                 <option value="Recruitment">Recruitment</option>
+                <option value="Performance">Performance</option>
                 <option value="Training">Training</option>
                 <option value="Finance">Finance</option>
                 <option value="System">System</option>
-                <option value="Survey">Survey</option>
               </select>
-              <button className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition flex items-center gap-2">
-                <span className="text-lg">🔍</span> Search
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Visibility</label>
+              <select
+                value={visibilityFilter}
+                onChange={(e) => setVisibilityFilter(e.target.value)}
+                className="w-full px-4 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="all">All</option>
+                <option value="private">Private (Admin only)</option>
+                <option value="shared">Shared (HR + Admin)</option>
+              </select>
+            </div>
+            <div className="flex items-end">
+              <button 
+                onClick={fetchReports}
+                className="w-full px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
+              >
+                <ArrowPathIcon className="w-4 h-4" />
+                Refresh
               </button>
             </div>
           </div>
         </div>
 
         {/* Reports Table */}
-        <div className={`rounded-2xl shadow-2xl border overflow-hidden mb-6 ${
-          darkMode ? 'bg-gradient-to-br from-gray-800 to-gray-900 border-gray-700' : 'bg-white border-gray-100'
-        }`}>
-          <div className="px-6 py-4 border-b">
-            <h2 className={`text-xl font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-              Recent Reports
-            </h2>
+        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+            <h2 className="text-base font-semibold text-gray-900">All Reports</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Manage report visibility and access</p>
           </div>
-          
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y">
-              <thead className={darkMode ? 'bg-gray-700/50' : 'bg-gray-50'}>
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Report Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Size</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Downloads</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className={`divide-y ${darkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
-                {filteredReports.map((report) => (
-                  <tr key={report.id} className={`hover:${darkMode ? 'bg-gray-700/30' : 'bg-gray-50'} transition-colors`}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className={`font-medium ${darkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                        {report.name}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getReportTypeColor(report.type)}`}>
-                        {report.type}
-                      </span>
-                    </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${darkMode ? 'text-gray-300' : 'text-gray-900'}`}>
-                      {report.date}
-                    </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${darkMode ? 'text-gray-300' : 'text-gray-900'}`}>
-                      {report.size}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(report.status)}`}>
-                        {report.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className={`text-sm font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                        {report.downloads}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button className={`p-2 rounded transition-colors mr-2 ${darkMode ? 'text-blue-400 hover:bg-blue-900/30' : 'text-blue-600 hover:bg-blue-50'}`}>
-                        👁️ View
-                      </button>
-                      <button className={`p-2 rounded transition-colors ${darkMode ? 'text-green-400 hover:bg-green-900/30' : 'text-green-600 hover:bg-green-50'}`}>
-                        📥 Download
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
 
-        {/* Analytics Dashboard */}
-        <div className={`rounded-2xl shadow-2xl border p-6 mb-6 ${
-          darkMode ? 'bg-gradient-to-br from-gray-800 to-gray-900 border-gray-700' : 'bg-white border-gray-100'
-        }`}>
-          <h3 className={`text-xl font-semibold mb-6 ${darkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-            Analytics Dashboard
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <h4 className={`text-lg font-medium mb-4 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                Report Usage Trends
-              </h4>
-              <div className="h-64 flex items-center justify-center rounded-lg border-2 border-dashed">
-                <div className="text-center">
-                  <span className="text-4xl mb-3">📈</span>
-                  <p className={`text-lg ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Analytics Chart Coming Soon</p>
-                </div>
-              </div>
+          {filteredReports.length === 0 ? (
+            <div className="text-center py-12">
+              <DocumentTextIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-600 font-medium">No reports found</p>
+              <p className="text-gray-400 text-sm mt-1">Generate a new report to get started</p>
             </div>
-            <div>
-              <h4 className={`text-lg font-medium mb-4 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                Popular Reports
-              </h4>
-              <div className="space-y-3">
-                {reports.slice(0, 4).map((report, index) => (
-                  <div 
-                    key={report.id}
-                    className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
-                      darkMode 
-                        ? 'border-gray-700 hover:bg-gray-800/50' 
-                        : 'border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <span className={`text-lg ${
-                        index === 0 ? 'text-amber-500' :
-                        index === 1 ? 'text-gray-400' :
-                        index === 2 ? 'text-amber-700' :
-                        'text-gray-500'
-                      }`}>
-                        {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '📊'}
-                      </span>
-                      <div>
-                        <div className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                          {report.name}
-                        </div>
-                        <div className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-600'}`}>
-                          {report.type} • {report.downloads} downloads
-                        </div>
-                      </div>
-                    </div>
-                    <button className={`p-2 rounded ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}>
-                      📥
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Report Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date Range</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Visibility</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Generated By</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Downloads</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {paginatedReports.map((report) => (
+                      <tr key={report._id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="font-medium text-gray-900">{report.name}</div>
+                          <div className="text-xs text-gray-400">
+                            {formatDate(report.createdAt)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2 py-1 rounded-md text-xs font-medium ${getReportTypeColor(report.type)}`}>
+                            {report.type}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {formatDate(report.dateRange?.start)} - {formatDate(report.dateRange?.end)}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            {report.visibility === 'shared' ? (
+                              <>
+                                <GlobeAltIcon className="w-4 h-4 text-green-600" />
+                                <span className="text-sm text-green-700">Shared</span>
+                              </>
+                            ) : (
+                              <>
+                                <LockClosedIcon className="w-4 h-4 text-red-600" />
+                                <span className="text-sm text-red-700">Private</span>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {report.generatedBy?.name || 'System'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{report.downloadCount || 0}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleDownload(report)}
+                              className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                              title="Download"
+                            >
+                              <ArrowDownTrayIcon className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedReport(report);
+                                setShowVisibilityModal(true);
+                              }}
+                              className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                              title="Change Visibility"
+                            >
+                              <PencilIcon className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteReport(report._id)}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete"
+                            >
+                              <TrashIcon className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="px-6 py-4 border-t border-gray-100 flex justify-between items-center">
+                  <p className="text-sm text-gray-500">
+                    Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredReports.length)} of {filteredReports.length} reports
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronLeftIcon className="w-4 h-4" />
+                    </button>
+                    {[...Array(Math.min(totalPages, 5))].map((_, i) => {
+                      let pageNum;
+                      if (totalPages <= 5) pageNum = i + 1;
+                      else if (currentPage <= 3) pageNum = i + 1;
+                      else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                      else pageNum = currentPage - 2 + i;
+                      
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`px-3 py-1 text-sm rounded-lg transition-colors ${
+                            currentPage === pageNum
+                              ? 'bg-indigo-600 text-white'
+                              : 'border border-gray-200 hover:bg-gray-50'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="px-3 py-1 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronRightIcon className="w-4 h-4" />
                     </button>
                   </div>
-                ))}
-              </div>
-            </div>
-          </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
 
       {/* Generate Report Modal */}
       {showGenerateModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className={`rounded-2xl shadow-3xl max-w-md w-full ${
-            darkMode ? 'bg-gradient-to-br from-gray-800 to-gray-900' : 'bg-white'
-          }`}>
-            <div className="p-6 border-b">
-              <div className="flex justify-between items-center">
-                <h3 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                  Generate New Report
-                </h3>
-                <button 
-                  onClick={() => setShowGenerateModal(false)}
-                  className={`p-2 rounded-lg ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="text-lg font-semibold text-gray-900">Generate New Report</h2>
+              <button onClick={() => setShowGenerateModal(false)} className="text-gray-400 hover:text-gray-600">
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Report Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g., Q1 Payroll Summary"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  value={newReport.name}
+                  onChange={(e) => setNewReport({...newReport, name: e.target.value})}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Report Type</label>
+                <select
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  value={newReport.type}
+                  onChange={(e) => setNewReport({...newReport, type: e.target.value})}
                 >
-                  ✕
-                </button>
+                  <option value="Payroll">Payroll Report</option>
+                  <option value="Attendance">Attendance Report</option>
+                  <option value="Leaves">Leave Report</option>
+                  <option value="Recruitment">Recruitment Report</option>
+                  <option value="Performance">Performance Report</option>
+                  <option value="Training">Training Report</option>
+                  <option value="Finance">Finance Report</option>
+                  <option value="System">System Report</option>
+                </select>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    value={newReport.dateRange.start}
+                    onChange={(e) => setNewReport({...newReport, dateRange: {...newReport.dateRange, start: e.target.value}})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                  <input
+                    type="date"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    value={newReport.dateRange.end}
+                    onChange={(e) => setNewReport({...newReport, dateRange: {...newReport.dateRange, end: e.target.value}})}
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Format</label>
+                <select
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  value={newReport.format}
+                  onChange={(e) => setNewReport({...newReport, format: e.target.value})}
+                >
+                  <option value="PDF">PDF</option>
+                  <option value="Excel">Excel</option>
+                  <option value="CSV">CSV</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Visibility</label>
+                <select
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  value={newReport.visibility}
+                  onChange={(e) => setNewReport({...newReport, visibility: e.target.value})}
+                >
+                  <option value="private">Private (Admin only)</option>
+                  <option value="shared">Shared (HR + Admin)</option>
+                </select>
               </div>
             </div>
+            
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => setShowGenerateModal(false)}
+                className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleGenerateReport}
+                disabled={!newReport.name || !newReport.dateRange.start || !newReport.dateRange.end}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+              >
+                Generate Report
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Visibility Modal */}
+      {showVisibilityModal && selectedReport && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="text-lg font-semibold text-gray-900">Change Report Visibility</h2>
+              <button onClick={() => { setShowVisibilityModal(false); setSelectedReport(null); }} className="text-gray-400 hover:text-gray-600">
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+            
             <div className="p-6">
-              <div className="space-y-4">
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                    Report Type
-                  </label>
-                  <select className={`w-full rounded-lg px-4 py-2 ${
-                    darkMode 
-                      ? 'bg-gray-700 border-gray-600 text-white' 
-                      : 'bg-white border-gray-300 text-gray-900'
-                  }`}>
-                    <option>Select Report Type</option>
-                    <option>Payroll Summary</option>
-                    <option>Attendance Report</option>
-                    <option>Performance Analytics</option>
-                    <option>Recruitment Pipeline</option>
-                    <option>Training Progress</option>
-                  </select>
-                </div>
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                    Date Range
-                  </label>
-                  <div className="flex space-x-2">
-                    <input 
-                      type="date" 
-                      className={`flex-1 rounded-lg px-4 py-2 ${
-                        darkMode 
-                          ? 'bg-gray-700 border-gray-600 text-white' 
-                          : 'bg-white border-gray-300 text-gray-900'
-                      }`}
-                      placeholder="Start Date"
-                    />
-                    <span className={`flex items-center ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>to</span>
-                    <input 
-                      type="date" 
-                      className={`flex-1 rounded-lg px-4 py-2 ${
-                        darkMode 
-                          ? 'bg-gray-700 border-gray-600 text-white' 
-                          : 'bg-white border-gray-300 text-gray-900'
-                      }`}
-                      placeholder="End Date"
-                    />
+              <p className="text-gray-700 mb-4">Report: <strong>{selectedReport.name}</strong></p>
+              
+              <div className="space-y-3">
+                <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="radio"
+                    name="visibility"
+                    value="private"
+                    checked={selectedReport.visibility === 'private'}
+                    onChange={() => setSelectedReport({...selectedReport, visibility: 'private'})}
+                    className="w-4 h-4 text-indigo-600"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <LockClosedIcon className="w-4 h-4 text-red-600" />
+                      <span className="font-medium">Private</span>
+                    </div>
+                    <p className="text-xs text-gray-500">Only Admin can view this report</p>
                   </div>
-                </div>
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                    Format
-                  </label>
-                  <div className="flex space-x-2">
-                    {['PDF', 'Excel', 'CSV'].map(format => (
-                      <button
-                        key={format}
-                        className={`flex-1 py-2 rounded-lg border ${
-                          darkMode 
-                            ? 'border-gray-600 hover:bg-gray-700' 
-                            : 'border-gray-300 hover:bg-gray-100'
-                        }`}
-                      >
-                        {format}
-                      </button>
-                    ))}
+                </label>
+                
+                <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="radio"
+                    name="visibility"
+                    value="shared"
+                    checked={selectedReport.visibility === 'shared'}
+                    onChange={() => setSelectedReport({...selectedReport, visibility: 'shared'})}
+                    className="w-4 h-4 text-indigo-600"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <GlobeAltIcon className="w-4 h-4 text-green-600" />
+                      <span className="font-medium">Shared</span>
+                    </div>
+                    <p className="text-xs text-gray-500">Both Admin and HR can view this report</p>
                   </div>
-                </div>
-                <button className="w-full py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold mt-4">
-                  Generate Report
-                </button>
+                </label>
               </div>
+            </div>
+            
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => { setShowVisibilityModal(false); setSelectedReport(null); }}
+                className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdateVisibility}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                Update Visibility
+              </button>
             </div>
           </div>
         </div>
       )}
 
       <style jsx>{`
-        @keyframes fadeInUp {
-          from { opacity: 0; transform: translateY(30px); }
-          to { opacity: 1; transform: translateY(0); }
+        @keyframes slideIn {
+          from { opacity: 0; transform: translateX(100px); }
+          to { opacity: 1; transform: translateX(0); }
         }
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
+        .animate-slide-in {
+          animation: slideIn 0.3s ease-out forwards;
         }
-        .animate-fade-in-up { animation: fadeInUp 0.8s ease-out forwards; }
-        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
-        .shadow-3xl { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
       `}</style>
     </div>
   );

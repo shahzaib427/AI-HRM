@@ -1,53 +1,46 @@
 // contexts/AuthContext.jsx
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 
 const AuthContext = createContext();
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used inside AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used inside AuthProvider');
   return context;
 };
 
 export const AuthProvider = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser]   = useState(null);
+  const [loading, setLoading]           = useState(true);
+  const navigateRef                     = useRef(null); // holds the navigate fn from React Router
 
-  const validateUser = (user) => {
-    return !!(user?._id || user?.id || user?.email);
-  };
+  // Call this once from AppLayout to wire up React Router navigate
+  const setNavigate = (fn) => { navigateRef.current = fn; };
+
+  const validateUser = (user) =>
+    !!(user?._id || user?.id || user?.email);
 
   const clearAuth = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('authToken');
     localStorage.removeItem('user');
-    localStorage.removeItem('user_id');   // ← added
+    localStorage.removeItem('user_id');
     setCurrentUser(null);
   };
 
-  const loadUser = () => {
-    try {
-      const token =
-        localStorage.getItem('token') ||
-        localStorage.getItem('authToken');
+  const loadUser = async () => {
+    // 2-second splash delay — shows LoadingScreen on first app load
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
+    try {
+      const token   = localStorage.getItem('token') || localStorage.getItem('authToken');
       const userStr = localStorage.getItem('user');
 
-      if (!token || !userStr) {
-        clearAuth();
-        return;
-      }
+      if (!token || !userStr) { clearAuth(); return; }
 
       const user = JSON.parse(userStr);
+      if (!validateUser(user)) { clearAuth(); return; }
 
-      if (!validateUser(user)) {
-        clearAuth();
-        return;
-      }
-
-      // Restore user_id if missing
       const userId = user._id || user.id;
       if (userId && !localStorage.getItem('user_id')) {
         localStorage.setItem('user_id', String(userId));
@@ -62,19 +55,15 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  useEffect(() => {
-    loadUser();
-  }, []);
+  useEffect(() => { loadUser(); }, []);
 
   const login = (user, token) => {
-    if (!user || !token) return false;
-    if (!validateUser(user)) return false;
+    if (!user || !token || !validateUser(user)) return false;
 
-    localStorage.setItem('token', token);
+    localStorage.setItem('token',     token);
     localStorage.setItem('authToken', token);
-    localStorage.setItem('user', JSON.stringify(user));
+    localStorage.setItem('user',      JSON.stringify(user));
 
-    // Save user_id separately for Wellness + other components
     const userId = user._id || user.id;
     if (userId) localStorage.setItem('user_id', String(userId));
 
@@ -82,27 +71,23 @@ export const AuthProvider = ({ children }) => {
     return true;
   };
 
+  // ✅ Logout: clear state + navigate WITHOUT page reload
   const logout = () => {
     clearAuth();
-    window.location.href = '/login';
+    if (navigateRef.current) {
+      navigateRef.current('/login', { replace: true });
+    }
   };
 
-  const getToken = () => {
-    return (
-      localStorage.getItem('token') ||
-      localStorage.getItem('authToken')
-    );
-  };
+  const getToken = () =>
+    localStorage.getItem('token') || localStorage.getItem('authToken');
 
   const updateUser = (newData) => {
     if (!currentUser) return false;
     const updated = { ...currentUser, ...newData };
     localStorage.setItem('user', JSON.stringify(updated));
-
-    // Keep user_id in sync if it changed
     const userId = updated._id || updated.id;
     if (userId) localStorage.setItem('user_id', String(userId));
-
     setCurrentUser(updated);
     return true;
   };
@@ -116,7 +101,8 @@ export const AuthProvider = ({ children }) => {
         loading,
         getToken,
         updateUser,
-        isAuthenticated: !!currentUser,  // removed "&& !loading" — prevents redirect flicker
+        setNavigate,
+        isAuthenticated: !!currentUser,
       }}
     >
       {children}

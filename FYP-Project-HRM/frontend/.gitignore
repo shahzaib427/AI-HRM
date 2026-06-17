@@ -1,3 +1,4 @@
+@"
 # Logs
 logs
 *.log
@@ -22,3 +23,24 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Databases
+*.db
+*.sqlite3
+
+# ChromaDB data
+chromadb_data*/
+flask_session/
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Upload folders
+backend/uploads/
+ai/instance/
+"@ | Set-Content "C:\Users\DELL\OneDrive\Desktop\fyp\.gitignore"

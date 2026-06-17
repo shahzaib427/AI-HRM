@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const fs = require('fs');
 const path = require('path');
+const NotificationService = require('../services/notificationService');
 
 exports.getMyProfile = async (req, res) => {
   try {
@@ -28,14 +29,16 @@ exports.getMyProfile = async (req, res) => {
   }
 };
 
+// UPDATE MY PROFILE - WITH NOTIFICATION
 exports.updateMyProfile = async (req, res) => {
   try {
     const userId = req.user.id;
     const updateData = req.body;
 
-    // Define allowed fields for employee to update
+    // Get old user data before update
+    const oldUser = await User.findById(userId).select('name department position phone email');
+
     const allowedFields = {
-      // Personal Information
       name: updateData.name,
       fatherName: updateData.fatherName,
       gender: updateData.gender,
@@ -45,40 +48,27 @@ exports.updateMyProfile = async (req, res) => {
       idCardNumber: updateData.idCardNumber,
       idCardIssueDate: updateData.idCardIssueDate,
       idCardExpiryDate: updateData.idCardExpiryDate,
-      
-      // Contact Information
       phone: updateData.phone,
       alternatePhone: updateData.alternatePhone,
-      
-      // Address Information
       presentAddress: updateData.presentAddress,
       permanentAddress: updateData.permanentAddress,
       city: updateData.city,
       state: updateData.state,
       country: updateData.country,
       postalCode: updateData.postalCode,
-      
-      // Emergency Contacts
       emergencyContacts: updateData.emergencyContacts || [],
-      
-      // Bank Information
       bankName: updateData.bankName,
       bankAccountNumber: updateData.bankAccountNumber,
       bankAccountTitle: updateData.bankAccountTitle,
       bankBranchCode: updateData.bankBranchCode,
       ibanNumber: updateData.ibanNumber,
-      
-      // Qualifications & Skills
       qualifications: updateData.qualifications,
       experiences: updateData.experiences || [],
       skills: updateData.skills || [],
       previousExperience: updateData.previousExperience,
-      
-      // Profile
       profilePicture: updateData.profilePicture
     };
 
-    // Remove undefined values
     Object.keys(allowedFields).forEach(key => {
       if (allowedFields[key] === undefined) {
         delete allowedFields[key];
@@ -95,9 +85,45 @@ exports.updateMyProfile = async (req, res) => {
       }
     ).select('-password -passwordHistory');
 
+    // ✅ SEND NOTIFICATION to HR/Admin about profile update
+    const io = req.app.get('io');
+    const notificationService = new NotificationService(io);
+    
+    const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } });
+    
+    // Check what changed
+    let changeDescription = '';
+    if (oldUser.phone !== updateData.phone) {
+      changeDescription = `Phone number changed from ${oldUser.phone} to ${updateData.phone}`;
+    } else if (oldUser.name !== updateData.name) {
+      changeDescription = `Name changed from ${oldUser.name} to ${updateData.name}`;
+    } else {
+      changeDescription = 'Profile information updated';
+    }
+    
+    for (const hr of hrUsers) {
+      await notificationService.createNotification({
+        recipient: {
+          userId: hr._id,
+          userModel: 'User',
+          role: hr.role
+        },
+        type: 'employee_updated',
+        title: 'Employee Profile Updated 📝',
+        message: `${updatedUser.name} has updated their profile. ${changeDescription}`,
+        data: {
+          userId: userId,
+          userName: updatedUser.name,
+          employeeId: updatedUser.employeeId,
+          changes: changeDescription
+        },
+        priority: 'medium'
+      });
+    }
+
     res.status(200).json({
       success: true,
-      message: 'Profile updated successfully',
+      message: 'Profile updated successfully with notification to HR',
       data: updatedUser
     });
   } catch (error) {
@@ -267,9 +293,34 @@ exports.createEmployee = async (req, res) => {
 
     await newEmployee.save();
     
+    // ✅ SEND NOTIFICATION to HR/Admin about new employee (without account creation)
+    const io = req.app.get('io');
+    const notificationService = new NotificationService(io);
+    
+    const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } });
+    for (const hr of hrUsers) {
+      await notificationService.createNotification({
+        recipient: {
+          userId: hr._id,
+          userModel: 'User',
+          role: hr.role
+        },
+        type: 'employee_onboarded',
+        title: 'New Employee Added 👤',
+        message: `${newEmployee.name} has been added as ${newEmployee.position || 'Employee'}`,
+        data: {
+          employeeId: newEmployee._id,
+          employeeName: newEmployee.name,
+          position: newEmployee.position,
+          department: newEmployee.department
+        },
+        priority: 'high'
+      });
+    }
+    
     res.status(201).json({
       success: true,
-      message: 'Employee created successfully',
+      message: 'Employee created successfully with notification',
       data: newEmployee
     });
   } catch (error) {
@@ -287,6 +338,8 @@ exports.createEmployee = async (req, res) => {
 
 exports.updateEmployee = async (req, res) => {
   try {
+    const oldEmployee = await User.findById(req.params.id).select('name department position');
+    
     const updatedEmployee = await User.findByIdAndUpdate(
       req.params.id,
       req.body,
@@ -304,9 +357,33 @@ exports.updateEmployee = async (req, res) => {
       });
     }
 
+    // ✅ SEND NOTIFICATION to HR/Admin about employee update
+    const io = req.app.get('io');
+    const notificationService = new NotificationService(io);
+    
+    const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } });
+    for (const hr of hrUsers) {
+      await notificationService.createNotification({
+        recipient: {
+          userId: hr._id,
+          userModel: 'User',
+          role: hr.role
+        },
+        type: 'employee_updated',
+        title: 'Employee Information Updated 📝',
+        message: `${updatedEmployee.name}'s profile has been updated by ${req.user.name}`,
+        data: {
+          employeeId: updatedEmployee._id,
+          employeeName: updatedEmployee.name,
+          updatedBy: req.user.name
+        },
+        priority: 'medium'
+      });
+    }
+
     res.status(200).json({
       success: true,
-      message: 'Employee updated successfully',
+      message: 'Employee updated successfully with notification',
       data: updatedEmployee
     });
   } catch (error) {
@@ -335,16 +412,42 @@ exports.deleteEmployee = async (req, res) => {
 
     await User.findByIdAndDelete(req.params.id);
     
+    // ✅ SEND NOTIFICATION to HR/Admin about employee deletion
+    const io = req.app.get('io');
+    const notificationService = new NotificationService(io);
+    
+    const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } });
+    for (const hr of hrUsers) {
+      await notificationService.createNotification({
+        recipient: {
+          userId: hr._id,
+          userModel: 'User',
+          role: hr.role
+        },
+        type: 'employee_deleted',
+        title: 'Employee Deleted ❌',
+        message: `${employee.name} (${employee.employeeId}) has been removed from the system by ${req.user.name}`,
+        data: {
+          employeeId: employee._id,
+          employeeName: employee.name,
+          employeeCode: employee.employeeId,
+          deletedBy: req.user.name
+        },
+        priority: 'high'
+      });
+    }
+    
     res.status(200).json({ 
       success: true, 
-      message: 'Employee deleted successfully' 
+      message: 'Employee deleted successfully with notification' 
     });
   } catch (error) {
     console.error('Error deleting employee:', error);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };
-// Add this to employeeController.js
+
+// CREATE EMPLOYEE WITH ACCOUNT - WITH NOTIFICATION
 exports.createEmployeeWithAccount = async (req, res) => {
   try {
     console.log('🚀 createEmployeeWithAccount called');
@@ -355,7 +458,6 @@ exports.createEmployeeWithAccount = async (req, res) => {
       employeeProfile 
     } = req.body;
 
-    // Validate required data
     if (!userAccount || !employeeProfile) {
       return res.status(400).json({
         success: false,
@@ -372,7 +474,6 @@ exports.createEmployeeWithAccount = async (req, res) => {
       });
     }
 
-    // Check if user already exists
     const existingUser = await User.findOne({ 
       $or: [{ email }, { username: username || email.split('@')[0] }] 
     });
@@ -384,11 +485,9 @@ exports.createEmployeeWithAccount = async (req, res) => {
       });
     }
 
-    // Generate employee ID
     const employeeId = await generateEmployeeId();
     console.log('✅ Generated employee ID:', employeeId);
 
-    // Create user account
     const user = await User.create({
       employeeId,
       name: userAccount.name,
@@ -397,7 +496,6 @@ exports.createEmployeeWithAccount = async (req, res) => {
       password: password,
       role: role || 'employee',
       
-      // Employee profile data
       fatherName: employeeProfile.fatherName,
       phone: employeeProfile.phone,
       alternatePhone: employeeProfile.alternatePhone,
@@ -409,7 +507,6 @@ exports.createEmployeeWithAccount = async (req, res) => {
       bloodGroup: employeeProfile.bloodGroup,
       maritalStatus: employeeProfile.maritalStatus,
       
-      // Employment info
       employeeType: employeeProfile.employeeType,
       department: employeeProfile.department,
       position: employeeProfile.position,
@@ -420,7 +517,6 @@ exports.createEmployeeWithAccount = async (req, res) => {
       isActive: employeeProfile.isActive !== false,
       hasSystemAccess: employeeProfile.hasSystemAccess !== false,
       
-      // Address
       presentAddress: employeeProfile.presentAddress,
       permanentAddress: employeeProfile.permanentAddress,
       city: employeeProfile.city,
@@ -428,10 +524,8 @@ exports.createEmployeeWithAccount = async (req, res) => {
       country: employeeProfile.country,
       postalCode: employeeProfile.postalCode,
       
-      // Emergency contacts
       emergencyContacts: employeeProfile.emergencyContacts || [],
       
-      // Salary
       salary: employeeProfile.salary || 0,
       fuelAllowance: employeeProfile.fuelAllowance || 0,
       medicalAllowance: employeeProfile.medicalAllowance || 0,
@@ -440,35 +534,57 @@ exports.createEmployeeWithAccount = async (req, res) => {
       currency: employeeProfile.currency || 'PKR',
       salaryFrequency: employeeProfile.salaryFrequency || 'monthly',
       
-      // Bank
       bankName: employeeProfile.bankName,
       bankAccountNumber: employeeProfile.bankAccountNumber,
       bankAccountTitle: employeeProfile.bankAccountTitle,
       bankBranchCode: employeeProfile.bankBranchCode,
       ibanNumber: employeeProfile.ibanNumber,
       
-      // Qualifications & Skills
       qualifications: employeeProfile.qualifications,
       previousExperience: employeeProfile.previousExperience || 0,
       experiences: employeeProfile.experiences || [],
       skills: employeeProfile.skills || [],
       
-      // Profile picture
       profilePicture: employeeProfile.profilePicture,
       
-      // System flags
       temporaryPassword: true,
       passwordChanged: false
     });
 
     console.log('✅ User created successfully:', user.employeeId);
 
+    // ✅ SEND NOTIFICATION to HR/Admin about new employee onboarded
+    const io = req.app.get('io');
+    const notificationService = new NotificationService(io);
+    
+    const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } });
+    for (const hr of hrUsers) {
+      await notificationService.createNotification({
+        recipient: {
+          userId: hr._id,
+          userModel: 'User',
+          role: hr.role
+        },
+        type: 'employee_onboarded',
+        title: 'New Employee Onboarded 🎉',
+        message: `${user.name} has joined as ${user.position || 'Employee'} in ${user.department || 'General'} department`,
+        data: {
+          employeeId: user._id,
+          employeeName: user.name,
+          employeeCode: user.employeeId,
+          position: user.position,
+          department: user.department,
+          email: user.email
+        },
+        priority: 'high'
+      });
+    }
+
     // Send welcome email
     let emailSent = false;
     try {
       const authController = require('./authController');
       
-      // Call the existing sendWelcomeEmail function
       emailSent = await new Promise((resolve) => {
         const mockRes = {
           status: () => ({
@@ -488,7 +604,6 @@ exports.createEmployeeWithAccount = async (req, res) => {
           }
         };
         
-        // Call the sendWelcomeEmail function
         authController.sendWelcomeEmail(mockReq, mockRes);
       });
       
@@ -496,14 +611,13 @@ exports.createEmployeeWithAccount = async (req, res) => {
       console.warn('⚠️ Email sending error:', emailError.message);
     }
 
-    // Prepare response without sensitive data
     const userResponse = user.toObject();
     delete userResponse.password;
     delete userResponse.passwordHistory;
 
     res.status(201).json({
       success: true,
-      message: 'Employee created successfully',
+      message: 'Employee created successfully with notifications sent',
       employeeId: user.employeeId,
       emailSent: emailSent,
       data: {
@@ -518,7 +632,6 @@ exports.createEmployeeWithAccount = async (req, res) => {
   } catch (error) {
     console.error('❌ createEmployeeWithAccount error:', error);
     
-    // Handle specific errors
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({
@@ -548,7 +661,6 @@ exports.createEmployeeWithAccount = async (req, res) => {
 // Helper function to generate employee ID
 async function generateEmployeeId() {
   try {
-    // Get the latest employee
     const latestEmployee = await User.findOne({ 
       employeeId: { $regex: /^EMP\d+$/ } 
     }).sort({ createdAt: -1 });
@@ -565,10 +677,11 @@ async function generateEmployeeId() {
     return `EMP${nextNumber.toString().padStart(3, '0')}`;
   } catch (error) {
     console.error('Error generating employee ID:', error);
-    // Fallback to timestamp-based ID
     return `EMP${Date.now().toString().slice(-6)}`;
   }
 }
+
+// UPLOAD PROFILE PICTURE - WITH NOTIFICATION
 exports.uploadProfilePicture = async (req, res) => {
   try {
     if (!req.file) {
@@ -578,10 +691,8 @@ exports.uploadProfilePicture = async (req, res) => {
       });
     }
 
-    // Get the file URL
     const profilePictureUrl = `/uploads/profile-pictures/${req.file.filename}`;
     
-    // Update user's profile picture in database
     const user = await User.findByIdAndUpdate(
       req.user.id,
       { profilePicture: profilePictureUrl },
@@ -595,9 +706,33 @@ exports.uploadProfilePicture = async (req, res) => {
       });
     }
 
+    // ✅ SEND NOTIFICATION to HR/Admin about profile picture update
+    const io = req.app.get('io');
+    const notificationService = new NotificationService(io);
+    
+    const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } });
+    for (const hr of hrUsers) {
+      await notificationService.createNotification({
+        recipient: {
+          userId: hr._id,
+          userModel: 'User',
+          role: hr.role
+        },
+        type: 'employee_updated',
+        title: 'Profile Picture Updated 🖼️',
+        message: `${user.name} has updated their profile picture`,
+        data: {
+          userId: user._id,
+          userName: user.name,
+          employeeId: user.employeeId
+        },
+        priority: 'low'
+      });
+    }
+
     res.status(200).json({
       success: true,
-      message: 'Profile picture uploaded successfully',
+      message: 'Profile picture uploaded successfully with notification',
       data: {
         profilePicture: profilePictureUrl
       }
@@ -623,7 +758,6 @@ exports.deleteProfilePicture = async (req, res) => {
       });
     }
 
-    // Delete the file if it exists
     if (user.profilePicture) {
       const filePath = path.join(__dirname, '..', user.profilePicture);
       if (fs.existsSync(filePath)) {
@@ -631,7 +765,6 @@ exports.deleteProfilePicture = async (req, res) => {
       }
     }
 
-    // Remove profile picture reference from database
     user.profilePicture = null;
     await user.save();
 
@@ -648,7 +781,6 @@ exports.deleteProfilePicture = async (req, res) => {
   }
 };
 
-// 👇 ADD THIS EXACTLY AT THE BOTTOM (CRITICAL!)
 module.exports = {
   getMyProfile: exports.getMyProfile,
   updateMyProfile: exports.updateMyProfile,
@@ -660,7 +792,6 @@ module.exports = {
   updateEmployee: exports.updateEmployee,
   deleteEmployee: exports.deleteEmployee,
   createEmployeeWithAccount: exports.createEmployeeWithAccount,
-   uploadProfilePicture: exports.uploadProfilePicture, 
+  uploadProfilePicture: exports.uploadProfilePicture, 
   deleteProfilePicture: exports.deleteProfilePicture 
-
 };

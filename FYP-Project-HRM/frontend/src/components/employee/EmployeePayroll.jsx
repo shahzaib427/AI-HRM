@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import { FaWallet, FaFileInvoiceDollar, FaCalendarAlt, FaDownload, FaEye, FaSync, FaExclamationTriangle, FaUser, FaBuilding, FaChartLine, FaMoneyBillWave, FaPercent, FaQuestionCircle } from 'react-icons/fa';
-
-// ─── Helpers (unchanged logic) ────────────────────────────────────────────────
+import { 
+  Download, FileSpreadsheet, CheckCircle, Clock,
+  Filter, RefreshCw, Eye,
+  ChevronLeft, ChevronRight, DollarSign,
+  X, AlertCircle, Home, TrendingUp, Award, CreditCard
+} from 'lucide-react';
 
 const formatCurrency = (amount) =>
   new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount || 0);
@@ -16,531 +19,587 @@ const formatDate = (dateString) => {
   } catch { return 'Invalid Date'; }
 };
 
-// ─── Reusable UI ──────────────────────────────────────────────────────────────
-
 const Badge = ({ children, variant = 'default' }) => {
-  const v = {
-    default: 'bg-slate-100 text-slate-600',
-    success: 'bg-emerald-50 text-emerald-700',
-    warning: 'bg-amber-50 text-amber-700',
-    info:    'bg-blue-50 text-blue-700',
-    danger:  'bg-red-50 text-red-700',
-    purple:  'bg-violet-50 text-violet-700',
+  const variants = {
+    default: 'bg-gray-100 text-gray-600',
+    success: 'bg-green-100 text-green-700',
+    warning: 'bg-yellow-100 text-yellow-700',
+    danger: 'bg-red-100 text-red-700',
+    info: 'bg-blue-100 text-blue-700',
+    purple: 'bg-purple-100 text-purple-700'
   };
-  return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${v[variant]}`}>{children}</span>;
+  return (
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${variants[variant]}`}>
+      {children}
+    </span>
+  );
 };
 
-const statusBadge = (status) => {
-  if (!status) return <Badge>Processing</Badge>;
-  const s = status.toLowerCase();
-  if (s === 'paid' || s === 'processed') return <Badge variant="success">{status}</Badge>;
-  if (s === 'pending') return <Badge variant="warning">{status}</Badge>;
-  return <Badge variant="info">{status}</Badge>;
+const KpiCard = ({ title, value, icon, color }) => {
+  const colors = {
+    blue: 'bg-blue-500', green: 'bg-green-500', yellow: 'bg-yellow-500',
+    purple: 'bg-purple-500', indigo: 'bg-indigo-500', emerald: 'bg-emerald-500'
+  };
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-gray-500 mb-1">{title}</p>
+          <p className="text-2xl font-bold text-gray-800">{value}</p>
+        </div>
+        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${colors[color]}`}>
+          {icon}
+        </div>
+      </div>
+    </div>
+  );
 };
 
-const KpiCard = ({ icon: Icon, label, value, sub, iconBg }) => (
-  <div className="bg-white rounded-2xl border border-slate-200 p-5">
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-xs text-slate-500 font-medium mb-2">{label}</p>
-        <p className="text-2xl font-semibold text-slate-900">{value}</p>
-        {sub && <p className="text-xs text-slate-400 mt-1">{sub}</p>}
-      </div>
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${iconBg}`}>
-        <Icon className="text-white text-sm" />
-      </div>
-    </div>
-  </div>
-);
-
-// ─── Auth Error Screen ────────────────────────────────────────────────────────
-
-const AuthErrorScreen = ({ error, onLogin, onClearRetry }) => (
-  <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm w-full max-w-sm p-8 text-center">
-      <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-5">
-        <FaExclamationTriangle className="w-7 h-7 text-red-500" />
-      </div>
-      <h2 className="text-lg font-semibold text-slate-900 mb-2">Authentication Required</h2>
-      <p className="text-slate-500 text-sm mb-6">{error || 'Please login to access payroll information.'}</p>
-      <div className="space-y-3">
-        <button onClick={onLogin} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors">
-          Go to Login
-        </button>
-        <button onClick={onClearRetry} className="w-full py-2.5 border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors">
-          Clear Cache & Retry
-        </button>
-      </div>
-      <p className="text-xs text-slate-400 mt-6">Need help? Contact hr@company.com</p>
-    </div>
-  </div>
-);
-
-// ─── Loading Screen ───────────────────────────────────────────────────────────
-
-const LoadingScreen = () => (
-  <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-    <div className="text-center">
-      <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mx-auto mb-4" />
-      <p className="text-slate-600 font-medium">Loading Payroll…</p>
-      <p className="text-slate-400 text-sm mt-1">Fetching your records</p>
-    </div>
-  </div>
-);
-
-// ─── Payslip Card ─────────────────────────────────────────────────────────────
-
-const PayslipCard = ({ payslip, onView, onDownload, onRequestCorrection }) => (
-  <div className="bg-white rounded-2xl border border-slate-200 p-5 hover:border-blue-300 hover:shadow-md transition-all group">
-    <div className="flex items-start justify-between mb-4">
-      <div>
-        <div className="flex items-center gap-2 mb-1">
-          <FaFileInvoiceDollar className="text-slate-400 text-xs" />
-          <p className="font-semibold text-slate-900">{payslip.month} {payslip.year}</p>
-        </div>
-        <p className="text-xs text-slate-400">Paid {formatDate(payslip.paymentDate || payslip.createdAt)}</p>
-      </div>
-      {statusBadge(payslip.status)}
-    </div>
-
-    <div className="space-y-2 mb-4 text-sm">
-      <div className="flex justify-between text-slate-500">
-        <span>Basic</span><span className="text-slate-800">{formatCurrency(payslip.basicSalary)}</span>
-      </div>
-      <div className="flex justify-between text-slate-500">
-        <span>Allowances</span><span className="text-emerald-600">+{formatCurrency(payslip.allowances)}</span>
-      </div>
-      {payslip.bonus > 0 && (
-        <div className="flex justify-between text-slate-500">
-          <span>Bonus</span><span className="text-emerald-600">+{formatCurrency(payslip.bonus)}</span>
-        </div>
-      )}
-      <div className="flex justify-between text-slate-500">
-        <span>Deductions</span><span className="text-red-500">−{formatCurrency(payslip.deductions)}</span>
-      </div>
-      <div className="h-px bg-slate-100 my-1" />
-      <div className="flex justify-between font-semibold text-slate-900">
-        <span>Net Salary</span><span className="text-emerald-600">{formatCurrency(payslip.netSalary)}</span>
-      </div>
-    </div>
-
-    <div className="flex gap-2">
-      <button onClick={() => onView(payslip._id)} className="flex-1 flex items-center justify-center gap-2 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors">
-        <FaEye className="text-xs" /> View
-      </button>
-      <button onClick={() => onDownload(payslip._id)} className="flex-1 flex items-center justify-center gap-2 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-medium rounded-lg transition-colors">
-        <FaDownload className="text-xs" /> Download
-      </button>
-    </div>
-
-    {payslip.status === 'Pending' && (
-      <button onClick={() => onRequestCorrection(payslip._id)} className="w-full mt-2.5 text-xs text-blue-600 hover:text-blue-700 hover:underline pt-2 border-t border-slate-100 transition-colors">
-        Request Correction
-      </button>
-    )}
-  </div>
-);
-
-// ─── Main Component ───────────────────────────────────────────────────────────
-
-const EmployeePayroll = () => {
-  const [dashboard, setDashboard]         = useState(null);
-  const [payrolls, setPayrolls]           = useState([]);
-  const [selectedYear, setSelectedYear]   = useState(new Date().getFullYear());
-  const [loading, setLoading]             = useState(true);
-  const [error, setError]                 = useState('');
-  const [authError, setAuthError]         = useState(false);
-  const [user, setUser]                   = useState(null);
-  const [years, setYears]                 = useState([]);
-  const [retryCount, setRetryCount]       = useState(0);
-
-  // ── same token logic ────────────────────────────────────────────────────────
-  const getToken = () =>
-    localStorage.getItem('token') ||
-    localStorage.getItem('authToken') ||
-    localStorage.getItem('accessToken') ||
-    localStorage.getItem('jwtToken') ||
-    localStorage.getItem('userToken') ||
-    sessionStorage.getItem('token') ||
-    sessionStorage.getItem('authToken');
-
-  const clearStoredTokens = () => {
-    ['token','authToken','accessToken','jwtToken','userToken'].forEach(k => localStorage.removeItem(k));
-    ['token','authToken'].forEach(k => sessionStorage.removeItem(k));
-  };
-
-  const decodeJWT = (token) => {
-    try {
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      return JSON.parse(window.atob(base64));
-    } catch { return null; }
-  };
+const PayslipModal = ({ isOpen, onClose, payroll, axiosInstance }) => {
+  const [payslipHtml, setPayslipHtml] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const token = getToken();
-    if (!token) { setAuthError(true); setError('Please login to access payroll information'); setLoading(false); return; }
+    if (isOpen && payroll) fetchPayslip();
+  }, [isOpen, payroll]);
+
+  const fetchPayslip = async () => {
+    if (!payroll) return;
+    setLoading(true); setError(null);
     try {
-      const payload = decodeJWT(token);
-      if (!payload) throw new Error('Invalid token');
-      if (payload.exp && payload.exp * 1000 < Date.now()) {
-        clearStoredTokens(); setAuthError(true);
-        setError('Your session has expired. Please login again.'); setLoading(false); return;
-      }
-      setUser({
-        _id: payload.id || payload._id || payload.userId,
-        employeeId: payload.employeeId || payload.empId || payload.employeeNumber,
-        name: payload.name || `${payload.firstName || ''} ${payload.lastName || ''}`.trim() || 'Employee',
-        firstName: payload.firstName, lastName: payload.lastName,
-        role: payload.role, department: payload.department,
-        position: payload.position, email: payload.email,
-      });
-    } catch {
-      clearStoredTokens(); setAuthError(true);
-      setError('Invalid authentication token.'); setLoading(false);
+      const response = await axiosInstance.get(`/employee/payroll/${payroll._id}/payslip`, { responseType: 'text' });
+      if (response.data) setPayslipHtml(response.data);
+      else setError('No data received');
+    } catch (err) {
+      setError(err.response?.data || 'Failed to load payslip');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleDownload = async () => {
+    if (!payroll) return;
+    try {
+      const response = await axiosInstance.get(`/employee/payroll/${payroll._id}/payslip/download`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'text/html' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `payslip_${payroll.month}_${payroll.year}.html`);
+      document.body.appendChild(link); link.click(); link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch { alert('Failed to download payslip'); }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50 rounded-t-xl">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Payslip — {payroll?.month} {payroll?.year}</h3>
+            <p className="text-sm text-gray-500">Employee Payroll Record</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={handleDownload} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors">
+              <Download className="w-4 h-4" /> Download
+            </button>
+            <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-lg transition-colors">
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto p-4 bg-gray-100">
+          {loading ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                <p className="text-gray-600">Loading payslip...</p>
+              </div>
+            </div>
+          ) : error ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="text-center text-red-500">
+                <AlertCircle className="w-12 h-12 mx-auto mb-3" />
+                <p>{typeof error === 'string' ? error : 'Failed to load payslip'}</p>
+                <button onClick={fetchPayslip} className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg">Retry</button>
+              </div>
+            </div>
+          ) : payslipHtml ? (
+            <iframe
+              srcDoc={payslipHtml}
+              title="Payslip"
+              className="w-full h-[calc(90vh-120px)] border-0 bg-white rounded-lg"
+              sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals"
+            />
+          ) : (
+            <div className="flex items-center justify-center h-64 text-gray-500">No payslip data available</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Axios instance setup
+const getToken = () =>
+  localStorage.getItem('token') ||
+  localStorage.getItem('authToken') ||
+  localStorage.getItem('accessToken') ||
+  sessionStorage.getItem('token');
+
+const createAxiosInstance = () => {
+  const token = getToken();
+  const instance = axios.create({
+    baseURL: 'http://localhost:5000/api',
+    headers: { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }) },
+    withCredentials: true
+  });
+  
+  instance.interceptors.request.use((config) => {
+    const t = getToken();
+    if (t) config.headers.Authorization = `Bearer ${t}`;
+    return config;
+  });
+  
+  instance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
+      return Promise.reject(error);
+    }
+  );
+  return instance;
+};
+
+const axiosInstance = createAxiosInstance();
+
+const EmployeePayroll = () => {
+  const [payrolls, setPayrolls] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState({ year: new Date().getFullYear().toString(), status: 'all', page: 1 });
+  const [pagination, setPagination] = useState({ total: 0, totalPages: 1, currentPage: 1 });
+  const [years, setYears] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedPayroll, setSelectedPayroll] = useState(null);
+  const [error, setError] = useState('');
+  const [summary, setSummary] = useState({ totalNetSalary: 0, count: 0, paidCount: 0 });
+
+  const getCurrentUser = useCallback(() => {
+    try {
+      const token = getToken();
+      if (token) {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        setCurrentUser(payload);
+        return payload;
+      }
+    } catch (e) {
+      console.error('Error parsing token:', e);
+    }
+    return null;
   }, []);
 
-  const createAxiosInstance = () => {
-    const token = getToken();
-    const instance = axios.create({
-      baseURL: 'http://localhost:5000/api',
-      headers: { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }) },
-      timeout: 15000, withCredentials: true,
-    });
-    instance.interceptors.request.use(cfg => {
-      if (cfg.method === 'get') cfg.params = { ...cfg.params, _t: Date.now() };
-      return cfg;
-    }, err => Promise.reject(err));
-    instance.interceptors.response.use(res => res, async err => {
-      if (err.response?.status === 401 && !err.config._retry) {
-        err.config._retry = true;
-        clearStoredTokens(); setAuthError(true);
-        setError('Your session has expired. Please login again.');
-        setTimeout(() => { window.location.href = '/login'; }, 2000);
+  const calculateTotalSalary = (payroll) => {
+    if (!payroll) return 0;
+    return (payroll.basicSalary || 0) + (payroll.allowances || 0);
+  };
+
+  const fetchPayrolls = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (filters.year && filters.year !== 'all') params.append('year', filters.year);
+      if (filters.status && filters.status !== 'all') params.append('status', filters.status);
+      params.append('page', filters.page || 1);
+      params.append('limit', 10);
+
+      const response = await axiosInstance.get(`/employee/payroll?${params.toString()}`);
+      
+      if (response.data?.success) {
+        const data = response.data.data || [];
+        setPayrolls(data);
+        setPagination({
+          total: response.data.total || data.length,
+          totalPages: response.data.totalPages || 1,
+          currentPage: response.data.currentPage || 1
+        });
+
+        const totalNet = data.reduce((sum, p) => sum + calculateTotalSalary(p), 0);
+        const paid = data.filter(p => p.status === 'Processed' || p.status === 'Paid').length;
+        setSummary({
+          totalNetSalary: totalNet,
+          count: data.length,
+          paidCount: paid
+        });
       }
-      return Promise.reject(err);
-    });
-    return instance;
-  };
-
-  useEffect(() => { if (user && !authError) fetchAllData(); }, [user, selectedYear, authError, retryCount]);
-
-  const fetchAllData = async () => {
-    setLoading(true); setError('');
-    await Promise.allSettled([fetchDashboard(), fetchPayrolls(), fetchPayrollYears()]);
-    setLoading(false);
-  };
-
-  const fetchDashboard = async () => {
-    try {
-      const res = await createAxiosInstance().get('/employee/payroll/dashboard');
-      if (res.data.success) setDashboard(res.data.data);
-      else setError(res.data.message || 'Failed to load dashboard');
-    } catch (err) {
-      if (err.response?.status !== 401) setError('Failed to load dashboard data.');
+    } catch (error) {
+      console.error('Error fetching payrolls:', error);
+      setPayrolls([]);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [filters.year, filters.status, filters.page]);
 
-  const fetchPayrolls = async () => {
+  const fetchYears = useCallback(async () => {
     try {
-      const res = await createAxiosInstance().get(`/employee/payroll?year=${selectedYear}`);
-      if (res.data.success) setPayrolls(res.data.data || []);
-      else setPayrolls([]);
-    } catch { setPayrolls([]); }
-  };
-
-  const fetchPayrollYears = async () => {
-    try {
-      const res = await createAxiosInstance().get('/employee/payroll/years');
-      if (res.data.success) setYears(res.data.data || []);
-      else {
+      const response = await axiosInstance.get('/employee/payroll/years');
+      if (response.data?.success) {
+        setYears(response.data.data || []);
+      } else {
         const cur = new Date().getFullYear();
-        setYears([cur, cur - 1, cur - 2, cur - 3, cur - 4]);
+        setYears([cur, cur - 1, cur - 2, cur - 3]);
       }
     } catch {
       const cur = new Date().getFullYear();
       setYears([cur, cur - 1, cur - 2]);
     }
+  }, []);
+
+  const handleViewPayslip = (payroll) => {
+    setSelectedPayroll(payroll);
+    setModalOpen(true);
   };
 
-  const goToLogin = () => { clearStoredTokens(); window.location.href = '/login'; };
-
-  const viewPayslip = (id) => {
-    const token = getToken();
-    if (!token) { goToLogin(); return; }
-    window.open(`http://localhost:5000/api/employee/payroll/payslip/${id}`, '_blank', 'noopener,noreferrer');
-  };
-
-  const downloadPayslip = (id) => {
-    const token = getToken();
-    if (!token) { goToLogin(); return; }
-    const link = document.createElement('a');
-    link.href = `http://localhost:5000/api/employee/payroll/payslip/${id}/download`;
-    link.setAttribute('download', `payslip-${id}.pdf`);
-    document.body.appendChild(link); link.click(); document.body.removeChild(link);
-  };
-
-  const requestCorrection = async (id) => {
-    const reason = prompt('Enter reason for correction request:');
-    if (!reason?.trim()) { if (reason !== null) alert('Please provide a reason.'); return; }
+  const handleDownloadPayslip = async (payroll) => {
     try {
-      const res = await createAxiosInstance().post(`/employee/payroll/${id}/request-correction`, {
-        issue: 'Discrepancy', details: reason.trim(), date: new Date().toISOString(),
-      });
-      if (res.data.success) { alert('Correction request submitted!'); fetchAllData(); }
-      else alert(res.data.message || 'Failed to submit request');
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to submit request.');
+      const response = await axiosInstance.get(`/employee/payroll/${payroll._id}/payslip/download`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'text/html' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `payslip_${payroll.month}_${payroll.year}.html`);
+      document.body.appendChild(link); link.click(); link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch { 
+      alert('Failed to download payslip'); 
     }
   };
 
-  const handleRetry = () => { setRetryCount(p => p + 1); setError(''); setLoading(true); };
+  const handleFilterChange = (key, value) => setFilters({ ...filters, [key]: value, page: 1 });
 
-  // ── Render guards ────────────────────────────────────────────────────────────
-  if (authError) return <AuthErrorScreen error={error} onLogin={goToLogin} onClearRetry={() => { clearStoredTokens(); window.location.reload(); }} />;
-  if (loading && !dashboard) return <LoadingScreen />;
+  const handleResetFilters = () => setFilters({ year: new Date().getFullYear().toString(), status: 'all', page: 1 });
 
-  const cp = dashboard?.currentPayroll;
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= pagination.totalPages)
+      setFilters({ ...filters, page: newPage });
+  };
+
+  const StatusBadge = ({ status }) => {
+    if (status === 'Paid' || status === 'paid' || status === 'Processed') 
+      return <Badge variant="success">Paid</Badge>;
+    if (status === 'Pending' || status === 'pending') 
+      return <Badge variant="warning">Pending</Badge>;
+    return <Badge variant="default">{status || 'Pending'}</Badge>;
+  };
+
+  useEffect(() => { 
+    getCurrentUser(); 
+  }, [getCurrentUser]);
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchPayrolls();
+      fetchYears();
+    }
+  }, [currentUser, fetchPayrolls, fetchYears]);
+
+  const currentPayroll = payrolls.find(p => {
+    const currentMonth = new Date().toLocaleString('default', { month: 'long' });
+    const currentYear = new Date().getFullYear().toString();
+    return p.month === currentMonth && p.year?.toString() === currentYear;
+  });
+
+  if (loading && payrolls.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading payroll data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-gray-50">
+      <PayslipModal
+        isOpen={modalOpen}
+        onClose={() => { setModalOpen(false); setSelectedPayroll(null); }}
+        payroll={selectedPayroll}
+        axiosInstance={axiosInstance}
+      />
 
-      {/* ── Page Header ── */}
-      <div className="bg-white border-b border-slate-200 px-6 py-5">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex items-center justify-between gap-4">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-5 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
-                <FaWallet className="text-blue-600 text-sm" />
-                Payroll Dashboard
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <CreditCard className="text-indigo-600" /> My Payroll
               </h1>
-              <div className="flex flex-wrap items-center gap-2 mt-2">
-                <span className="text-sm text-slate-500">
-                  Welcome, <span className="font-medium text-slate-700">{user?.name || 'Employee'}</span>
-                </span>
-                {user?.employeeId && <Badge variant="info">ID: {user.employeeId}</Badge>}
-                {user?.department && <Badge variant="purple">{user.department}</Badge>}
-                {user?.position && <Badge>{user.position}</Badge>}
-              </div>
+              <p className="text-sm text-gray-500 mt-1">
+                Welcome back, {currentUser?.name || currentUser?.firstName || 'Employee'}
+              </p>
             </div>
-            <button onClick={handleRetry} disabled={loading} className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50">
-              <FaSync className={`text-xs ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
+            <div className="flex items-center gap-2 text-gray-400">
+              <CreditCard className="w-5 h-5" />
+              <span className="text-sm">Payroll Portal</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
-
-        {/* ── Error Banner ── */}
-        {error && !authError && (
+      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+        {/* Error Message */}
+        {error && (
           <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm">
-            <FaExclamationTriangle className="text-red-500 flex-shrink-0" />
+            <AlertCircle className="text-red-500 flex-shrink-0 w-5 h-5" />
             <span className="text-red-700 flex-1">{error}</span>
             <button onClick={() => setError('')} className="text-red-400 hover:text-red-600">✕</button>
           </div>
         )}
 
-        {/* ── Current Month Section (Simple neutral design) ── */}
-        {cp && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6">
-            <div className="flex items-start justify-between mb-6">
-              <div>
-                <p className="text-slate-400 text-xs uppercase tracking-wide font-medium mb-1">Current Month</p>
-                <p className="text-3xl font-semibold text-slate-900 tracking-tight">{formatCurrency(cp.netSalary)}</p>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="text-sm text-slate-500">{cp.month} {cp.year}</span>
-                  <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                  <span className="text-sm text-slate-500">Pay Period</span>
-                </div>
-              </div>
-              <div>
-                {statusBadge(cp.status)}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-              <div>
-                <p className="text-xs text-slate-400 mb-1">Net Salary</p>
-                <p className="text-sm font-semibold text-slate-900">{formatCurrency(cp.netSalary)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 mb-1">Basic</p>
-                <p className="text-sm font-medium text-slate-700">{formatCurrency(cp.basicSalary)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 mb-1">Allowances</p>
-                <p className="text-sm font-medium text-emerald-600">+{formatCurrency(cp.allowances)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 mb-1">Bonus</p>
-                <p className="text-sm font-medium text-amber-600">+{formatCurrency(cp.bonus)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 mb-1">Deductions</p>
-                <p className="text-sm font-medium text-red-500">-{formatCurrency(cp.deductions)}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Summary Cards ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <KpiCard icon={FaMoneyBillWave} label="Total Earned (YTD)" value={formatCurrency(dashboard?.ytdSummary?.totalNetSalary)} sub="Year to date" iconBg="bg-emerald-500" />
-          <KpiCard icon={FaCalendarAlt} label="Months Paid" value={dashboard?.ytdSummary?.count || 0} sub={`out of ${selectedYear}`} iconBg="bg-blue-500" />
-          <KpiCard icon={FaChartLine} label="Average Monthly" value={formatCurrency((dashboard?.ytdSummary?.totalNetSalary || 0) / Math.max(1, dashboard?.ytdSummary?.count || 1))} sub="Net salary" iconBg="bg-violet-500" />
+        {/* KPI Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+          <KpiCard 
+            title="Current Month Salary" 
+            value={formatCurrency(currentPayroll ? calculateTotalSalary(currentPayroll) : 0)} 
+            icon={<DollarSign className="w-6 h-6 text-white" />} 
+            color="blue" 
+          />
+          <KpiCard 
+            title="Total Earned (YTD)" 
+            value={formatCurrency(summary.totalNetSalary)} 
+            icon={<TrendingUp className="w-6 h-6 text-white" />} 
+            color="green" 
+          />
+          <KpiCard 
+            title="Total Payslips" 
+            value={pagination.total} 
+            icon={<FileSpreadsheet className="w-6 h-6 text-white" />} 
+            color="purple" 
+          />
+          <KpiCard 
+            title="Current Status" 
+            value={currentPayroll?.status || 'N/A'} 
+            icon={<CheckCircle className="w-6 h-6 text-white" />} 
+            color={currentPayroll?.status === 'Processed' ? 'emerald' : 'yellow'} 
+          />
         </div>
 
-        {/* ── Payslip History ── */}
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
-                <FaFileInvoiceDollar className="text-blue-600 text-sm" />
-              </div>
+        {/* Payroll History Table */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+            <div className="flex items-center justify-between flex-wrap gap-3">
               <div>
-                <p className="text-sm font-semibold text-slate-800">Payslip History</p>
-                <p className="text-xs text-slate-400">{payrolls.length} records for {selectedYear}</p>
+                <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                  <FileSpreadsheet className="w-4 h-4 text-indigo-500" /> My Payroll History
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">View and download all your payslips</p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => { fetchPayrolls(); }} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors">
+                  <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                </button>
               </div>
             </div>
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(Number(e.target.value))}
-              className="text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-slate-700"
-            >
-              {years.map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
           </div>
 
-          {payrolls.length === 0 ? (
-            <div className="py-16 text-center">
-              <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <FaFileInvoiceDollar className="text-slate-400 text-lg" />
-              </div>
-              <p className="text-slate-700 font-medium">No payslips for {selectedYear}</p>
-              <p className="text-slate-400 text-sm mt-1">Try selecting a different year</p>
-              {years.length > 1 && selectedYear > Math.min(...years) && (
-                <button onClick={() => setSelectedYear(selectedYear - 1)} className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 transition-colors">
-                  View {selectedYear - 1} Records
-                </button>
-              )}
+          {/* Filters */}
+          <div className="p-4 border-b border-gray-100">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <select 
+                value={filters.year} 
+                onChange={(e) => handleFilterChange('year', e.target.value)} 
+                className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="all">All Years</option>
+                {years.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+              <select 
+                value={filters.status} 
+                onChange={(e) => handleFilterChange('status', e.target.value)} 
+                className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="all">All Status</option>
+                <option value="Pending">Pending</option>
+                <option value="Processed">Processed</option>
+                <option value="Paid">Paid</option>
+              </select>
+              <button onClick={handleResetFilters} className="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center gap-2">
+                <Filter className="w-3 h-3" /> Reset Filters
+              </button>
             </div>
-          ) : (
-            <div className="p-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {payrolls.map(payslip => (
-                  <PayslipCard
-                    key={payslip._id}
-                    payslip={payslip}
-                    onView={viewPayslip}
-                    onDownload={downloadPayslip}
-                    onRequestCorrection={requestCorrection}
-                  />
-                ))}
+          </div>
+
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Period</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Basic Salary</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Allowances</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Total</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Payment Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {payrolls.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-12 text-center text-gray-400">
+                      <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                      <p>No payroll records found</p>
+                    </td>
+                  </tr>
+                ) : (
+                  payrolls.map((payroll) => {
+                    const totalSalary = calculateTotalSalary(payroll);
+                    return (
+                      <tr key={payroll._id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-sm text-gray-800">{payroll.month || 'N/A'}</div>
+                          <div className="text-xs text-gray-400">{payroll.year || 'N/A'}</div>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="text-sm text-gray-800">{formatCurrency(payroll.basicSalary || 0)}</div>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="text-sm text-emerald-600">+{formatCurrency(payroll.allowances || 0)}</div>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="text-sm font-bold text-indigo-600">{formatCurrency(totalSalary)}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <StatusBadge status={payroll.status} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="text-sm text-gray-600">{formatDate(payroll.paymentDate)}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            <button onClick={() => handleViewPayslip(payroll)} className="flex items-center gap-1 px-2 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-medium rounded-lg transition-colors">
+                              <Eye className="w-3 h-3" /> View
+                            </button>
+                            <button onClick={() => handleDownloadPayslip(payroll)} className="flex items-center gap-1 px-2 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-medium rounded-lg transition-colors">
+                              <Download className="w-3 h-3" /> PDF
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {pagination.totalPages > 1 && (
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50">
+              <div className="flex justify-between items-center">
+                <div className="text-sm text-gray-500">
+                  Showing {((pagination.currentPage - 1) * 10) + 1} to {Math.min(pagination.currentPage * 10, pagination.total)} of {pagination.total} records
+                </div>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => handlePageChange(pagination.currentPage - 1)} 
+                    disabled={pagination.currentPage === 1} 
+                    className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronLeft className="w-4 h-4 inline" /> Previous
+                  </button>
+                  <span className="px-3 py-1.5 text-sm text-gray-600">Page {pagination.currentPage} of {pagination.totalPages}</span>
+                  <button 
+                    onClick={() => handlePageChange(pagination.currentPage + 1)} 
+                    disabled={pagination.currentPage === pagination.totalPages} 
+                    className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next <ChevronRight className="w-4 h-4 inline" />
+                  </button>
+                </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* ── Recent Payments & Quick Actions ── */}
+        {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-          {/* Recent payments */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center">
-                <FaMoneyBillWave className="text-emerald-600 text-sm" />
+              <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                <Award className="w-5 h-5 text-emerald-600" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-slate-800">Recent Payments</h3>
-                <p className="text-xs text-slate-400">Last 4 transactions</p>
+                <h3 className="text-sm font-semibold text-gray-800">Year-to-Date Summary</h3>
+                <p className="text-xs text-gray-400">Total earnings for {filters.year !== 'all' ? filters.year : 'current year'}</p>
               </div>
             </div>
-            {(!dashboard?.recentPayrolls || dashboard.recentPayrolls.length === 0) ? (
-              <p className="text-slate-400 text-sm text-center py-6">No recent payments</p>
-            ) : (
-              <div className="space-y-3">
-                {dashboard.recentPayrolls.slice(0, 4).map((p, i) => (
-                  <div key={p._id || i} className="flex items-center justify-between py-3 border-b border-slate-50 last:border-0">
-                    <div>
-                      <p className="text-sm font-medium text-slate-800">{p.month} {p.year}</p>
-                      <p className="text-xs text-slate-400">{formatDate(p.paymentDate)}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-emerald-600">{formatCurrency(p.netSalary)}</p>
-                      <div className="mt-1">{statusBadge(p.status)}</div>
-                    </div>
-                  </div>
-                ))}
+            <div className="space-y-3">
+              <div className="flex justify-between py-2 border-b border-gray-100">
+                <span className="text-sm text-gray-500">Total Net Salary</span>
+                <span className="text-lg font-bold text-indigo-600">{formatCurrency(summary.totalNetSalary)}</span>
               </div>
-            )}
+              <div className="flex justify-between py-2 border-b border-gray-100">
+                <span className="text-sm text-gray-500">Total Records</span>
+                <span className="text-sm font-medium text-gray-800">{summary.count}</span>
+              </div>
+              <div className="flex justify-between py-2">
+                <span className="text-sm text-gray-500">Paid Records</span>
+                <span className="text-sm font-medium text-emerald-600">{summary.paidCount}</span>
+              </div>
+            </div>
           </div>
 
-          {/* Quick actions */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
-                <FaQuestionCircle className="text-blue-600 text-sm" />
+              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-slate-800">Quick Actions</h3>
-                <p className="text-xs text-slate-400">Manage your payroll</p>
+                <h3 className="text-sm font-semibold text-gray-800">Quick Stats</h3>
+                <p className="text-xs text-gray-400">Payroll insights</p>
               </div>
             </div>
-            <div className="space-y-2">
-              <button onClick={handleRetry} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 border border-slate-100 transition-colors text-left">
-                <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <FaSync className="text-blue-600 text-xs" />
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-500">Total Payslips</span>
+                <span className="text-xl font-bold text-gray-800">{pagination.total}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-500">Pending Records</span>
+                <span className="text-xl font-bold text-amber-600">
+                  {payrolls.filter(p => p.status === 'Pending').length}
+                </span>
+              </div>
+              <div className="mt-4 pt-3 border-t border-gray-100">
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+                  <Clock className="w-3 h-3" />
+                  Last updated: {new Date().toLocaleString()}
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-800">Refresh Data</p>
-                  <p className="text-xs text-slate-400">Sync latest records</p>
-                </div>
-              </button>
-              <button
-                onClick={() => {
-                  if (payrolls.length > 0) { 
-                    if (window.confirm(`Download all ${payrolls.length} payslips for ${selectedYear}?`)) {
-                      alert('Bulk download feature coming soon!');
-                    }
-                  } else alert('No payslips available');
-                }}
-                className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 border border-slate-100 transition-colors text-left"
-              >
-                <div className="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <FaDownload className="text-emerald-600 text-xs" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-800">Download All</p>
-                  <p className="text-xs text-slate-400">All payslips for {selectedYear}</p>
-                </div>
-              </button>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* ── Help Footer ── */}
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-100 p-5 flex items-start gap-4">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center flex-shrink-0">
-            <FaQuestionCircle className="text-white text-sm" />
+        {/* Help Section */}
+        <div className="bg-gray-50 rounded-xl border border-gray-200 p-5 flex items-start gap-4">
+          <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
+            <AlertCircle className="w-5 h-5 text-white" />
           </div>
           <div className="flex-1">
-            <p className="text-sm font-semibold text-slate-800 mb-1">Need Help with Payroll?</p>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              For payroll queries, discrepancies, or tax information, contact our HR team at <span className="text-blue-600 font-medium">hr@company.com</span> or call <span className="text-blue-600 font-medium">(123) 456-7890</span>
+            <p className="text-sm font-semibold text-gray-800 mb-1">Need Help with Your Payroll?</p>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              For payroll queries, discrepancies, or tax information, contact our HR team at <span className="text-indigo-600 font-medium">hr@company.com</span>
             </p>
-            <p className="text-xs text-slate-400 mt-2">Last updated: {new Date().toLocaleString()}</p>
           </div>
         </div>
-
-        {/* Dev debug */}
-        {process.env.NODE_ENV === 'development' && (
-          <details className="bg-slate-100 rounded-xl p-4 text-xs">
-            <summary className="cursor-pointer font-medium text-slate-600">Debug Info</summary>
-            <pre className="mt-2 text-slate-500 overflow-auto">{JSON.stringify({ token: !!getToken(), user, payrolls: payrolls.length, years, selectedYear, error, authError }, null, 2)}</pre>
-          </details>
-        )}
       </div>
     </div>
   );
