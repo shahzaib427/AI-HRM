@@ -1,0 +1,21 @@
+node_modules/
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ChromaDB / AI generated data
+chroma_db/
+chromadb_data/
+chroma.sqlite3
+
+# Flask
+flask_session/
+
+# Frontend
+dist/
+.vite/
