@@ -1,0 +1,58 @@
+CATEGORY: market_insight
+TITLE: Tech Salary Trends 2024 - Pakistan
+KEYWORDS: salary, compensation, trends, pakistan, tech salaries, pkr, monthly salary
+MARKET_YEAR: 2024
+
+Comprehensive monthly salary ranges for tech roles in Pakistan (in PKR):
+
+Entry Level (0-2 years):
+- Junior Software Engineer: Rs. 60,000 - Rs. 120,000
+- Data Analyst: Rs. 50,000 - Rs. 100,000
+- QA Engineer: Rs. 45,000 - Rs. 90,000
+- DevOps Intern: Rs. 40,000 - Rs. 80,000
+- Fresh Graduate (Top companies): Rs. 80,000 - Rs. 150,000
+
+Mid Level (3-6 years):
+- Software Engineer: Rs. 150,000 - Rs. 250,000
+- Senior Software Engineer: Rs. 250,000 - Rs. 400,000
+- Data Scientist: Rs. 200,000 - Rs. 350,000
+- DevOps Engineer: Rs. 180,000 - Rs. 320,000
+- Product Manager: Rs. 250,000 - Rs. 450,000
+- Tech Lead: Rs. 400,000 - Rs. 650,000
+
+Senior Level (7-12 years):
+- Engineering Manager: Rs. 600,000 - Rs. 950,000
+- Principal Engineer: Rs. 650,000 - Rs. 1,100,000
+- Architect: Rs. 550,000 - Rs. 900,000
+- Director of Engineering: Rs. 1,000,000 - Rs. 1,800,000
+
+Leadership (12+ years):
+- VP of Engineering: Rs. 1,800,000 - Rs. 3,000,000
+- CTO: Rs. 2,500,000 - Rs. 5,000,000+
+
+Company-wise comparisons:
+- Multinationals (Afiniti, Systems Limited): 20-30% above market
+- Local Product Companies (Arbisoft, Confiz): Market rate
+- International Remote: $2,000 - $8,000/month (Rs. 550,000 - 2,200,000)
+- Service Companies (Techlogix, Contour): 10-15% below product companies
+- Startups: Variable, often lower base but equity
+
+Location-wise variations:
+- Karachi: Highest, 10-15% above national average
+- Lahore: 5-10% above average
+- Islamabad/Rawalpindi: At national average
+- Other cities: 10-20% below average
+
+Remote Work Impact:
+- Full remote Pakistani companies: Same as location-based
+- Hybrid roles: Slightly higher (5-10%) for flexibility
+- International remote: 3-5x local salaries
+
+Benefits beyond salary:
+- Health insurance (family coverage worth Rs. 500,000 - 1,000,000)
+- Bonus (1-3 months salary)
+- Provident fund (8-12% of basic)
+- Stock options (rare in Pakistan, common in startups)
+- Education budget (Rs. 100,000 - 400,000/year)
+- Internet/utility allowance (Rs. 10,000 - 30,000/month)
+- Gym membership (Rs. 30,000 - 100,000/year)

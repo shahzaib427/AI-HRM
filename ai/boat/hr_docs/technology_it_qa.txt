@@ -1,0 +1,49 @@
+# ACCOUNT & PASSWORD
+
+Q: How do I reset my password?
+A: Go to the login page and click "Forgot Password." Enter your registered email and you'll receive a reset link that expires within 24 hours.
+
+Q: I didn't receive the password reset email. What should I do?
+A: Check your spam/junk folder first. If it still hasn't arrived after 10 minutes, contact IT support at shahzaibnaseem3169@icloud.com or 03134750548.
+
+Q: What are the password requirements?
+A: Passwords must be at least 12 characters long, including uppercase, lowercase, numbers, and special characters. Passwords expire every 90 days.
+
+Q: What should I do if I'm locked out of my account?
+A: After multiple failed login attempts, your account locks for 30 minutes. Wait and try again, or use "Forgot Password." For urgent help, contact IT at shahzaibnaseem3169@icloud.com.
+
+Q: How do I enable two-factor authentication?
+A: Go to Security Settings in your account profile, select "Enable 2FA," and follow the prompts.
+
+# SOFTWARE & SUPPORT
+
+Q: What software is available for employees?
+A: Standard software includes Microsoft Office 365, Slack/Teams, and Zoom. Additional software requires IT approval.
+
+Q: How do I get technical support?
+A: Email shahzaibnaseem3169@icloud.com or call 03134750548 for IT support.
+
+Q: Can I install personal software on my work laptop?
+A: Only IT-approved software can be installed on company devices. Submit a request to shahzaibnaseem3169@icloud.com.
+
+Q: How do I connect to the VPN?
+A: Install the VPN client provided by IT and use your company credentials to connect when working remotely.
+
+# HARDWARE
+
+Q: How do I request new hardware?
+A: Submit a request with manager approval to shahzaibnaseem3169@icloud.com.
+
+Q: What should I do if my laptop is stolen?
+A: Immediately report to IT (shahzaibnaseem3169@icloud.com / 03134750548) to disable access, and file a police report. Also inform HR.
+
+Q: How do I set up email on my phone?
+A: Follow the mobile setup guide from IT. Company email requires device encryption and passcode protection.
+
+# PORTAL ACCESS
+
+Q: I'm having a portal issue. What do I do?
+A: For HR Portal access issues (login errors, page not loading, missing data), email shahzaibnaseem3169@icloud.com or call 03134750548 with a screenshot of the error if possible.
+
+Q: The HR portal isn't working. Who do I contact?
+A: Contact IT support at shahzaibnaseem3169@icloud.com or 03134750548, describing the issue and which page it happened on.

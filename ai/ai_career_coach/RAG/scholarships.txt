@@ -1,0 +1,198 @@
+
+## **rag/scholarships.txt**
+
+```text
+# SCHOLARSHIPS FOR PAKISTANI STUDENTS
+
+## Government of Pakistan Scholarships
+
+### HEC Need-Based Scholarship
+- **Provider**: Higher Education Commission (HEC)
+- **Eligibility**: Pakistani students enrolled in public sector universities
+- **Coverage**: Full tuition fee + monthly stipend (Rs. 10,000-20,000)
+- **Selection**: Need-based, academic merit
+- **Apply**: Through university financial aid office
+- **Deadline**: Varies by university (usually August-September)
+
+### Punjab Educational Endowment Fund (PEEF)
+- **Provider**: Government of Punjab
+- **Eligibility**: Punjab domicile holders, 60%+ marks
+- **Coverage**: Full tuition + books + monthly stipend
+- **Categories**: Merit-based, need-based, special quota
+- **Apply**: Online at peef.punjab.gov.pk
+- **Deadline**: October-December annually
+
+### Ehsaas Undergraduate Scholarship
+- **Provider**: HEC with Prime Minister's Office
+- **Eligibility**: Students from low-income families
+- **Coverage**: Full tuition + Rs. 30,000 annual stipend
+- **Quota**: 50,000 scholarships annually
+- **Apply**: Through HEC portal or university
+- **Deadline**: September-October annually
+
+### Sindh Education Endowment Fund (SEEF)
+- **Provider**: Government of Sindh
+- **Eligibility**: Sindh domicile holders
+- **Coverage**: Partial to full tuition + stipend
+- **Apply**: Through SEEF website
+- **Deadline**: September annually
+
+### KPK Educational Endowment Fund
+- **Provider**: Government of Khyber Pakhtunkhwa
+- **Eligibility**: KPK domicile holders
+- **Coverage**: Full tuition for professional degrees
+- **Apply**: Through KPK EEF website
+- **Deadline**: November annually
+
+### Balochistan Education Endowment Fund (BEEF)
+- **Provider**: Government of Balochistan
+- **Eligibility**: Balochistan domicile holders
+- **Coverage**: Full tuition + stipend
+- **Apply**: Through BEEF office
+- **Deadline**: November annually
+
+## International Scholarships
+
+### Fulbright Scholarship (USA)
+- **Provider**: United States Educational Foundation (USEFP)
+- **Eligibility**: Pakistani citizens, 4-year Bachelor's degree
+- **Coverage**: Full tuition, airfare, living stipend, health insurance
+- **Selection**: Merit-based, leadership potential
+- **IELTS/TOEFL**: Required (6.5+ / 80+)
+- **Apply**: Online at usefp.org
+- **Deadline**: May annually
+
+### Commonwealth Scholarship (UK)
+- **Provider**: UK Government
+- **Eligibility**: Pakistani citizens, Bachelor's degree with strong grades
+- **Coverage**: Full tuition, living allowance, airfare
+- **Types**: Master's and PhD scholarships
+- **IELTS**: Required (6.5+ overall)
+- **Apply**: Through HEC Pakistan
+- **Deadline**: October annually
+
+### Erasmus Mundus (Europe)
+- **Provider**: European Union
+- **Eligibility**: International students including Pakistan
+- **Coverage**: Full tuition, travel allowance, monthly stipend
+- **Features**: Study at multiple European universities
+- **IELTS**: Required (6.5+)
+- **Apply**: Through Erasmus Mundus website
+- **Deadline**: Varies by program (October-January)
+
+### Chevening Scholarship (UK)
+- **Provider**: UK Foreign Office
+- **Eligibility**: Pakistani citizens, 2+ years work experience
+- **Coverage**: Full tuition, living expenses, airfare
+- **Selection**: Academic excellence, leadership potential
+- **IELTS**: Required (6.5+)
+- **Apply**: chevening.org
+- **Deadline**: November annually
+
+### DAAD Scholarship (Germany)
+- **Provider**: German Academic Exchange Service
+- **Eligibility**: Pakistani citizens, Bachelor's degree
+- **Coverage**: Full tuition + monthly stipend
+- **Focus**: Development-related fields
+- **IELTS/TOEFL**: Required
+- **Apply**: Through DAAD Pakistan office
+- **Deadline**: August-October annually
+
+### Aga Khan Foundation Scholarship
+- **Provider**: Aga Khan Foundation
+- **Eligibility**: Pakistani citizens, strong academic record
+- **Coverage**: 50% loan, 50% grant
+- **Focus**: Master's programs in development fields
+- **Apply**: Through Aga Khan Foundation
+- **Deadline**: March annually
+
+### Australia Awards Scholarship
+- **Provider**: Australian Government
+- **Eligibility**: Pakistani citizens, 2+ years work experience
+- **Coverage**: Full tuition, living expenses, airfare
+- **Focus**: Development-related fields
+- **IELTS**: Required (6.5+)
+- **Apply**: australiaawards.gov.pk
+- **Deadline**: April annually
+
+### Chinese Government Scholarship (CSC)
+- **Provider**: Chinese Government
+- **Eligibility**: Pakistani citizens with good academic record
+- **Coverage**: Full tuition, accommodation, living stipend
+- **Apply**: Through HEC Pakistan or Chinese Embassy
+- **Deadline**: January-March annually
+
+### Turkish Government Scholarship (Turkiye Burslari)
+- **Provider**: Turkish Government
+- **Eligibility**: Pakistani citizens
+- **Coverage**: Full tuition, accommodation, monthly stipend
+- **Apply**: turkiyeburslari.gov.tr
+- **Deadline**: February annually
+
+## Local University Scholarships
+
+### LUMS National Outreach Programme (NOP)
+- **Provider**: Lahore University of Management Sciences
+- **Eligibility**: Students from underprivileged backgrounds
+- **Coverage**: Full tuition + stipend
+- **Apply**: Through LUMS website
+- **Deadline**: December-January annually
+
+### NUST Scholarships
+- **Provider**: National University of Sciences and Technology
+- **Eligibility**: NUST students with financial need
+- **Coverage**: Partial to full tuition
+- **Apply**: Through NUST Financial Aid Office
+- **Deadline**: Varies
+
+### FAST University Financial Aid
+- **Provider**: FAST National University
+- **Eligibility**: FAST students with financial need
+- **Coverage**: Partial to full tuition
+- **Apply**: Through FAST Financial Aid Office
+- **Deadline**: Start of each semester
+
+### GIK Institute Scholarships
+- **Provider**: Ghulam Ishaq Khan Institute
+- **Eligibility**: GIK students with academic merit
+- **Coverage**: Partial to full tuition
+- **Apply**: Through GIK Financial Aid Office
+- **Deadline**: At admission time
+
+## Tips for Pakistani Students
+
+### Academic Preparation
+- Maintain high CGPA (3.5+ for competitive scholarships)
+- Take standardized tests seriously (GRE, GMAT, IELTS, TOEFL)
+- Publish research papers if possible
+- Participate in extracurricular activities
+- Develop leadership skills
+
+### Application Documents
+- Strong Statement of Purpose (SOP) - personalized
+- 2-3 strong recommendation letters
+- Updated CV/resume with achievements
+- Research proposal for PhD applications
+- Academic transcripts and certificates
+
+### Important Timelines
+- Start preparation 1 year before
+- IELTS/TOEFL: 6 months before
+- GRE/GMAT: 6 months before
+- Scholarship applications: 8-12 months before
+- Visa applications: 3 months before
+
+### Common Mistakes
+- Applying to only top universities
+- Generic SOP
+- Weak recommendation letters
+- Not meeting language requirements
+- Missing deadlines
+- Not researching scholarship criteria
+
+### Additional Resources
+- HEC Pakistan website: hec.gov.pk
+- USEFP: usefp.org
+- British Council: britishcouncil.pk
+- DAAD Pakistan: daad.pk
+- Australian High Commission: australiaawards.gov.pk

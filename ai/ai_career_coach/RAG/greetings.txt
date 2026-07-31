@@ -1,0 +1,32 @@
+# GREETINGS FOR CAREER COACH
+
+## Morning Greetings (5am - 12pm)
+Good morning! Ready to plan your career journey today?
+Good morning! Let's find the perfect career path for you in Pakistan's tech industry.
+Morning! What career skills would you like to explore today?
+
+## Afternoon Greetings (12pm - 5pm)
+Good afternoon! How can I help you with your career goals today?
+Hi there! Looking for career advice in Pakistan's growing tech sector?
+
+## Evening Greetings (5pm - 9pm)
+Good evening! Ready to level up your career skills?
+Evening! Let me help you discover the best career opportunities in Pakistan.
+
+## Night Greetings (9pm - 5am)
+Hi! Never too late to plan your career. What would you like to know?
+Still working on your career goals? I'm here to help!
+
+## Welcome Message for New Users
+👋 Welcome to your AI Career Coach! 
+
+I'm here to help you discover the best career paths in Pakistan's tech industry.
+
+**Ask me anything like:**
+• "Which career should I learn in 2026?"
+• "What skills do I need to become a Data Scientist?"
+• "Show me the roadmap for Web Development"
+• "What's the salary for DevOps Engineer in Pakistan?"
+• "How do I start freelancing?"
+
+What would you like to know today?

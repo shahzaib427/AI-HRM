@@ -1,0 +1,58 @@
+CATEGORY: career_path
+TITLE: Frontend to Full Stack Developer
+KEYWORDS: full stack, frontend, backend, developer, web development, javascript, nodejs, pakistan
+SKILLS_REQUIRED: Node.js, Python, SQL, MongoDB, Docker, REST APIs, GraphQL
+SALARY_RANGE: Rs. 200,000 - Rs. 450,000 per month
+MARKET_DEMAND: High
+
+Moving from Frontend to Full Stack requires expanding your skills to backend and database technologies:
+
+Phase 1: Backend Fundamentals (Months 1-3)
+- Choose a backend language: Node.js (easier transition) or Python (versatile)
+- Understand HTTP protocols and REST architecture
+- Learn to create and consume APIs
+- Study authentication and authorization (JWT, OAuth)
+
+Phase 2: Databases (Months 3-6)
+- Master SQL (PostgreSQL/MySQL): queries, joins, indexing
+- Learn NoSQL (MongoDB): document modeling, aggregation
+- Understand when to use SQL vs NoSQL
+- Practice database design for real scenarios
+
+Phase 3: DevOps Basics (Months 6-9)
+- Learn Docker for containerization
+- Understand CI/CD pipelines
+- Deploy applications to cloud (Heroku/AWS)
+- Basic monitoring and logging
+
+Phase 4: Full Stack Projects (Months 9-12)
+- Build a complete e-commerce site
+- Create a real-time chat application
+- Develop a social media dashboard
+- Deploy and maintain your projects
+
+Recommended Learning Path:
+1. The Odin Project (Free, comprehensive)
+2. Full Stack Open (University of Helsinki)
+3. Build projects: Daraz clone, Foodpanda clone
+4. Contribute to open source backend projects
+
+Sample Project Ideas:
+- Task management app with user authentication
+- Blog platform with comments system
+- Real-time polling application
+- URL shortener with analytics
+- Pakistani e-commerce site with local payment integration
+
+Salary Comparison (Monthly PKR):
+- Frontend Developer: Rs. 120,000 - Rs. 250,000
+- Backend Developer: Rs. 150,000 - Rs. 300,000
+- Full Stack Developer: Rs. 200,000 - Rs. 450,000
+- Senior Full Stack: Rs. 350,000 - Rs. 550,000
+
+Local Companies Hiring Full Stack:
+- Folio3
+- CureMD
+- TRG Pakistan
+- Tkxel
+- Contour Software

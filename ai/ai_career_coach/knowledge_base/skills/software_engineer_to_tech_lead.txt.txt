@@ -1,0 +1,63 @@
+CATEGORY: career_path
+TITLE: Software Engineer to Tech Lead Transition
+KEYWORDS: tech lead, software engineer, leadership, promotion, senior, team lead, pakistan tech
+SKILLS_REQUIRED: System Design, Leadership, Mentoring, Communication, Project Management, Architecture
+SALARY_RANGE: Rs. 450,000 - Rs. 800,000 per month
+MARKET_DEMAND: Very High
+
+Transitioning from Software Engineer to Tech Lead requires a shift from individual contributor to leader mindset. Here's a comprehensive guide:
+
+1. Technical Excellence (Months 1-6)
+   - Master system design and software architecture
+   - Learn to make technical trade-offs
+   - Understand scalability and performance optimization
+   - Review code and architecture of large systems
+
+2. Leadership Development (Months 6-12)
+   - Take ownership of small features/modules
+   - Lead technical discussions and design reviews
+   - Mentor junior developers
+   - Practice delegating tasks effectively
+
+3. Project Management (Months 12-18)
+   - Learn agile methodologies deeply
+   - Handle project estimation and planning
+   - Manage stakeholder expectations
+   - Track team velocity and metrics
+
+4. Communication Skills (Ongoing)
+   - Present technical decisions to non-technical stakeholders
+   - Write clear technical documentation
+   - Facilitate team meetings effectively
+   - Handle conflicts and difficult conversations
+
+Timeline: 2-3 years with focused effort
+
+Success Metrics:
+- Successfully delivered projects as lead
+- Team members you've mentored have grown
+- Recognized as go-to person for architecture decisions
+- Can balance technical and business requirements
+
+Common Challenges:
+- Letting go of coding to focus on leadership
+- Dealing with different personalities
+- Managing upward and downward
+- Time management with increased responsibilities
+
+Salary Progression (Monthly in PKR):
+- Junior Software Engineer: Rs. 80,000 - Rs. 150,000
+- Software Engineer: Rs. 150,000 - Rs. 250,000
+- Senior Software Engineer: Rs. 250,000 - Rs. 400,000
+- Tech Lead: Rs. 450,000 - Rs. 800,000
+- Engineering Manager: Rs. 700,000 - Rs. 1,200,000
+
+Top Pakistani Companies:
+- Systems Limited
+- Afiniti
+- Devsinc
+- Arbisoft
+- Confiz
+- 10Pearls
+- VentureDive
+-TKXEL

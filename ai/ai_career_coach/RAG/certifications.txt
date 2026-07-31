@@ -1,0 +1,22 @@
+# VALUABLE CERTIFICATIONS FOR PAKISTAN TECH INDUSTRY
+
+## Cloud Certifications
+AWS Solutions Architect - Rs. 30,000 - Very High demand
+Azure Developer Associate - Rs. 20,000 - High demand
+Google Cloud Engineer - Rs. 25,000 - Growing demand
+
+## DevOps Certifications
+Certified Kubernetes Administrator - Rs. 25,000
+Docker Certified Associate - Rs. 15,000
+Terraform Associate - Rs. 15,000
+
+## AI/Data Certifications
+TensorFlow Developer Certificate - Rs. 15,000
+AWS AI/ML Specialty - Rs. 20,000
+Data Science Professional (IBM) - Rs. 20,000
+
+## Free Certifications
+Google IT Support - Free
+Harvard CS50 - Free
+freeCodeCamp - Free
+DigiSkills Pakistan - Free

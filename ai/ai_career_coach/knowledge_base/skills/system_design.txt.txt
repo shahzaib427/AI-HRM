@@ -1,0 +1,58 @@
+CATEGORY: skill
+TITLE: System Design Mastery
+KEYWORDS: system design, architecture, scalability, microservices, distributed systems
+SKILLS_REQUIRED: Load Balancing, Caching, Databases, Message Queues, CDN, Microservices
+
+System design is crucial for senior engineering roles. Here's what you need to know:
+
+Core Concepts:
+
+1. Load Balancing
+   - Types: Round Robin, Least Connections, IP Hash
+   - Tools: Nginx, HAProxy, AWS ELB
+   - Layer 4 vs Layer 7 load balancing
+
+2. Caching Strategies
+   - CDN for static content
+   - Redis/Memcached for distributed caching
+   - Cache eviction policies: LRU, LFU, TTL
+   - Cache patterns: Cache aside, Write through, Write behind
+
+3. Database Design
+   - SQL vs NoSQL trade-offs
+   - Indexing strategies
+   - Partitioning/Sharding
+   - Replication: Master-slave, Multi-master
+   - CAP Theorem implications
+
+4. Message Queues
+   - Use cases: Decoupling, Buffering, Async processing
+   - Tools: RabbitMQ, Kafka, SQS
+   - Pub/Sub patterns
+   - Message ordering and exactly-once delivery
+
+5. Microservices Architecture
+   - Service discovery
+   - API Gateway pattern
+   - Circuit breakers
+   - Distributed tracing
+   - Saga pattern for distributed transactions
+
+6. System Design Problems to Practice:
+   - Design Daraz.pk (e-commerce platform)
+   - Design Foodpanda Pakistan (food delivery)
+   - Design WhatsApp (real-time messaging)
+   - Design Netflix (video streaming)
+   - Design a Pakistani banking system
+
+7. Performance Metrics:
+   - Latency: P95, P99 response times
+   - Throughput: Requests per second
+   - Availability: 99.9% vs 99.99%
+   - Consistency: Eventual vs Strong
+
+Resources (Prices in PKR):
+- Book: "Designing Data-Intensive Applications" (Rs. 4,500 - Rs. 6,500)
+- Course: Grokking System Design (Rs. 15,000 - Rs. 20,000)
+- YouTube: Gaurav Sen, System Design Interview (Free)
+- Local training: Systems Limited workshops (Rs. 25,000 - Rs. 40,000)

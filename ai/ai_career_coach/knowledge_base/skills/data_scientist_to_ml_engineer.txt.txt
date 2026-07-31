@@ -1,0 +1,55 @@
+CATEGORY: career_path
+TITLE: Data Scientist to ML Engineer
+KEYWORDS: data science, machine learning, ml engineer, ai, artificial intelligence, pakistan
+SKILLS_REQUIRED: Python, TensorFlow, PyTorch, ML Ops, Docker, Kubernetes, SQL
+SALARY_RANGE: Rs. 250,000 - Rs. 700,000 per month
+MARKET_DEMAND: Very High
+
+Transitioning from Data Scientist to ML Engineer focuses on productionizing ML models:
+
+Phase 1: Engineering Fundamentals (Months 1-3)
+- Master Python for production (clean code, testing, documentation)
+- Learn software engineering best practices
+- Understand version control (Git) deeply
+- Study design patterns for ML systems
+
+Phase 2: ML Ops (Months 3-6)
+- Model deployment strategies
+- Docker containerization for ML models
+- Model versioning and registry
+- CI/CD for ML pipelines
+- Monitoring model performance in production
+
+Phase 3: Big Data Technologies (Months 6-9)
+- Apache Spark for large-scale processing
+- Feature stores and data pipelines
+- Stream processing (Kafka, Flink)
+- Distributed computing concepts
+
+Phase 4: Production ML (Months 9-12)
+- Build end-to-end ML pipelines
+- Implement A/B testing for models
+- Handle model drift and retraining
+- Optimize inference latency
+
+Key Tools to Learn:
+- ML Flow, Kubeflow, TFX
+- Docker, Kubernetes
+- Apache Spark, Beam
+- FastAPI, Flask for model serving
+- Prometheus, Grafana for monitoring
+
+Salary Progression (Monthly PKR):
+- Junior Data Scientist: Rs. 120,000 - Rs. 220,000
+- Data Scientist: Rs. 200,000 - Rs. 350,000
+- ML Engineer: Rs. 250,000 - Rs. 450,000
+- Senior ML Engineer: Rs. 450,000 - Rs. 700,000
+- ML Architect: Rs. 650,000 - Rs. 1,000,000
+
+Pakistani AI Companies:
+- Visionet
+- Abacus Consulting
+- PLUM Grid
+- Contour Software AI Division
+- Afiniti (AI focus)
+- CureMD (Healthcare AI)

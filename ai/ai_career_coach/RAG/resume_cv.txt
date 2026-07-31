@@ -1,0 +1,150 @@
+# RESUME & CV GUIDE FOR PAKISTAN
+
+## ATS-Friendly Resume Structure
+
+1. Contact Information:
+- Name (bold, large font)
+- Phone (+92 3XX XXXXXXX)
+- Email (professional, e.g., first.last@gmail.com)
+- LinkedIn profile (custom URL)
+- GitHub profile (for developers)
+- Portfolio website (if applicable)
+- Location (City, Pakistan)
+
+2. Professional Summary:
+- 2-3 lines summary
+- Years of experience
+- Key skills and technologies
+- Top achievements
+- Career objective
+- Industry focus (e.g., Fintech, E-commerce)
+
+3. Work Experience:
+- Company name
+- Position title
+- Dates (Month Year - Present)
+- 3-5 bullet points with achievements
+- Use action verbs: Developed, Led, Created, Improved, Optimized
+- Include metrics (e.g., increased performance by 40%)
+- Mention technologies used
+
+4. Education:
+- Degree name
+- Institution
+- Year of graduation
+- CGPA (if above 3.0)
+- Relevant coursework
+- Thesis/Project title
+
+5. Skills Section:
+- Technical skills (categorized)
+- Tools & Technologies
+- Languages (English, Urdu, etc.)
+- Soft skills (Communication, Leadership)
+
+6. Projects:
+- 2-3 significant projects
+- Technologies used
+- GitHub links
+- Live demo links
+- Project description and impact
+
+7. Certifications & Achievements:
+- Relevant certifications
+- Awards and recognition
+- Publications
+- Speaking engagements
+
+## Sample Resume for Pakistani Software Engineer
+
+MUHAMMAD ALI
+Lahore, Pakistan | +92 3XX XXXXXXX
+ali@email.com | linkedin.com/in/ali | github.com/ali
+
+PROFESSIONAL SUMMARY
+Results-driven Software Engineer with 3+ years of experience in full-stack development. Expertise in React.js, Node.js, and Python. Successfully delivered 5+ enterprise projects for Systems Limited. Passionate about building scalable applications and mentoring junior developers.
+
+TECHNICAL SKILLS
+- Frontend: React.js, Next.js, TypeScript, Redux, Tailwind CSS
+- Backend: Node.js, Express.js, Python, Django, REST APIs
+- Database: MongoDB, PostgreSQL, MySQL, Redis
+- Cloud & DevOps: AWS (EC2, S3, Lambda), Docker, CI/CD
+- Tools: Git, JIRA, Postman, VS Code, Linux
+
+WORK EXPERIENCE
+
+Software Engineer | Systems Limited, Lahore
+Jan 2022 - Present
+- Developed 5+ web applications using React.js and Node.js, serving 10,000+ users
+- Reduced API response time by 40% through database optimization and caching
+- Led a team of 3 junior developers, conducting code reviews and mentoring sessions
+- Implemented CI/CD pipeline using GitHub Actions, reducing deployment time by 60%
+- Collaborated with cross-functional teams in Agile environment
+
+Junior Developer | Techlogix, Lahore
+Aug 2020 - Dec 2021
+- Built responsive UIs using React.js with Material-UI
+- Collaborated with cross-functional teams in Agile environment
+- Fixed 50+ bugs and improved application performance by 25%
+- Wrote unit tests using Jest, achieving 80% code coverage
+
+EDUCATION
+Bachelor of Science in Computer Science
+National University of Computer and Emerging Sciences (FAST), Lahore
+2016 - 2020 | CGPA: 3.6/4.0
+Thesis: "AI-Powered Recommendation System for E-commerce"
+
+PROJECTS
+
+E-Commerce Platform (MERN Stack)
+- Built full-stack e-commerce application with 500+ daily users
+- Implemented JWT authentication, payment integration (Stripe), and admin dashboard
+- Deployed on AWS EC2 with auto-scaling
+- GitHub: github.com/username/ecommerce
+
+Task Management App (MERN Stack)
+- Created collaborative task management tool with real-time updates
+- Used Socket.io for real-time notifications
+- Implemented drag-drop interface using React DnD
+- Live demo: taskapp.herokuapp.com
+
+CERTIFICATIONS
+- AWS Certified Solutions Architect - Associate (2023)
+- Meta Backend Developer Professional Certificate (2022)
+- IELTS Academic: 7.5 (2021)
+
+LANGUAGES
+- English (Professional Working)
+- Urdu (Native)
+- Punjabi (Native)
+
+## Common Mistakes to Avoid
+
+1. Using fancy templates (ATS can't read complex formatting)
+2. Including photos (not recommended in Pakistan)
+3. Long paragraphs (use bullet points)
+4. Spelling mistakes and grammatical errors
+5. Missing contact information
+6. Outdated skills listed
+7. Too long (keep to 1-2 pages)
+8. Generic objective statements
+9. Not tailoring for each application
+10. Missing LinkedIn and GitHub links
+
+## Keywords to Include for Pakistani Jobs
+
+Technical Keywords:
+- Full Stack Development
+- Agile Methodology
+- Scrum
+- REST APIs
+- Microservices
+- Cloud Computing
+- DevOps
+
+Local Context:
+- Pakistan, Lahore, Karachi, Islamabad
+- Local company names
+- Pakistani market experience
+- Client handling
+- Team collaboration

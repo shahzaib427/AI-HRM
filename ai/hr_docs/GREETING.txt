@@ -1,0 +1,111 @@
+WELCOME TO LSIT - LSIT UNIVERSITY OF EDUCATION 🎓
+
+GREETING MESSAGE:
+
+👋 Welcome to LSIT (LSIT University of Education)! We are committed to providing quality education and a professional environment for our students and staff. 🌟
+
+This knowledge base contains important policies and procedures to help you navigate your daily activities at LSIT. Please refer to the relevant sections for guidance on attendance, leave applications, and career development programs. 📚✨
+
+INSTITUTE DETAILS:
+| Field | Information |
+|-------|-------------|
+| Institute Name | LSIT (LSIT University of Education) 🏛️ |
+| Official Email | administration@lsituoe.edu.pk 📧 |
+| Attendance Portal | https://lsit.edu.pk/attendance 💻 |
+| Mobile App | LSIT Connect 📱 |
+
+AVAILABLE POLICIES:
+- 📍 Attendance Policy: Check In/Check Out process, timings, and forgotten attendance
+- 📋 Leave Application Process: Leave types, allocation, and application procedure
+- 🚀 Career Development Programs: Training opportunities and career growth paths
+
+CONTACT INFORMATION:
+For any queries or assistance, please contact:
+- 📧 Email: administration@lsituoe.edu.pk
+- 💻 HR Portal: https://lsit.edu.pk/attendance
+- 📱 Mobile App: LSIT Connect
+
+IMPORTANT GUIDELINES:
+- ⏰ Check In before 10:00 AM daily
+- 📅 Apply for planned leave at least 3 days in advance
+- 🤒 Notify manager by 9:00 AM for sick leave
+- 📞 Contact administration within 24 hours if attendance is missed
+
+We wish you a productive and successful journey at LSIT! 🌈🎉
+
+---
+
+GREETING VARIATIONS FOR RAG:
+
+Q: Hi
+A: Hello! 👋 Welcome to LSIT knowledge base. How can I help you today? You can ask about Attendance Policy, Leave Application Process, or Career Development Programs. 📚
+
+Q: Hello
+A: Hi there! 👋 Welcome to LSIT. I'm here to help you with institute policies. What would you like to know? 😊
+
+Q: Hey
+A: Hey! 👋 Good to see you. Need help with attendance, leave, or career programs? Let me know! 🌟
+
+Q: Good morning
+A: Good morning! ☀️ Hope you're having a great day. How can I assist you with LSIT policies today? 😊
+
+Q: Good afternoon
+A: Good afternoon! 🌤️ Welcome to LSIT knowledge base. Feel free to ask me anything about attendance, leave, or career development. 📚
+
+Q: Good evening
+A: Good evening! 🌙 Happy to help you with LSIT policies. What can I do for you? 😊
+
+Q: How are you?
+A: I'm doing great, thank you for asking! 😊 Ready to help you with any LSIT policy questions. How can I assist you today? 🌟
+
+Q: Thanks
+A: You're welcome! 😊 Glad to help. Let me know if you need anything else about LSIT policies. 🎓
+
+Q: Thank you
+A: Happy to help! 🙏 Feel free to reach out anytime for questions about attendance, leave, or career development at LSIT. 🌟
+
+Q: Bye
+A: Goodbye! 👋 Have a wonderful day at LSIT. Come back anytime if you need help! 🌈
+
+Q: See you later
+A: See you later! 👋 Wishing you a productive day. Don't hesitate to ask if you have more questions. 😊
+
+Q: What is LSIT?
+A: LSIT stands for LSIT University of Education 🏛️. It is an educational institute committed to quality education and professional development. 🎓
+
+Q: How do I contact LSIT administration?
+A: You can contact LSIT administration via email at administration@lsituoe.edu.pk 📧 for any queries or assistance. 😊
+
+Q: What policies are available in this knowledge base?
+A: This knowledge base contains: 📍 Attendance Policy, 📋 Leave Application Process, and 🚀 Career Development Programs. 📚
+
+Q: How do I access LSIT portal?
+A: Access LSIT portal at https://lsit.edu.pk/attendance 💻 or download LSIT Connect mobile app 📱 from iOS or Android app store.
+
+Q: Who do I contact for help?
+A: For any assistance, email administration@lsituoe.edu.pk 📧 or reach out through LSIT portal. We're here to help! 😊
+
+Q: What are the key rules I should know?
+A: Key rules: ⏰ Check In before 10:00 AM daily, 📅 apply planned leave 3 days in advance, 🤒 notify manager by 9:00 AM for sick leave, and 📞 contact administration within 24 hours for missed attendance.
+
+Q: Is there a mobile app for LSIT?
+A: Yes! 📱 LSIT Connect mobile app is available for iOS and Android. Download it to mark attendance and apply for leave on the go! 🚀
+
+Q: Where can I find attendance policy?
+A: Attendance policy with Check In/Check Out details is available in the Attendance Policy section. 📍 Check In before 10:00 AM daily! ⏰
+
+Q: Where can I find leave policy?
+A: Leave policy with leave types and allocation (Annual: 20 days, Sick: 10 days, Casual: 5 days) is available in the Leave Application Process section. 📋
+
+Q: Where can I find career development information?
+A: Career development programs including Technical Certifications (AWS, Azure, Google Cloud) ☁️, Leadership Development 👔, Soft Skills Workshops 🗣️, and Mentorship Program 🤝 are available in the Career Development Programs section. 🚀
+
+Q: Can you help me?
+A: Absolutely! 😊 I'm here to help with LSIT policies. You can ask me about attendance marking ⏰, leave application 📋, or career development programs 🚀. What do you need? 🌟
+
+Q: Start
+A: Welcome to LSIT knowledge base! 🎓 Here's what I can help you with:
+📍 Attendance Policy – Check In/Out process
+📋 Leave Application – Leave types and application
+🚀 Career Development – Training programs and growth paths
+How can I assist you today? 😊

@@ -1,0 +1,362 @@
+# INTERVIEW PREPARATION - PAKISTAN TECH INDUSTRY
+
+## Web Development
+
+Q: What is the virtual DOM in React?
+A: The virtual DOM is a lightweight copy of the actual DOM. React uses it to improve performance by only updating elements that changed.
+
+Q: Explain closures in JavaScript
+A: A closure is a function that has access to its outer scope. It's used for data privacy and currying.
+
+Q: What's the difference between == and ===?
+A: == compares values with type coercion, === compares values and types strictly. Always use === unless you need type coercion.
+
+Q: What is event delegation?
+A: Event delegation is a technique where a parent element handles events for its children. It reduces the number of event listeners.
+
+Q: Explain promises and async/await
+A: Promises represent eventual completion of async operations. async/await provides cleaner syntax for working with promises.
+
+Q: What is CORS and how does it work?
+A: CORS (Cross-Origin Resource Sharing) is a security mechanism that allows web pages to request resources from another domain. It uses HTTP headers to specify allowed origins.
+
+Q: What is the difference between localStorage and sessionStorage?
+A: localStorage persists until manually cleared, sessionStorage clears when browser tab closes. Both store key-value pairs.
+
+Q: What is the difference between let, const, and var?
+A: var is function-scoped and can be redeclared. let is block-scoped and cannot be redeclared. const is block-scoped and cannot be reassigned.
+
+Q: What is the useEffect hook in React?
+A: useEffect lets you perform side effects in functional components like data fetching, subscriptions, or manually changing the DOM.
+
+Q: What is REST API?
+A: REST API is an architectural style using HTTP methods (GET, POST, PUT, DELETE) and returns data in JSON/XML format.
+
+Q: What is Webpack and why use it?
+A: Webpack is a module bundler that bundles JavaScript files, CSS, images, and other assets for use in a browser.
+
+Q: Explain the concept of hoisting in JavaScript
+A: Hoisting is JavaScript's behavior of moving declarations to the top of their scope during compilation.
+
+Q: What is the difference between spread and rest operators?
+A: Spread (...) expands elements, rest (...) collects remaining elements into an array.
+
+Q: What is Redux and when to use it?
+A: Redux is a state management library. Use it for complex applications with shared state across many components.
+
+Q: Explain the component lifecycle in React
+A: Lifecycle includes mounting (constructor, render, componentDidMount), updating, and unmounting (componentWillUnmount).
+
+## MERN Stack
+
+Q: What is MongoDB and why use it?
+A: MongoDB is a NoSQL database that stores data in flexible JSON-like documents. It's great for scalable applications.
+
+Q: What is Express.js?
+A: Express.js is a backend framework for Node.js. It helps build APIs and handle routes, requests, and responses easily.
+
+Q: What is React and why is it popular?
+A: React is a frontend library for building user interfaces. It's popular because it uses components and has a virtual DOM.
+
+Q: What is Node.js?
+A: Node.js lets you run JavaScript on the server. It's fast, non-blocking, and great for real-time applications.
+
+Q: What is JWT and how is it used in MERN?
+A: JWT (JSON Web Token) is used for authentication. After login, server gives a token; client sends it with each request.
+
+Q: Explain the MERN stack architecture
+A: MERN: MongoDB (database), Express.js (backend), React (frontend), Node.js (runtime). Data flows from browser → React → Node/Express → MongoDB.
+
+Q: What is Mongoose?
+A: Mongoose is an ODM (Object Data Modeling) library for MongoDB and Node.js. It provides schema validation and query building.
+
+Q: How do you handle file uploads in MERN?
+A: Use Multer middleware in Express, store files on server or cloud storage like AWS S3, and save file references in MongoDB.
+
+Q: What is Redux Toolkit?
+A: Redux Toolkit is the official way to write Redux logic. It simplifies store setup and reduces boilerplate code.
+
+Q: How to connect React with Node.js backend?
+A: Use Axios or Fetch API to make HTTP requests from React to Node.js API endpoints.
+
+## Python Development
+
+Q: What are decorators in Python?
+A: Decorators are functions that modify other functions. They use @ syntax and are used for logging, timing, authentication.
+
+Q: Difference between list and tuple?
+A: List is mutable (can change), tuple is immutable (cannot change). Lists use [], tuples use ().
+
+Q: What are generators?
+A: Generators are functions that yield values one at a time using the yield keyword. They are memory efficient for large datasets.
+
+Q: What is the Global Interpreter Lock (GIL)?
+A: GIL is a mutex that prevents multiple threads from executing Python bytecode simultaneously. It affects CPU-bound multi-threading.
+
+Q: What is the difference between deep copy and shallow copy?
+A: Shallow copy copies references; deep copy creates completely independent copies.
+
+Q: What is Django?
+A: Django is a full-featured Python web framework. It includes everything: database ORM, admin panel, authentication.
+
+Q: What is Flask?
+A: Flask is a lightweight Python web framework. It's simple and flexible, good for small to medium apps.
+
+Q: What are list comprehensions?
+A: List comprehensions provide a concise way to create lists. Example: [x*2 for x in range(5)]
+
+Q: What is the difference between @staticmethod and @classmethod?
+A: @staticmethod doesn't take self or cls; @classmethod takes cls and can modify class state.
+
+Q: What is pickling and unpickling?
+A: Pickling converts Python objects to byte stream; unpickling converts back. Used for serialization.
+
+Q: What is the difference between range and xrange?
+A: In Python 2, range returns list, xrange returns generator. In Python 3, range works like xrange.
+
+Q: Explain exception handling in Python
+A: Use try-except-finally blocks. try contains risky code, except handles errors, finally always executes.
+
+Q: What are lambda functions?
+A: Lambda functions are small anonymous functions defined with lambda keyword. Example: lambda x: x*2
+
+Q: What is the difference between append and extend?
+A: append adds one element to list; extend adds multiple elements from another iterable.
+
+Q: What is the purpose of __init__ method?
+A: __init__ is a constructor method that initializes object attributes when a class instance is created.
+
+## Data Science
+
+Q: Difference between supervised and unsupervised learning?
+A: Supervised uses labeled data for prediction; unsupervised finds patterns in unlabeled data.
+
+Q: Explain overfitting and how to prevent it
+A: Overfitting is when a model memorizes training data. Prevent with cross-validation, regularization, and more data.
+
+Q: What is the difference between bagging and boosting?
+A: Bagging trains models in parallel and averages results; boosting trains sequentially, each model correcting previous errors.
+
+Q: What is the difference between correlation and causation?
+A: Correlation means two things move together; causation means one causes the other.
+
+Q: Explain the bias-variance tradeoff
+A: Bias is error from wrong assumptions; variance is error from sensitivity to training data. Balance is key.
+
+Q: What is PCA (Principal Component Analysis)?
+A: PCA reduces dimensionality by finding principal components that capture maximum variance.
+
+Q: What is the difference between L1 and L2 regularization?
+A: L1 (Lasso) can shrink coefficients to zero (feature selection). L2 (Ridge) shrinks coefficients but not to zero.
+
+Q: What is Pandas?
+A: Pandas is a Python library for data manipulation. It provides DataFrames (like Excel sheets) to work with tabular data.
+
+Q: What is NumPy?
+A: NumPy is for numerical computing in Python. It provides arrays and mathematical functions.
+
+Q: What is Matplotlib?
+A: Matplotlib is for creating charts and graphs in Python (line plots, bar charts, histograms).
+
+Q: What is a confusion matrix?
+A: A table showing correct and incorrect predictions. Shows True Positive, False Positive, True Negative, False Negative.
+
+Q: What is cross-validation?
+A: Cross-validation is a technique to evaluate model performance by splitting data into training and validation sets multiple times.
+
+Q: What is the difference between precision and recall?
+A: Precision is accuracy of positive predictions; recall is ability to find all positive samples.
+
+Q: What is the ROC curve?
+A: ROC curve plots True Positive Rate vs False Positive Rate at different thresholds. AUC measures overall performance.
+
+Q: What is feature engineering?
+A: Feature engineering is creating new features from existing data to improve model performance.
+
+## AI/ML
+
+Q: Difference between AI, ML, and Deep Learning?
+A: AI is the broad field, ML is a subset of AI, Deep Learning is a subset of ML using neural networks.
+
+Q: What is a neural network?
+A: A neural network is a series of algorithms that recognizes patterns through a process like the human brain.
+
+Q: What is transfer learning?
+A: Transfer learning uses a pre-trained model on a new problem. It saves time and data.
+
+Q: What is the difference between CNN and RNN?
+A: CNN is for spatial data (images), RNN is for sequential data (text, time series).
+
+Q: What is TensorFlow?
+A: TensorFlow is Google's library for machine learning and deep learning. Used for building and training neural networks.
+
+Q: What is PyTorch?
+A: PyTorch is Facebook's deep learning library. It's popular for research because it's more flexible.
+
+Q: What is NLP (Natural Language Processing)?
+A: NLP helps computers understand human language. Used in chatbots, sentiment analysis, translation.
+
+Q: What is Computer Vision?
+A: Computer Vision helps computers understand images and videos. Used in face recognition, self-driving cars.
+
+Q: What is the activation function? Name types
+A: Activation functions introduce non-linearity. Types: ReLU, Sigmoid, Tanh, Softmax.
+
+Q: What is backpropagation?
+A: Backpropagation calculates gradients of loss function with respect to weights to update them during training.
+
+Q: What is gradient descent?
+A: Gradient descent is an optimization algorithm that minimizes loss by moving in direction of negative gradient.
+
+Q: What is the difference between batch and stochastic gradient descent?
+A: Batch uses entire dataset, stochastic uses one sample, mini-batch uses small batch of samples.
+
+Q: What is dropout?
+A: Dropout is a regularization technique that randomly drops neurons during training to prevent overfitting.
+
+Q: What is the vanishing gradient problem?
+A: Gradients become very small in deep networks, preventing weight updates. Solved with ReLU, batch normalization.
+
+Q: What are transformers?
+A: Transformers are neural network architectures using self-attention. Used in GPT, BERT for NLP tasks.
+
+## Database/SQL
+
+Q: Difference between SQL and NoSQL?
+A: SQL uses structured schema, ACID compliance. NoSQL uses flexible schema, horizontal scaling.
+
+Q: Write a SQL query to find duplicate emails
+A: SELECT email, COUNT(*) FROM users GROUP BY email HAVING COUNT(*) > 1
+
+Q: What is a JOIN? Explain different types
+A: JOIN combines data from multiple tables. INNER JOIN returns matching rows, LEFT JOIN returns all left table rows.
+
+Q: What is indexing and when to use it?
+A: Indexes speed up queries. Use on columns used in WHERE, JOIN, ORDER BY. Too many indexes slow down writes.
+
+Q: What is normalization?
+A: Normalization organizes data to reduce redundancy. Normal forms: 1NF, 2NF, 3NF.
+
+Q: What is denormalization?
+A: Denormalization adds redundancy to improve read performance. Used in data warehouses.
+
+Q: What is ACID?
+A: Atomicity, Consistency, Isolation, Durability - properties ensuring reliable database transactions.
+
+Q: What is the difference between DELETE, TRUNCATE, and DROP?
+A: DELETE removes rows (can rollback), TRUNCATE removes all rows (faster), DROP removes entire table.
+
+Q: What is a primary key?
+A: Primary key uniquely identifies each row in a table. Cannot be NULL.
+
+Q: What is a foreign key?
+A: Foreign key links two tables. It references primary key of another table.
+
+Q: What is the difference between WHERE and HAVING?
+A: WHERE filters rows before grouping. HAVING filters after GROUP BY.
+
+Q: What is a subquery?
+A: A subquery is a query nested inside another query. Can be used in SELECT, FROM, WHERE clauses.
+
+Q: What is the difference between UNION and UNION ALL?
+A: UNION removes duplicates, UNION ALL keeps all rows. UNION ALL is faster.
+
+Q: What is database indexing?
+A: Indexing creates a data structure to speed up data retrieval. B-tree and hash are common types.
+
+Q: What is the difference between clustered and non-clustered index?
+A: Clustered index determines physical order of data (one per table). Non-clustered index has separate structure (many per table).
+
+## Cloud Computing
+
+Q: What is cloud computing?
+A: Cloud computing means using servers and services over the internet instead of owning physical hardware.
+
+Q: What is AWS EC2?
+A: EC2 provides virtual servers in the cloud. You can rent a computer to run your applications.
+
+Q: What is AWS S3?
+A: S3 is cloud storage for files. Used for storing images, videos, backups, website files.
+
+Q: What is Docker?
+A: Docker packages your app and its dependencies into a container that runs anywhere.
+
+Q: What is Kubernetes?
+A: Kubernetes manages multiple containers. It handles scaling, deployment, and keeping your app running.
+
+Q: What is CI/CD?
+A: CI/CD automates testing and deployment. When you push code, it automatically tests and deploys.
+
+Q: What is the difference between IaaS, PaaS, and SaaS?
+A: IaaS provides infrastructure, PaaS provides platform, SaaS provides software as a service.
+
+Q: What is the difference between scaling up and scaling out?
+A: Scaling up means bigger server (vertical). Scaling out means more servers (horizontal).
+
+Q: What is the difference between Docker and Kubernetes?
+A: Docker containers applications; Kubernetes orchestrates (manages) containers.
+
+Q: What is AWS Lambda?
+A: Lambda is serverless compute. You run code without provisioning servers, pay only for execution time.
+
+Q: What is AWS RDS?
+A: RDS is managed relational database service. Supports PostgreSQL, MySQL, Oracle, SQL Server.
+
+Q: What is AWS VPC?
+A: VPC (Virtual Private Cloud) is isolated network in AWS. You control IP ranges, subnets, routing.
+
+Q: What is CloudFront?
+A: CloudFront is AWS CDN (Content Delivery Network) that caches content at edge locations for faster delivery.
+
+Q: What is Terraform?
+A: Terraform creates cloud infrastructure using code (Infrastructure as Code). Supports multiple cloud providers.
+
+Q: What is the difference between public, private, and hybrid cloud?
+A: Public cloud is shared infrastructure, private is dedicated, hybrid combines both.
+
+## DevOps
+
+Q: What is DevOps?
+A: DevOps combines development and operations. It focuses on automation, monitoring, and faster software delivery.
+
+Q: What is Git?
+A: Git tracks code changes. It lets you save versions, work with teams, and undo mistakes.
+
+Q: What is Jenkins?
+A: Jenkins automates building and testing your code. It runs your tests every time you push code.
+
+Q: What is Terraform?
+A: Terraform creates cloud infrastructure using code. You write what servers you need, and Terraform creates them.
+
+Q: What is the difference between continuous delivery and continuous deployment?
+A: Continuous delivery auto-tests but needs manual approval to deploy. Continuous deployment auto-deploys after tests pass.
+
+Q: What is Ansible?
+A: Ansible automates configuration management and application deployment. It's agentless and uses YAML.
+
+Q: What is the difference between Git merge and rebase?
+A: Merge creates a merge commit; rebase rewrites commit history for cleaner linear history.
+
+Q: What is a CI/CD pipeline?
+A: A CI/CD pipeline automates building, testing, and deploying code changes through different stages.
+
+Q: What is monitoring in DevOps?
+A: Monitoring tracks system health, performance, and errors. Tools: Prometheus, Grafana, Datadog.
+
+Q: What is logging in DevOps?
+A: Logging records events and errors. Tools: ELK Stack (Elasticsearch, Logstash, Kibana).
+
+Q: What is Infrastructure as Code (IaC)?
+A: IaC manages infrastructure using configuration files instead of manual processes.
+
+Q: What is the difference between blue-green deployment and canary deployment?
+A: Blue-green switches traffic between two identical environments. Canary gradually rolls out to small percentage.
+
+Q: What is Kubernetes?
+A: Kubernetes orchestrates containers, handling deployment, scaling, and management.
+
+Q: What is Docker Compose?
+A: Docker Compose defines and runs multi-container Docker applications using a YAML file.
+
+Q: What is the difference between Git and GitHub?
+A: Git is version control system; GitHub is cloud platform for hosting Git repositories.

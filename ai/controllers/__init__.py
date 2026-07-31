@@ -1,0 +1,5 @@
+# controllers/__init__.py
+from controllers.auth_controller import AuthController
+from controllers.career_controller import CareerController
+from controllers.chat_controller import ChatController
+from controllers.wellness_controller import WellnessController

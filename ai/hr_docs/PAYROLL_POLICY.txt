@@ -1,0 +1,110 @@
+PAYROLL POLICY - LSIT 💰
+
+SALARY STRUCTURE:
+
+Pay Cycle:
+- Salary is processed between 5th and 7th of each month
+- If dates fall on weekend/holiday, salary is processed on next working day
+- Salary is credited directly to employee bank account
+
+Salary Components:
+| Component | Percentage |
+|-----------|-----------|
+| Basic Salary | 50% of total salary |
+| House Rent Allowance | 30% of basic salary |
+| Transport Allowance | 10% of basic salary |
+| Utilities Allowance | 5% of basic salary |
+| Medical Allowance | 5% of basic salary |
+
+DEDUCTIONS:
+| Deduction Type | Details |
+|----------------|---------|
+| Income Tax | As per government policy |
+| Provident Fund | 10% of basic salary |
+| Loan Installments | As per agreement |
+| Unpaid Leave | Deducted for leave without pay |
+| Late Check-in | Rs. 500 per late check-in (after 3 times in a month) |
+
+PROVIDENT FUND:
+- Employee: 10% of basic salary
+- Employer: 10% of basic salary
+- PF statement available quarterly
+
+ANNUAL INCREMENT:
+- Performance-based increment in July
+- Range: 5% to 15% based on performance
+- Confirmation increment: 5% after 6-month probation
+
+KEY INFORMATION:
+| Field | Details |
+|-------|--------|
+| Salary Date | 5th to 7th of each month |
+| Payment Method | Direct bank transfer |
+| Probation Period | 6 months |
+| PF Employee | 10% of basic salary |
+| PF Employer | 10% of basic salary |
+| Payroll Queries | accounts@lsituoe.edu.pk |
+| General Support | administration@lsituoe.edu.pk |
+
+FAQ:
+Q: When is salary paid?
+A: Salary is credited between 5th and 7th of each month to your bank account.
+
+Q: Where i check salary information?
+A:  you can check salary in payroll 
+
+
+Q: What if salary date is a holiday?
+A: Salary is processed on the next working day.
+
+Q: How is salary calculated?
+A: Basic Salary (50%) + House Rent (30%) + Transport (10%) + Utilities (5%) + Medical (5%).
+
+Q: What deductions are taken from salary?
+A: Income Tax, Provident Fund (10% of basic), loan installments, unpaid leave, and late check-in deductions.
+
+Q: What is late check-in deduction?
+A: After 3 late check-ins in a month, Rs. 500 is deducted for each additional late check-in.
+
+Q: What is Provident Fund?
+A: PF is a savings scheme. You pay 10% of basic salary, LSIT matches with 10%. Money is saved for retirement.
+
+Q: How can I check PF balance?
+A: PF statements are available quarterly. Contact accounts department.
+
+Q: When is annual increment given?
+A: Increments are given in July based on performance.
+
+Q: How much increment can I get?
+A: Increment is 5% to 15% based on your performance rating.
+
+Q: How do I get salary slip?
+A: Salary slip is sent by email monthly. You can also download from LSIT HR portal.
+
+Q: What if salary is not received?
+A: Contact accounts@lsituoe.edu.pk immediately.
+
+Q: How is unpaid leave deducted?
+A: (Monthly Basic Salary ÷ Working Days) × Number of unpaid leave days.
+
+Q: How do I update bank account?
+A: Submit new bank details to accounts department with proof.
+
+Q: Who to contact for payroll questions?
+A: Email accounts@lsituoe.edu.pk for all payroll queries.
+
+Q: What is probation period?
+A: Probation is 6 months. After completion, you get 5% confirmation increment.
+
+Q: Can I get salary advance?
+A: Yes, in emergency cases with manager approval. Contact accounts department.
+
+Q: How do I update tax information?
+A: Submit tax declaration form to accounts department by March 31st.
+
+Q: Where can I view salary history?
+A: Log into LSIT HR portal and go to Payroll History section.
+
+Q: Where I check salary history?
+A: Log into LSIT HR portal and go to Payroll History section.
+

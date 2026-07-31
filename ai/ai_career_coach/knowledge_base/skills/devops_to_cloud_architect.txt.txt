@@ -1,0 +1,52 @@
+CATEGORY: career_path
+TITLE: DevOps to Cloud Architect
+KEYWORDS: devops, cloud architect, aws, azure, gcp, infrastructure, sre, pakistan
+SKILLS_REQUIRED: AWS/Azure/GCP, Kubernetes, Terraform, Networking, Security, Python/Go
+SALARY_RANGE: Rs. 500,000 - Rs. 950,000 per month
+MARKET_DEMAND: Very High
+
+Evolution from DevOps Engineer to Cloud Architect:
+
+Phase 1: Advanced Cloud Skills (Months 1-4)
+- Master at least one cloud (AWS/Azure/GCP)
+- Get professional certifications
+- Understand multi-cloud strategies
+- Learn infrastructure as code deeply (Terraform)
+
+Phase 2: Architecture Design (Months 4-8)
+- Design highly available systems
+- Plan disaster recovery
+- Cost optimization strategies
+- Security architecture
+
+Phase 3: Automation & Scaling (Months 8-12)
+- Advanced Kubernetes (operators, custom resources)
+- Service mesh (Istio, Linkerd)
+- GitOps practices (ArgoCD, Flux)
+- Auto-scaling strategies
+
+Phase 4: Leadership (Months 12-18)
+- Define infrastructure strategy
+- Create migration roadmaps
+- Lead infrastructure initiatives
+- Mentor DevOps engineers
+
+Certification Path:
+1. AWS Solutions Architect Associate (Exam fee: ~Rs. 40,000)
+2. AWS Solutions Architect Professional (Exam fee: ~Rs. 60,000)
+3. CKA (Certified Kubernetes Administrator) (Exam fee: ~Rs. 45,000)
+4. HashiCorp Terraform Certification (Exam fee: ~Rs. 35,000)
+
+Salary Progression (Monthly PKR):
+- DevOps Engineer: Rs. 150,000 - Rs. 300,000
+- Senior DevOps: Rs. 300,000 - Rs. 480,000
+- Cloud Architect: Rs. 500,000 - Rs. 950,000
+- Principal Architect: Rs. 850,000 - Rs. 1,400,000
+
+Pakistani Companies with Strong DevOps:
+- Carecloud
+- Empower
+- NorthBay Solutions
+- IBM Pakistan
+- Systems Limited (Cloud Division)
+- Techlogix
