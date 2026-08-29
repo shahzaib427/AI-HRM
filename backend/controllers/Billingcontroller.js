@@ -1,10 +1,10 @@
 // controllers/billingController.js
 const Subscription = require('../models/Subscription');
 const Organization = require('../models/Organization');
-const paymentService = require('../services/paymentService');
-const mockStripeService = require('../services/mockStripeService');
+const paymentService = require('../services/Paymentservice');
+const mockStripeService = require('../services/Mockstripeservice');
 const { isStripeConfigured } = require('../config/stripe');
-const { provisionOrganizationFromGuestCheckout } = require('../services/subscriptionOnboardingService');
+const { provisionOrganizationFromGuestCheckout } = require('../services/Subscriptiononboardingservice');
 
 // Plans are keyed by employee-count tier. Amounts are in cents.
 // Rename ids/prices freely — just keep planId consistent with whatever the
