@@ -8,21 +8,72 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 logger = logging.getLogger(__name__)
 
 # ----------------------------
-# Import AI modules safely
+# Lazy-load AI modules
 # ----------------------------
-try:
-    from boat.boat_module import predict as boat_predict
-except ImportError:
-    logger.warning("boat module not found — HR chat disabled")
-    boat_predict = None
+# IMPORTANT: Do NOT import boat.boat_module or ai_career_coach_module at
+# module level. boat_module loads torch + SentenceTransformer + T5 models
+# and builds embeddings on import — that takes 30-50+ seconds on Render's
+# free tier and will block gunicorn's worker from binding the port in time,
+# causing "No open HTTP ports detected" during deploy.
+#
+# Instead, each module is imported the first time it's actually needed
+# (i.e. the first HR chat / career chat request), then cached in these
+# module-level variables so every request after that is fast.
 
-try:
-    from ai_career_coach.ai_career_coach_module import predict as ai_career_predict
-except ImportError:
-    logger.warning("ai_career_coach module not found — career features disabled")
-    ai_career_predict = None
+_boat_predict = None        # None = not attempted yet, False = failed/unavailable, callable = loaded
+_ai_career_predict = None
+_ai_productivity_predict = None
 
 
+def _get_boat_predict():
+    global _boat_predict
+    if _boat_predict is None:
+        try:
+            logger.info("Lazy-loading HR boat module...")
+            from boat.boat_module import predict as boat_predict
+            _boat_predict = boat_predict
+            logger.info("HR boat module loaded successfully")
+        except ImportError:
+            logger.warning("boat module not found — HR chat disabled")
+            _boat_predict = False
+        except Exception as e:
+            logger.exception(f"Failed to load boat module: {e}")
+            _boat_predict = False
+    return _boat_predict or None
+
+
+def _get_ai_career_predict():
+    global _ai_career_predict
+    if _ai_career_predict is None:
+        try:
+            logger.info("Lazy-loading AI career coach module...")
+            from ai_career_coach.ai_career_coach_module import predict as ai_career_predict
+            _ai_career_predict = ai_career_predict
+            logger.info("AI career coach module loaded successfully")
+        except ImportError:
+            logger.warning("ai_career_coach module not found — career features disabled")
+            _ai_career_predict = False
+        except Exception as e:
+            logger.exception(f"Failed to load ai_career_coach module: {e}")
+            _ai_career_predict = False
+    return _ai_career_predict or None
+
+
+def _get_ai_productivity_predict():
+    global _ai_productivity_predict
+    if _ai_productivity_predict is None:
+        try:
+            logger.info("Lazy-loading AI productivity module...")
+            from ai_productivity.ai_productivity_module import predict as ai_productivity_predict
+            _ai_productivity_predict = ai_productivity_predict
+            logger.info("AI productivity module loaded successfully")
+        except ImportError:
+            logger.warning("ai_productivity module not found — productivity AI disabled")
+            _ai_productivity_predict = False
+        except Exception as e:
+            logger.exception(f"Failed to load ai_productivity module: {e}")
+            _ai_productivity_predict = False
+    return _ai_productivity_predict or None
 
 
 class AIService:
@@ -30,12 +81,14 @@ class AIService:
     # ========================= CAREER METHODS =========================
     @staticmethod
     def get_career_recommendations(user_id, profile):
+        ai_career_predict = _get_ai_career_predict()
         if not ai_career_predict:
             return {'status': 'error', 'message': 'Career module unavailable'}
         return ai_career_predict({'action': 'get_recommendations', 'user_id': user_id, 'profile': profile})
 
     @staticmethod
     def analyze_skill_gap(target_role, current_skills, profile):
+        ai_career_predict = _get_ai_career_predict()
         if not ai_career_predict:
             return {'status': 'error', 'message': 'Career module unavailable'}
         return ai_career_predict({'action': 'analyze_skill_gap', 'target_role': target_role,
@@ -43,42 +96,49 @@ class AIService:
 
     @staticmethod
     def get_market_insights(role):
+        ai_career_predict = _get_ai_career_predict()
         if not ai_career_predict:
             return {'status': 'error', 'message': 'Career module unavailable'}
         return ai_career_predict({'action': 'get_market_insights', 'role': role, 'country': 'Pakistan'})
 
     @staticmethod
     def get_job_alerts(skills, location):
+        ai_career_predict = _get_ai_career_predict()
         if not ai_career_predict:
             return {'status': 'error', 'message': 'Career module unavailable'}
         return ai_career_predict({'action': 'get_job_alerts', 'skills': skills, 'location': location})
 
     @staticmethod
     def get_scholarships(education_level):
+        ai_career_predict = _get_ai_career_predict()
         if not ai_career_predict:
             return {'status': 'error', 'message': 'Career module unavailable'}
         return ai_career_predict({'action': 'get_scholarships', 'education_level': education_level})
 
     @staticmethod
     def get_resume_tips():
+        ai_career_predict = _get_ai_career_predict()
         if not ai_career_predict:
             return {'status': 'error', 'message': 'Career module unavailable'}
         return ai_career_predict({'action': 'get_resume_tips'})
 
     @staticmethod
     def get_interview_tips():
+        ai_career_predict = _get_ai_career_predict()
         if not ai_career_predict:
             return {'status': 'error', 'message': 'Career module unavailable'}
         return ai_career_predict({'action': 'get_interview_tips'})
 
     @staticmethod
     def get_freelancing_guide():
+        ai_career_predict = _get_ai_career_predict()
         if not ai_career_predict:
             return {'status': 'error', 'message': 'Career module unavailable'}
         return ai_career_predict({'action': 'get_freelancing_guide'})
 
     @staticmethod
     def chat_career(message, user_name, user_id, profile):
+        ai_career_predict = _get_ai_career_predict()
         if not ai_career_predict:
             return {'status': 'error', 'message': 'Career module unavailable'}
         return ai_career_predict({
@@ -91,18 +151,21 @@ class AIService:
 
     @staticmethod
     def get_interview_questions(domain, limit):
+        ai_career_predict = _get_ai_career_predict()
         if not ai_career_predict:
             return {'status': 'error', 'message': 'Career module unavailable'}
         return ai_career_predict({'action': 'get_interview_questions', 'domain': domain, 'limit': limit})
 
     @staticmethod
     def get_in_demand_skills():
+        ai_career_predict = _get_ai_career_predict()
         if not ai_career_predict:
             return {'status': 'error', 'message': 'Career module unavailable'}
         return ai_career_predict({'action': 'get_in_demand_skills'})
 
     @staticmethod
     def get_training_institutes():
+        ai_career_predict = _get_ai_career_predict()
         if not ai_career_predict:
             return {'status': 'error', 'message': 'Career module unavailable'}
         return ai_career_predict({'action': 'get_training_institutes'})
@@ -110,11 +173,14 @@ class AIService:
     # ========================= HR ASSISTANT =========================
     @staticmethod
     def chat_hr(message):
+        boat_predict = _get_boat_predict()
         if not boat_predict:
             return {'status': 'error', 'message': 'HR module unavailable'}
         return boat_predict({'action': 'ask', 'question': message})
 
-
+    # ========================= PRODUCTIVITY / WEEKLY INSIGHTS =========================
+    @staticmethod
+    def get_weekly_insights(sessions):
         """Weekly AI insights from real session data, with guaranteed fallback."""
         if not sessions:
             return {
@@ -127,6 +193,7 @@ class AIService:
             }
 
         # Try real AI module first
+        ai_productivity_predict = _get_ai_productivity_predict()
         if ai_productivity_predict:
             try:
                 result = ai_productivity_predict({
