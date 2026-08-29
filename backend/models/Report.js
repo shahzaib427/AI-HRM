@@ -8,7 +8,7 @@ const reportSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['Payroll', 'Attendance', 'Leaves', 'Recruitment', 'Performance', 'Training', 'Finance', 'System'],
+    enum: ['Payroll', 'Attendance', 'Leaves', 'Recruitment'],
     required: true
   },
   dateRange: {

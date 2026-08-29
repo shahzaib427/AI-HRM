@@ -17,13 +17,14 @@ router.get('/upcoming', leaveController.getUpcomingLeaves);
 router.post('/apply', leaveController.applyLeave);
 router.get('/my-leaves', leaveController.getMyLeaves);
 
-
-
 // Admin/HR routes - MUST COME BEFORE :id ROUTES
 router.get('/all', auth.authorize('admin', 'hr'), leaveController.getAllLeaves);
-// Add delete all routes - IMPORTANT: Place BEFORE :id route
+
+// Delete routes - IMPORTANT: Place BEFORE :id route
 router.delete('/delete-all', auth.authorize('admin', 'hr'), leaveController.deleteAllLeaves);
 router.delete('/cleanup', auth.authorize('admin', 'hr'), leaveController.cleanupOldLeaves);
+router.delete('/bulk/delete', auth.authorize('admin', 'hr'), leaveController.bulkDeleteLeaves);
+router.delete('/:id/permanent', auth.authorize('admin', 'hr'), leaveController.deleteLeave);
 
 // Manager routes
 router.get('/team/leaves', auth.authorize('manager', 'admin', 'hr'), leaveController.getTeamLeaves);
@@ -38,7 +39,7 @@ router
   .put(leaveController.checkLeaveAccess, leaveController.updateLeave)
   .delete(leaveController.checkLeaveAccess, leaveController.cancelLeave);
 
-  router.get('/export', auth.authorize('admin', 'hr'), leaveController.exportLeavesToCSV);
+router.get('/export', auth.authorize('admin', 'hr'), leaveController.exportLeavesToCSV);
 router.get('/export/monthly-report', auth.authorize('admin', 'hr'), leaveController.exportMonthlyReport);
 
 module.exports = router;

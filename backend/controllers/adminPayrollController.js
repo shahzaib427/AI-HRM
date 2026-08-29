@@ -2,8 +2,58 @@ const Payroll = require('../models/Payroll');
 const User = require('../models/User');
 const mongoose = require('mongoose');
 const { sendSalarySlipEmail } = require('../utils/emailService');
+const sendEmail = require('../utils/emailService');
 const PDFDocument = require('pdfkit');
 const NotificationService = require('../services/notificationService');
+
+// ======================= HELPER: PAYROLL-ELIGIBLE ROLES =======================
+// There are only three real dashboards: admin, hr, employee. 'manager' and
+// 'team-lead' are just employee-dashboard position labels, not separate
+// access levels, so they're still payroll-eligible. Only 'admin' is excluded.
+const PAYROLL_EXCLUDED_ROLES = ['admin'];
+const PAYROLL_ELIGIBLE_ROLES = ['employee', 'hr', 'manager', 'team-lead'];
+
+const isPayrollEligible = (employee) => !PAYROLL_EXCLUDED_ROLES.includes(employee.role);
+
+// ======================= HELPER: VALIDATE PAYROLL PERIOD =======================
+// Payroll can only be generated starting the month/year the employee actually
+// joined — never for months before they were part of the company.
+const MONTH_INDEX = {
+  January: 0, February: 1, March: 2, April: 3, May: 4, June: 5,
+  July: 6, August: 7, September: 8, October: 9, November: 10, December: 11
+};
+
+const getJoinDate = (employee) =>
+  employee.joiningDate || employee.dateOfJoining || employee.hireDate || employee.createdAt;
+
+const isPeriodBeforeJoining = (employee, month, year) => {
+  const joinDate = getJoinDate(employee);
+  if (!joinDate) return false; // no join date on record — don't block
+
+  const joinYear  = new Date(joinDate).getFullYear();
+  const joinMonth = new Date(joinDate).getMonth(); // 0-indexed
+
+  const reqYear  = parseInt(year);
+  const reqMonth = MONTH_INDEX[month];
+  if (reqMonth === undefined) return false; // unrecognized month string, skip
+
+  if (reqYear < joinYear) return true;
+  if (reqYear === joinYear && reqMonth < joinMonth) return true;
+  return false;
+};
+
+// Combined guard used right after fetching `employee`, before creating a payroll.
+// Returns an error string if the request should be rejected, otherwise null.
+const validatePayrollEligibility = (employee, month, year) => {
+  if (!isPayrollEligible(employee)) {
+    return `Payroll cannot be generated for ${employee.name} — role "${employee.role}" is not payroll-eligible (admin accounts do not receive payroll)`;
+  }
+  if (isPeriodBeforeJoining(employee, month, year)) {
+    const joinDate = getJoinDate(employee);
+    return `Cannot generate payroll for ${month} ${year} — ${employee.name} joined on ${new Date(joinDate).toLocaleDateString()}`;
+  }
+  return null;
+};
 
 // ======================= HELPER: GENERATE PDF BUFFER =======================
 const generatePayslipPDFBuffer = async (payroll, employee) => {
@@ -219,6 +269,11 @@ const generatePayroll = async (req, res) => {
     if (!employee)
       return res.status(404).json({ success: false, error: 'Employee not found' });
 
+    // ✅ GUARD: role must be employee/hr, and period must be on/after join date
+    const eligibilityError = validatePayrollEligibility(employee, month, year);
+    if (eligibilityError)
+      return res.status(400).json({ success: false, error: eligibilityError });
+
     const existing = await Payroll.findOne({ employeeId, month, year: parseInt(year) });
     if (existing)
       return res.status(400).json({ success: false, error: `Payroll already exists for ${employee.name} — ${month} ${year}` });
@@ -272,6 +327,29 @@ const generatePayroll = async (req, res) => {
       priority: 'medium'
     });
 
+    // ✅ SEND EMAIL to employee about generated payroll
+    if (employee.email) {
+      try {
+        const totalAmount = payroll.salary + payroll.fuelAllowance + payroll.medicalAllowance + payroll.specialAllowance + payroll.otherAllowance;
+        await sendEmail({
+          to: employee.email,
+          subject: `Payroll Generated - ${month} ${year}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
+              <p>Hi ${employee.name},</p>
+              <p>Your payroll for <strong>${month} ${year}</strong> has been generated and is currently <strong>Pending</strong> approval.</p>
+              <p>Gross amount: <strong>PKR ${totalAmount.toLocaleString()}</strong></p>
+              <p>You'll receive another email once the payment is processed.</p>
+              <p>Regards,<br/>HR Team</p>
+            </div>
+          `
+        });
+      } catch (emailErr) {
+        console.error('[ADMIN] Payroll generation email failed:', emailErr.message);
+        // Don't fail the whole request just because the email didn't send
+      }
+    }
+
     res.status(201).json({ 
       success: true, 
       message: `Payroll generated for ${employee.name} with notification`, 
@@ -299,6 +377,10 @@ const bulkGeneratePayroll = async (req, res) => {
       try {
         const employee = await User.findById(employeeId);
         if (!employee) { results.failed.push({ employeeId, error: 'Employee not found' }); continue; }
+
+        // ✅ GUARD: role must be employee/hr, and period must be on/after join date
+        const eligibilityError = validatePayrollEligibility(employee, month, year);
+        if (eligibilityError) { results.failed.push({ employeeId, error: eligibilityError }); continue; }
 
         const existing = await Payroll.findOne({ employeeId, month, year: parseInt(year) });
         if (existing) { results.failed.push({ employeeId, error: 'Payroll already exists' }); continue; }
@@ -348,6 +430,27 @@ const bulkGeneratePayroll = async (req, res) => {
           },
           priority: 'medium'
         });
+
+        // ✅ SEND EMAIL to each employee
+        if (employee.email) {
+          try {
+            const totalAmount = payroll.salary + payroll.fuelAllowance + payroll.medicalAllowance + payroll.specialAllowance + payroll.otherAllowance;
+            await sendEmail({
+              to: employee.email,
+              subject: `Payroll Generated - ${month} ${year}`,
+              html: `
+                <div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
+                  <p>Hi ${employee.name},</p>
+                  <p>Your payroll for <strong>${month} ${year}</strong> has been generated and is currently <strong>Pending</strong> approval.</p>
+                  <p>Gross amount: <strong>PKR ${totalAmount.toLocaleString()}</strong></p>
+                  <p>Regards,<br/>HR Team</p>
+                </div>
+              `
+            });
+          } catch (emailErr) {
+            console.error(`[ADMIN] Bulk payroll email failed for ${employee.email}:`, emailErr.message);
+          }
+        }
       } catch (err) {
         results.failed.push({ employeeId, error: err.message });
       }
@@ -374,6 +477,11 @@ const createManualPayroll = async (req, res) => {
 
     const employee = await User.findById(employeeId);
     if (!employee) return res.status(404).json({ success: false, error: 'Employee not found' });
+
+    // ✅ GUARD: role must be employee/hr, and period must be on/after join date
+    const eligibilityError = validatePayrollEligibility(employee, month, year);
+    if (eligibilityError)
+      return res.status(400).json({ success: false, error: eligibilityError });
 
     const existing = await Payroll.findOne({ employeeId, month, year: parseInt(year) });
     if (existing) return res.status(400).json({ success: false, error: 'Payroll already exists for this period' });
@@ -427,6 +535,27 @@ const createManualPayroll = async (req, res) => {
       priority: 'medium'
     });
 
+    // ✅ SEND EMAIL to employee
+    if (employee.email) {
+      try {
+        const totalAmount = payroll.salary + payroll.fuelAllowance + payroll.medicalAllowance + payroll.specialAllowance + payroll.otherAllowance;
+        await sendEmail({
+          to: employee.email,
+          subject: `Payroll Created - ${month} ${year}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
+              <p>Hi ${employee.name},</p>
+              <p>A manual payroll record has been created for <strong>${month} ${year}</strong>.</p>
+              <p>Gross amount: <strong>PKR ${totalAmount.toLocaleString()}</strong></p>
+              <p>Regards,<br/>HR Team</p>
+            </div>
+          `
+        });
+      } catch (emailErr) {
+        console.error('[ADMIN] Manual payroll email failed:', emailErr.message);
+      }
+    }
+
     res.status(201).json({ 
       success: true, 
       message: `Manual payroll created for ${employee.name} with notification`, 
@@ -446,6 +575,19 @@ const updatePayrollStatus = async (req, res) => {
 
     const originalPayroll = await Payroll.findById(id);
     if (!originalPayroll) return res.status(404).json({ success: false, error: 'Payroll not found' });
+
+    // ✅ GUARD: don't let a payout go through for a non-eligible role (e.g. if
+    // the underlying employee's role was changed to admin after this payroll
+    // record was created).
+    if (paymentStatus === 'Paid' && originalPayroll.employeeId) {
+      const payingEmployee = await User.findById(originalPayroll.employeeId);
+      if (payingEmployee && !isPayrollEligible(payingEmployee)) {
+        return res.status(400).json({
+          success: false,
+          error: `Cannot process payment — ${payingEmployee.name} has role "${payingEmployee.role}", which is not payroll-eligible`
+        });
+      }
+    }
 
     const updateData = {
       paymentStatus,
@@ -566,6 +708,16 @@ const processBulkPayment = async (req, res) => {
         const payroll = await Payroll.findById(payrollId);
         if (!payroll) { results.failed.push({ payrollId, error: 'Not found' }); continue; }
         if (payroll.paymentStatus === 'Paid') { results.failed.push({ payrollId, error: 'Already paid' }); continue; }
+
+        // ✅ GUARD: skip payout for non-eligible roles (defense in depth,
+        // in case the employee's role changed after payroll was generated).
+        if (payroll.employeeId) {
+          const payingEmployee = await User.findById(payroll.employeeId);
+          if (payingEmployee && !isPayrollEligible(payingEmployee)) {
+            results.failed.push({ payrollId, error: `${payingEmployee.name} has role "${payingEmployee.role}", not payroll-eligible` });
+            continue;
+          }
+        }
 
         payroll.paymentStatus = 'Paid';
         payroll.paymentDate   = new Date();
@@ -756,9 +908,11 @@ const getPayrollMonthsYears = async (req, res) => {
 
 const getEmployeesForPayroll = async (req, res) => {
   try {
+    // Only employees / HR are payroll-eligible — admins & superadmins are excluded
+    // so they never show up in the "generate payroll" employee picker.
     const employees = await User.find(
-      { isActive: true, role: { $in: ['employee', 'hr', 'manager'] } },
-      '_id name employeeId email department position salary fuelAllowance medicalAllowance specialAllowance otherAllowance profilePicture phone presentAddress bankName bankAccountNumber bankAccountTitle'
+      { isActive: true, role: { $in: PAYROLL_ELIGIBLE_ROLES } },
+      '_id name employeeId role email department position salary fuelAllowance medicalAllowance specialAllowance otherAllowance profilePicture phone presentAddress bankName bankAccountNumber bankAccountTitle joiningDate dateOfJoining createdAt'
     ).sort({ name: 1 });
 
     res.json({ success: true, data: employees });
@@ -770,8 +924,28 @@ const getEmployeesForPayroll = async (req, res) => {
 
 const updatePayroll = async (req, res) => {
   try {
+    const existingPayroll = await Payroll.findById(req.params.id);
+    if (!existingPayroll) return res.status(404).json({ success: false, error: 'Payroll not found' });
+
+    // ✅ GUARD: if the edit is moving this record onto a different employee
+    // and/or a different month/year, re-validate against that employee's
+    // role and join date so this route can't be used to bypass the checks
+    // enforced at creation time.
+    const targetEmployeeId = req.body.employeeId || existingPayroll.employeeId;
+    const targetMonth      = req.body.month      || existingPayroll.month;
+    const targetYear       = req.body.year       || existingPayroll.year;
+
+    if (targetEmployeeId) {
+      const employee = await User.findById(targetEmployeeId);
+      if (!employee)
+        return res.status(404).json({ success: false, error: 'Employee not found' });
+
+      const eligibilityError = validatePayrollEligibility(employee, targetMonth, targetYear);
+      if (eligibilityError)
+        return res.status(400).json({ success: false, error: eligibilityError });
+    }
+
     const payroll = await Payroll.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!payroll) return res.status(404).json({ success: false, error: 'Payroll not found' });
     res.json({ success: true, message: 'Payroll updated successfully', data: payroll });
   } catch (error) {
     console.error('[ADMIN] updatePayroll error:', error);

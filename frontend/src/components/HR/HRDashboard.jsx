@@ -138,7 +138,9 @@ const MetricBar = ({ metric }) => (
     <div className="flex justify-between items-center mb-1">
       <span className="text-sm text-gray-700">{metric.label}</span>
       <span className="text-sm font-semibold text-gray-900">
-        {metric.label === 'Time to Hire' ? `${metric.value} days` : `${metric.value}%`}
+        {metric.label === 'Time to Hire' ? `${metric.value} days` :
+         metric.label === 'Avg Applicants/Job' ? metric.value :
+         `${metric.value}%`}
       </span>
     </div>
     <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
@@ -162,8 +164,7 @@ const HRDashboard = () => {
     openPositions: 0,
     pendingLeave: 0,
     newHires: 0,
-    turnoverRate: 0,
-    trainingProgress: 0
+    turnoverRate: 0
   });
 
   const [recentActivity, setRecentActivity] = useState([]);
@@ -189,7 +190,6 @@ const HRDashboard = () => {
           axiosInstance.get('/hr/dashboard/metrics')
         ]);
 
-        // Check for 401
         const unauthorized = results.find(
           r => r.status === 'rejected' && r.reason?.response?.status === 401
         );
@@ -199,7 +199,6 @@ const HRDashboard = () => {
           return;
         }
 
-        // Check for 403
         const forbidden = results.find(
           r => r.status === 'rejected' && r.reason?.response?.status === 403
         );
@@ -209,27 +208,22 @@ const HRDashboard = () => {
           return;
         }
 
-        // Stats
         if (results[0].status === 'fulfilled' && results[0].value?.data?.success) {
           setStats(results[0].value.data.data);
         }
 
-        // Recent Activity
         if (results[1].status === 'fulfilled' && results[1].value.data.success) {
           setRecentActivity(results[1].value.data.data || []);
         }
 
-        // Pending Approvals
         if (results[2].status === 'fulfilled' && results[2].value.data.success) {
           setPendingApprovals(results[2].value.data.data || []);
         }
 
-        // Recruitment Data
         if (results[3].status === 'fulfilled' && results[3].value.data.success) {
           setRecruitmentData(results[3].value.data.data || []);
         }
 
-        // Metrics
         if (results[4].status === 'fulfilled' && results[4].value.data.success) {
           setTeamMetrics(results[4].value.data.data || []);
         }
@@ -245,17 +239,14 @@ const HRDashboard = () => {
     loadDashboardData();
   }, []);
 
-  // Navigation handlers
   const handleEmployeeManagement = () => navigate('/hr/employees');
   const handleProcessPayroll = () => navigate('/hr/payroll');
   const handleRecruitment = () => navigate('/hr/recruitment');
   const handlePerformanceReviews = () => navigate('/hr/performance');
 
-  // Display helpers
   const displayedActivity = showAllActivity ? recentActivity : recentActivity.slice(0, 4);
   const displayedApprovals = showAllApprovals ? pendingApprovals : pendingApprovals.slice(0, 3);
 
-  // Loading state
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -267,7 +258,6 @@ const HRDashboard = () => {
     );
   }
 
-  // Error state
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
@@ -309,8 +299,8 @@ const HRDashboard = () => {
 
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
 
-        {/* KPI Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+        {/* KPI Cards — Training Progress removed (no Training model to back it) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           <KpiCard 
             icon={FaUsers} 
             label="Total Employees" 
@@ -331,13 +321,6 @@ const HRDashboard = () => {
             value={stats.pendingLeave} 
             sub="Awaiting approval"
             iconBg="bg-amber-500" 
-          />
-          <KpiCard 
-            icon={FaChartLine} 
-            label="Training Progress" 
-            value={`${stats.trainingProgress}%`} 
-            sub="Completion rate"
-            iconBg="bg-violet-500" 
           />
         </div>
 

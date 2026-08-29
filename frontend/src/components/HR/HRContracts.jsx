@@ -6,7 +6,7 @@ import {
   FaCalendarAlt, FaMoneyBill, FaUserTie, FaCheckCircle,
   FaTimesCircle, FaClock, FaBuilding, FaSpinner, FaTimes,
   FaBriefcase, FaBan, FaPrint, FaChevronLeft, FaChevronRight,
-  FaEnvelope, FaPhone, FaUsers, FaChartLine
+  FaEnvelope, FaPhone, FaUsers, FaChartLine, FaIdBadge
 } from 'react-icons/fa';
 import { format } from 'date-fns';
 
@@ -81,6 +81,7 @@ const HRContracts = () => {
   });
   const [formData, setFormData] = useState({
     employeeId: '',
+    employeeCode: '',
     employeeName: '',
     position: '',
     department: '',
@@ -163,6 +164,9 @@ const HRContracts = () => {
       setFormData({
         ...formData,
         employeeId,
+        // Human-readable code (e.g. EMP123456789) so contracts stay
+        // disambiguated even when two employees share the same name.
+        employeeCode: employee.employeeId || '',
         employeeName: employee.name,
         position: employee.position,
         department: employee.department
@@ -292,6 +296,7 @@ const HRContracts = () => {
   const resetForm = () => {
     setFormData({
       employeeId: '',
+      employeeCode: '',
       employeeName: '',
       position: '',
       department: '',
@@ -357,7 +362,7 @@ const HRContracts = () => {
               <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
-                placeholder="Search by employee or contract number..."
+                placeholder="Search by employee, ID, or contract number..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all bg-white"
@@ -410,6 +415,11 @@ const HRContracts = () => {
                   <div className="flex-1">
                     <div className="flex items-center gap-3 flex-wrap mb-2">
                       <h3 className="text-base font-semibold text-gray-900">{contract.employeeName}</h3>
+                      {contract.employeeCode && (
+                        <Badge variant="purple">
+                          <FaIdBadge className="mr-1 text-xs" /> {contract.employeeCode}
+                        </Badge>
+                      )}
                       {getStatusBadge(contract.status)}
                       <span className="text-xs text-gray-400 font-mono">{contract.contractNumber}</span>
                     </div>
@@ -428,7 +438,7 @@ const HRContracts = () => {
                       </div>
                       <div className="flex items-center gap-2 text-gray-600">
                         <FaMoneyBill className="text-emerald-500 w-4 h-4" />
-                        <span>{contract.currency} {contract.salary?.toLocaleString()}</span>
+                        <span>{contract.currency} {contract.salary?.toLocaleString()} <span className="text-gray-400">/ month</span></span>
                       </div>
                     </div>
                     {contract.endDate && (
@@ -521,9 +531,16 @@ const HRContracts = () => {
                 >
                   <option value="">Select Employee</option>
                   {employees.map(emp => (
-                    <option key={emp._id} value={emp._id}>{emp.name} - {emp.position}</option>
+                    <option key={emp._id} value={emp._id}>
+                      {emp.employeeId ? `${emp.employeeId} — ` : ''}{emp.name} ({emp.position}, {emp.department})
+                    </option>
                   ))}
                 </select>
+                {formData.employeeCode && (
+                  <p className="mt-1 text-xs text-gray-400 flex items-center gap-1">
+                    <FaIdBadge className="text-gray-300" /> Employee ID: {formData.employeeCode}
+                  </p>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -540,14 +557,19 @@ const HRContracts = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Salary</label>
-                  <input
-                    type="number"
-                    value={formData.salary}
-                    onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    required
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Salary (per month)</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={formData.salary}
+                      onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
+                      className="w-full px-3 py-2 pr-20 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      required
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">
+                      / month
+                    </span>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
@@ -618,6 +640,10 @@ const HRContracts = () => {
                   <p className="text-sm font-semibold text-gray-900">{selectedContract.employeeName}</p>
                 </div>
                 <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500">Employee ID</p>
+                  <p className="text-sm font-semibold text-gray-900 font-mono">{selectedContract.employeeCode || 'N/A'}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
                   <p className="text-xs text-gray-500">Position</p>
                   <p className="text-sm font-semibold text-gray-900">{selectedContract.position}</p>
                 </div>
@@ -631,7 +657,7 @@ const HRContracts = () => {
                 </div>
                 <div className="bg-gray-50 rounded-lg p-3">
                   <p className="text-xs text-gray-500">Salary</p>
-                  <p className="text-sm font-semibold text-gray-900">{selectedContract.currency} {selectedContract.salary?.toLocaleString()}</p>
+                  <p className="text-sm font-semibold text-gray-900">{selectedContract.currency} {selectedContract.salary?.toLocaleString()} <span className="text-xs font-normal text-gray-400">/ month</span></p>
                 </div>
                 <div className="bg-gray-50 rounded-lg p-3">
                   <p className="text-xs text-gray-500">Department</p>
@@ -725,14 +751,19 @@ const HRContracts = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">New Salary (Optional)</label>
-                <input
-                  type="number"
-                  value={renewData.newSalary}
-                  onChange={(e) => setRenewData({ ...renewData, newSalary: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Leave empty to keep current"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">New Salary per month (Optional)</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={renewData.newSalary}
+                    onChange={(e) => setRenewData({ ...renewData, newSalary: e.target.value })}
+                    className="w-full px-3 py-2 pr-20 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Leave empty to keep current"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">
+                    / month
+                  </span>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Renewal</label>

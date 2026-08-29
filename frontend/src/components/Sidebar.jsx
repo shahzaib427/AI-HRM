@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   FaChartLine, FaUsers, FaCalendarCheck, FaMoneyBillWave, 
@@ -15,6 +15,11 @@ const Sidebar = ({ isOpen, onMobileClose, isMobile }) => {
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
   const [isAIToolsOpen, setIsAIToolsOpen] = useState(true);
+  const [avatarError, setAvatarError] = useState(false);
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [currentUser?.profilePicture]);
 
   const handleLogout = () => {
     logout();
@@ -30,61 +35,74 @@ const Sidebar = ({ isOpen, onMobileClose, isMobile }) => {
     return currentUser.name.split(' ').map(n => n.charAt(0)).join('').toUpperCase().slice(0, 2);
   };
 
-  const getRoleGradient = () => {
-    switch (currentUser?.role) {
-      case 'admin': return 'from-[#3b1fa8] to-[#4a2bc8]';
-      case 'hr': return 'from-[#3b1fa8] to-[#4a2bc8]';
-      case 'employee': return 'from-[#3b1fa8] to-[#4a2bc8]';
-      default: return 'from-[#3b1fa8] to-[#4a2bc8]';
+  // Single flat accent color instead of a gradient — matches the SaaS
+  // dashboard's "avoid excessive gradients" rule while keeping the
+  // indigo/purple brand accent for active/selected states.
+  const accentBg = 'bg-indigo-600';
+
+  const getProfileImageUrl = () => {
+    if (!currentUser?.profilePicture) return null;
+    
+    if (currentUser.profilePicture.startsWith('http://') || 
+        currentUser.profilePicture.startsWith('https://')) {
+      return currentUser.profilePicture;
     }
+    
+    if (currentUser.profilePicture.startsWith('/')) {
+      return `http://localhost:5000${currentUser.profilePicture}`;
+    }
+    
+    return `http://localhost:5000/${currentUser.profilePicture}`;
   };
 
   const getNavItems = () => {
     const role = currentUser?.role;
     
     const baseItems = [
-      { path: `/${role}/dashboard`, label: 'Dashboard', icon: <FaTachometerAlt className="text-lg" /> }
+      { path: `/${role}/dashboard`, label: 'Dashboard', icon: <FaTachometerAlt className="text-[15px]" /> }
     ];
 
     const roleSpecificItems = {
       admin: [
-        { path: '/admin/employees',         label: 'Employees',           icon: <FaUsers className="text-lg" /> },
-        { path: '/admin/attendance',        label: 'Attendance',          icon: <FaCalendarCheck className="text-lg" /> },
-        { path: '/admin/register-face',     label: 'Register Face',       icon: <FaCamera className="text-lg" /> },
-        { path: '/admin/payroll',           label: 'Payroll',             icon: <FaMoneyBillWave className="text-lg" /> },
-        { path: '/admin/leave',             label: 'Leave Management',    icon: <FaClipboardList className="text-lg" /> },
-        { path: '/admin/contacts',          label: 'Contact Submissions', icon: <FaAddressBook className="text-lg" /> },
-        { path: '/admin/reports',           label: 'Reports',             icon: <FaChartBar className="text-lg" /> },
-        { path: '/admin/messages',          label: 'Messages',            icon: <FaEnvelope className="text-lg" /> },
+        { path: '/admin/employees',         label: 'Employees',           icon: <FaUsers className="text-[15px]" /> },
+        { path: '/admin/attendance',        label: 'Attendance',          icon: <FaCalendarCheck className="text-[15px]" /> },
+        { path: '/admin/register-face',     label: 'Register Face',       icon: <FaCamera className="text-[15px]" /> },
+        { path: '/admin/payroll',           label: 'Payroll',             icon: <FaMoneyBillWave className="text-[15px]" /> },
+        { path: '/admin/leave',             label: 'Leave Management',    icon: <FaClipboardList className="text-[15px]" /> },
+        { path: '/admin/contacts',          label: 'Contact Submissions', icon: <FaAddressBook className="text-[15px]" /> },
+        { path: '/admin/reports',           label: 'Reports',             icon: <FaChartBar className="text-[15px]" /> },
+        { path: '/admin/messages',          label: 'Messages',            icon: <FaEnvelope className="text-[15px]" /> },
       ],
       hr: [
-        { path: '/hr/recruitment',          label: 'Recruitment',         icon: <FaBriefcase className="text-lg" /> },
-        { path: '/hr/contracts',            label: 'Contracts',           icon: <FaFileSignature className="text-lg" /> },
-        { path: '/hr/onboarding',           label: 'Onboarding',          icon: <FaUserCheck className="text-lg" /> },
-        { path: '/hr/attendance',           label: 'My Attendance',       icon: <FaCalendarCheck className="text-lg" /> },
-        { path: '/hr/employee-attendance',  label: 'Employee Attendance', icon: <FaCalendarCheck className="text-lg" /> },
-        { path: '/hr/leave',                label: 'Leave',               icon: <FaClipboardList className="text-lg" /> },
-        { path: '/hr/payroll',              label: 'Payroll',             icon: <FaMoneyBillWave className="text-lg" /> },
-        { path: '/hr/contacts',             label: 'Contact Submissions', icon: <FaAddressBook className="text-lg" /> },
-        { path: '/hr/reports',              label: 'Reports',             icon: <FaChartBar className="text-lg" /> },
-        { path: '/hr/messages',             label: 'Messages',            icon: <FaEnvelope className="text-lg" /> },
+        { path: '/hr/recruitment',          label: 'Recruitment',         icon: <FaBriefcase className="text-[15px]" /> },
+        { path: '/hr/contracts',            label: 'Contracts',           icon: <FaFileSignature className="text-[15px]" /> },
+        { path: '/hr/onboarding',           label: 'Onboarding',          icon: <FaUserCheck className="text-[15px]" /> },
+        { path: '/hr/attendance',           label: 'My Attendance',       icon: <FaCalendarCheck className="text-[15px]" /> },
+        { path: '/hr/employee-attendance',  label: 'Employee Attendance', icon: <FaCalendarCheck className="text-[15px]" /> },
+        { path: '/hr/leave',                label: 'Leave',               icon: <FaClipboardList className="text-[15px]" /> },
+        { path: '/hr/payroll',              label: 'Payroll',             icon: <FaMoneyBillWave className="text-[15px]" /> },
+        { path: '/hr/contacts',             label: 'Contact Submissions', icon: <FaAddressBook className="text-[15px]" /> },
+        { path: '/hr/reports',              label: 'Reports',             icon: <FaChartBar className="text-[15px]" /> },
+        { path: '/hr/messages',             label: 'Messages',            icon: <FaEnvelope className="text-[15px]" /> },
       ],
       employee: [
-        { path: '/employee/attendance',     label: 'Attendance',          icon: <FaCalendarCheck className="text-lg" /> },
-        { path: '/employee/leave',          label: 'Leave',               icon: <FaClipboardList className="text-lg" /> },
-        { path: '/employee/payroll',        label: 'Payroll',             icon: <FaMoneyBillWave className="text-lg" /> },
-        { path: '/employee/messages',       label: 'Messages',            icon: <FaEnvelope className="text-lg" /> },
+        { path: '/employee/attendance',     label: 'Attendance',          icon: <FaCalendarCheck className="text-[15px]" /> },
+        { path: '/employee/leave',          label: 'Leave',               icon: <FaClipboardList className="text-[15px]" /> },
+        { path: '/employee/contracts',      label: 'My Contracts',        icon: <FaFileSignature className="text-[15px]" /> },
+        { path: '/employee/onboarding',     label: 'My Onboarding',       icon: <FaUserCheck className="text-[15px]" /> },
+        { path: '/employee/payroll',        label: 'Payroll',             icon: <FaMoneyBillWave className="text-[15px]" /> },
+        { path: '/employee/messages',       label: 'Messages',            icon: <FaEnvelope className="text-[15px]" /> },
       ],
     };
 
     const aiToolsItem = role === 'employee' ? {
       label: 'AI Tools',
-      icon: <FaBrain className="text-lg" />,
+      icon: <FaBrain className="text-[15px]" />,
       isDropdown: true,
       children: [
-        { path: '/employee/career-coach', label: 'Career Coach', icon: <FaUserGraduate className="text-sm" /> },
-        { path: '/employee/learning-hub', label: 'Learning Hub', icon: <FaGraduationCap className="text-sm" /> },
-        { path: '/employee/wellness',     label: 'Wellness',     icon: <FaHandHoldingHeart className="text-sm" /> },
+        { path: '/employee/career-coach', label: 'Career Coach', icon: <FaUserGraduate className="text-xs" /> },
+        { path: '/employee/learning-hub', label: 'Learning Hub', icon: <FaGraduationCap className="text-xs" /> },
+        { path: '/employee/wellness',     label: 'Wellness',     icon: <FaHandHoldingHeart className="text-xs" /> },
       ]
     } : null;
 
@@ -111,172 +129,166 @@ const Sidebar = ({ isOpen, onMobileClose, isMobile }) => {
 
   if (isMobile && !isOpen) return null;
 
-  // Profile picture render function (reused for both yellow and red areas)
-  const renderProfilePicture = (size = 'w-5 h-5', showBorder = false) => {
-    if (currentUser?.profilePicture) {
+  const renderProfilePicture = (size = 'w-5 h-5') => {
+    const imageUrl = getProfileImageUrl();
+    if (imageUrl && !avatarError) {
       return (
         <img 
-          src={currentUser.profilePicture} 
+          src={imageUrl} 
           alt="Profile" 
-          className={`${size} rounded-full object-cover ${showBorder ? 'border-2 border-white/30' : ''}`}
+          className={`${size} rounded-full object-cover`}
+          onError={() => setAvatarError(true)}
         />
       );
     } else {
       return (
-        <div className={`${size} rounded-full bg-gradient-to-br ${getRoleGradient()} flex items-center justify-center flex-shrink-0`}>
-          <span className="text-white font-bold text-xs">{getInitials()}</span>
+        <div className={`${size} rounded-full ${accentBg} flex items-center justify-center flex-shrink-0`}>
+          <span className="text-white font-semibold text-[10px]">{getInitials()}</span>
         </div>
       );
     }
   };
 
+  // Shared classNames for a nav row, active vs. inactive
+  const navRowClass = (active) => `
+    flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors duration-150 group
+    ${active
+      ? `${accentBg} text-white`
+      : 'text-slate-400 hover:bg-white/[0.06] hover:text-white'
+    }
+  `;
+
   return (
     <>
-      {/* Mobile Overlay */}
       {isMobile && isOpen && (
         <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-all duration-300"
+          className="fixed inset-0 bg-black/50 z-40 transition-opacity duration-200"
           onClick={onMobileClose}
         />
       )}
 
-      {/* Sidebar */}
       <aside 
         className={`
-          fixed left-0 top-0 h-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900
-          text-white transition-all duration-300 z-50 flex flex-col shadow-2xl
+          fixed left-0 top-0 h-full bg-[#0B1120]
+          text-white transition-transform duration-200 z-50 flex flex-col
+          border-r border-white/[0.06]
           ${isMobile ? (isOpen ? 'translate-x-0' : '-translate-x-full') : 'translate-x-0'}
           ${sidebarWidth}
         `}
       >
-        {/* Close Button for Mobile */}
         {isMobile && (
           <button
             onClick={onMobileClose}
-            className="absolute top-4 right-4 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-all duration-200 z-50"
+            className="absolute top-4 right-4 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors z-50"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         )}
 
-        {/* Logo Section */}
-        <div className="h-16 flex items-center px-5 border-b border-white/10">
-          <Link to={`/${currentUser?.role}/dashboard`} className="flex items-center space-x-3 group">
-            <div className={`w-8 h-8 bg-gradient-to-br ${getRoleGradient()} rounded-lg flex items-center justify-center shadow-lg transition-all duration-300 group-hover:scale-105`}>
-              <FaRocket className="text-sm" />
+        {/* Brand */}
+        <div className="h-16 flex items-center justify-between px-5 border-b border-white/[0.06]">
+          <Link to={`/${currentUser?.role}/dashboard`} className="flex items-center gap-2.5 min-w-0">
+            <div className={`w-8 h-8 ${accentBg} rounded-lg flex items-center justify-center flex-shrink-0`}>
+              <FaRocket className="text-xs" />
             </div>
-            <div>
-              <div className="font-bold text-sm bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
-                HRM System
-              </div>
-              <div className="text-xs text-white/50">Enterprise Portal</div>
+            <div className="min-w-0">
+              <div className="font-semibold text-sm text-white truncate leading-tight">HRM System</div>
+              <div className="text-[11px] text-slate-500 truncate">Enterprise Portal</div>
             </div>
+          </Link>
+
+          <Link
+            to={`/${currentUser?.role}/notifications`}
+            onClick={() => { if (isMobile && onMobileClose) onMobileClose(); }}
+            className="relative flex-shrink-0 p-2 rounded-lg text-slate-400 hover:bg-white/[0.06] hover:text-white transition-colors"
+            title="Notifications"
+          >
+            <FaBell className="text-sm" />
+            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
           </Link>
         </div>
 
-        {/* 🟡 YELLOW MARK - User Profile Section (with profile picture) */}
-        <div className="p-5 border-b border-white/10">
-          <div className="flex items-center space-x-3">
+        {/* User profile */}
+        <div className="px-5 py-4 border-b border-white/[0.06]">
+          <div className="flex items-center gap-3">
             <div className="flex-shrink-0">
-              {currentUser?.profilePicture ? (
+              {getProfileImageUrl() && !avatarError ? (
                 <img 
-                  src={currentUser.profilePicture} 
+                  src={getProfileImageUrl()} 
                   alt="Profile" 
-                  className="w-12 h-12 rounded-xl object-cover shadow-lg"
+                  className="w-10 h-10 rounded-full object-cover"
+                  onError={() => setAvatarError(true)}
                 />
               ) : (
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${getRoleGradient()} flex items-center justify-center shadow-lg flex-shrink-0 transition-all duration-300`}>
-                  <span className="text-white font-bold text-base">{getInitials()}</span>
+                <div className={`w-10 h-10 rounded-full ${accentBg} flex items-center justify-center flex-shrink-0`}>
+                  <span className="text-white font-semibold text-sm">{getInitials()}</span>
                 </div>
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm truncate text-white">{currentUser?.name || 'User'}</p>
-              <div className="flex items-center gap-1 mt-0.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-green-400"></div>
-                <p className="text-xs text-white/60 capitalize">{currentUser?.role}</p>
+              <p className="font-medium text-sm truncate text-white leading-tight">{currentUser?.name || 'User'}</p>
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                <p className="text-[11px] text-slate-400 capitalize truncate">{currentUser?.role}</p>
               </div>
-              <p className="text-xs text-white/40 truncate mt-0.5">{currentUser?.email}</p>
             </div>
           </div>
         </div>
 
-        {/* Navigation Items */}
-        <nav className="flex-1 overflow-y-auto py-4 px-3 sidebar-nav">
-          <div className="space-y-1">
-
-            {/* Base Items (Dashboard) */}
+        {/* Nav */}
+        <nav className="flex-1 overflow-y-auto py-3 px-3 sidebar-nav">
+          <div className="space-y-0.5">
             {baseItems.map((item, index) => (
               <Link
                 key={index}
                 to={item.path}
                 onClick={() => { if (isMobile && onMobileClose) onMobileClose(); }}
-                className={`
-                  flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group
-                  ${isActive(item.path) 
-                    ? `bg-gradient-to-r ${getRoleGradient()} text-white shadow-lg` 
-                    : 'text-white/70 hover:bg-white/10 hover:text-white'
-                  }
-                `}
+                className={navRowClass(isActive(item.path))}
               >
-                <span className="flex-shrink-0 transition-transform duration-200 group-hover:scale-110">{item.icon}</span>
-                <span className="text-sm font-medium truncate">{item.label}</span>
-                {isActive(item.path) && (
-                  <div className="ml-auto w-1 h-6 rounded-full bg-white"></div>
-                )}
+                <span className="flex-shrink-0">{item.icon}</span>
+                <span className="text-[13px] font-medium truncate">{item.label}</span>
               </Link>
             ))}
 
-            {/* Regular Items */}
             {regularItems.map((item, index) => (
               <Link
                 key={index}
                 to={item.path}
                 onClick={() => { if (isMobile && onMobileClose) onMobileClose(); }}
-                className={`
-                  flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group
-                  ${isActive(item.path) 
-                    ? `bg-gradient-to-r ${getRoleGradient()} text-white shadow-lg` 
-                    : 'text-white/70 hover:bg-white/10 hover:text-white'
-                  }
-                `}
+                className={navRowClass(isActive(item.path))}
               >
-                <span className="flex-shrink-0 transition-transform duration-200 group-hover:scale-110">{item.icon}</span>
-                <span className="text-sm font-medium truncate">{item.label}</span>
-                {isActive(item.path) && (
-                  <div className="ml-auto w-1 h-6 rounded-full bg-white"></div>
-                )}
+                <span className="flex-shrink-0">{item.icon}</span>
+                <span className="text-[13px] font-medium truncate">{item.label}</span>
               </Link>
             ))}
 
-            {/* AI Tools Dropdown (Employee only) */}
             {aiToolsItem && (
               <div>
                 <button
                   onClick={toggleAITools}
-                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all duration-200 text-white/70 hover:bg-white/10 hover:text-white group"
+                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors duration-150 text-slate-400 hover:bg-white/[0.06] hover:text-white group"
                 >
-                  <div className="flex items-center space-x-3">
-                    <span className="flex-shrink-0 transition-transform duration-200 group-hover:scale-110">{aiToolsItem.icon}</span>
-                    <span className="text-sm font-medium">{aiToolsItem.label}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="flex-shrink-0">{aiToolsItem.icon}</span>
+                    <span className="text-[13px] font-medium">{aiToolsItem.label}</span>
                   </div>
-                  <FaChevronRight className={`text-xs transition-transform duration-200 ${isAIToolsOpen ? 'rotate-90' : ''}`} />
+                  <FaChevronRight className={`text-[10px] transition-transform duration-150 ${isAIToolsOpen ? 'rotate-90' : ''}`} />
                 </button>
                 
                 {isAIToolsOpen && (
-                  <div className="ml-6 mt-1 space-y-1 border-l-2 border-white/10 pl-3">
+                  <div className="ml-4 mt-0.5 space-y-0.5 border-l border-white/[0.08] pl-3">
                     {aiToolsItem.children.map((child, childIndex) => (
                       <Link
                         key={childIndex}
                         to={child.path}
                         onClick={() => { if (isMobile && onMobileClose) onMobileClose(); }}
                         className={`
-                          flex items-center space-x-3 px-3 py-2 rounded-lg transition-all duration-200
+                          flex items-center gap-3 px-3 py-2 rounded-lg transition-colors duration-150
                           ${isActive(child.path) 
-                            ? `bg-gradient-to-r ${getRoleGradient()} text-white` 
-                            : 'text-white/60 hover:bg-white/10 hover:text-white'
+                            ? `${accentBg} text-white` 
+                            : 'text-slate-500 hover:bg-white/[0.06] hover:text-white'
                           }
                         `}
                       >
@@ -291,59 +303,33 @@ const Sidebar = ({ isOpen, onMobileClose, isMobile }) => {
           </div>
         </nav>
 
-        {/* 🔴 RED MARK - Bottom Items with Profile Picture */}
-        <div className="border-t border-white/10 px-3 py-3">
-          <div className="space-y-1">
-            
-            {/* Profile - Now shows profile picture like yellow area */}
+        {/* Footer: Profile, Notifications, Logout */}
+        <div className="border-t border-white/[0.06] px-3 py-3">
+          <div className="space-y-0.5">
             <Link
               to={`/${currentUser?.role}/profile`}
               onClick={() => { if (isMobile && onMobileClose) onMobileClose(); }}
-              className={`
-                flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group
-                ${isActive(`/${currentUser?.role}/profile`) 
-                  ? `bg-gradient-to-r ${getRoleGradient()} text-white shadow-lg` 
-                  : 'text-white/70 hover:bg-white/10 hover:text-white'
-                }
-              `}
+              className={navRowClass(isActive(`/${currentUser?.role}/profile`))}
             >
-              <span className="flex-shrink-0 transition-transform duration-200 group-hover:scale-110">
-                {renderProfilePicture('w-5 h-5', false)}
-              </span>
-              <span className="text-sm font-medium truncate">Profile</span>
-              {isActive(`/${currentUser?.role}/profile`) && (
-                <div className="ml-auto w-1 h-6 rounded-full bg-white"></div>
-              )}
+              <span className="flex-shrink-0">{renderProfilePicture('w-5 h-5')}</span>
+              <span className="text-[13px] font-medium truncate">Profile</span>
             </Link>
 
-            {/* Notifications */}
             <Link
               to={`/${currentUser?.role}/notifications`}
               onClick={() => { if (isMobile && onMobileClose) onMobileClose(); }}
-              className={`
-                flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group
-                ${isActive(`/${currentUser?.role}/notifications`) 
-                  ? `bg-gradient-to-r ${getRoleGradient()} text-white shadow-lg` 
-                  : 'text-white/70 hover:bg-white/10 hover:text-white'
-                }
-              `}
+              className={navRowClass(isActive(`/${currentUser?.role}/notifications`))}
             >
-              <span className="flex-shrink-0 transition-transform duration-200 group-hover:scale-110">
-                <FaBell className="text-lg" />
-              </span>
-              <span className="text-sm font-medium truncate">Notifications</span>
-              {isActive(`/${currentUser?.role}/notifications`) && (
-                <div className="ml-auto w-1 h-6 rounded-full bg-white"></div>
-              )}
+              <span className="flex-shrink-0"><FaBell className="text-[15px]" /></span>
+              <span className="text-[13px] font-medium truncate">Notifications</span>
             </Link>
 
-            {/* Logout */}
             <button
               onClick={handleLogout}
-              className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group text-red-400 hover:bg-red-500/10 hover:text-red-300"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors duration-150 text-red-400/80 hover:bg-red-500/10 hover:text-red-400"
             >
-              <FaSignOutAlt className="text-lg flex-shrink-0 transition-transform duration-200 group-hover:scale-110" />
-              <span className="text-sm font-medium">Logout</span>
+              <FaSignOutAlt className="text-[15px] flex-shrink-0" />
+              <span className="text-[13px] font-medium">Logout</span>
             </button>
           </div>
         </div>

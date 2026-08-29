@@ -1,5 +1,6 @@
 // contexts/AuthContext.jsx
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import axiosInstance from '../utils/axiosInstance';
 
 const AuthContext = createContext();
 
@@ -12,9 +13,8 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser]   = useState(null);
   const [loading, setLoading]           = useState(true);
-  const navigateRef                     = useRef(null); // holds the navigate fn from React Router
+  const navigateRef                     = useRef(null);
 
-  // Call this once from AppLayout to wire up React Router navigate
   const setNavigate = (fn) => { navigateRef.current = fn; };
 
   const validateUser = (user) =>
@@ -28,8 +28,56 @@ export const AuthProvider = ({ children }) => {
     setCurrentUser(null);
   };
 
+  const fetchUserData = async (user) => {
+    if (!user) return user;
+
+    try {
+      const role = user.role || 'employee';
+      const endpoints = [
+        `/${role}/profile`,
+        `/employees/profile/me`,
+        `/auth/profile`,
+        `/auth/me`
+      ];
+
+      let profileData = null;
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await axiosInstance.get(endpoint);
+          if (response.data.success) {
+            profileData = response.data.data;
+            break;
+          }
+        } catch (err) {
+          continue;
+        }
+      }
+
+      if (profileData) {
+        return {
+          ...user,
+          name: profileData.name || user.name,
+          email: profileData.email || user.email,
+          phone: profileData.phone || user.phone,
+          employeeId: profileData.employeeId || user.employeeId,
+          position: profileData.position || user.position,
+          department: profileData.department || user.department,
+          joiningDate: profileData.joiningDate || user.joiningDate,
+          employeeType: profileData.employeeType || user.employeeType,
+          isActive: profileData.isActive !== undefined ? profileData.isActive : user.isActive,
+          fatherName: profileData.fatherName || user.fatherName || '',
+          profilePicture: profileData.profilePicture || profileData.avatar || user.profilePicture || '',
+        };
+      }
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+    }
+
+    return user;
+  };
+
   const loadUser = async () => {
-    // 2-second splash delay — shows LoadingScreen on first app load
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
     try {
@@ -46,7 +94,9 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('user_id', String(userId));
       }
 
-      setCurrentUser(user);
+      const freshUser = await fetchUserData(user);
+      localStorage.setItem('user', JSON.stringify(freshUser));
+      setCurrentUser(freshUser);
     } catch (err) {
       console.error('Auth load error:', err);
       clearAuth();
@@ -57,21 +107,22 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => { loadUser(); }, []);
 
-  const login = (user, token) => {
+  const login = async (user, token) => {
     if (!user || !token || !validateUser(user)) return false;
+
+    const freshUser = await fetchUserData(user);
 
     localStorage.setItem('token',     token);
     localStorage.setItem('authToken', token);
-    localStorage.setItem('user',      JSON.stringify(user));
+    localStorage.setItem('user',      JSON.stringify(freshUser));
 
-    const userId = user._id || user.id;
+    const userId = freshUser._id || freshUser.id;
     if (userId) localStorage.setItem('user_id', String(userId));
 
-    setCurrentUser(user);
+    setCurrentUser(freshUser);
     return true;
   };
 
-  // ✅ Logout: clear state + navigate WITHOUT page reload
   const logout = () => {
     clearAuth();
     if (navigateRef.current) {
@@ -92,6 +143,21 @@ export const AuthProvider = ({ children }) => {
     return true;
   };
 
+  const refreshUserData = async () => {
+    if (!currentUser) return null;
+    try {
+      const freshUser = await fetchUserData(currentUser);
+      if (freshUser) {
+        localStorage.setItem('user', JSON.stringify(freshUser));
+        setCurrentUser(freshUser);
+        return freshUser;
+      }
+    } catch (error) {
+      console.error('Error refreshing user data:', error);
+    }
+    return currentUser;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -101,6 +167,7 @@ export const AuthProvider = ({ children }) => {
         loading,
         getToken,
         updateUser,
+        refreshUserData,
         setNavigate,
         isAuthenticated: !!currentUser,
       }}

@@ -38,6 +38,10 @@ import EmployeeSettings   from './components/employee/EmployeeSettings';
 import CareerCoach        from './components/employee/CareerCoach';
 import LearningHub        from './components/employee/LearningHub';
 import Wellness           from './components/employee/Wellness';
+// Employee's own contracts view (view + sign)
+import MyContracts        from './components/employee/MyContracts';
+// Employee's own onboarding checklist (view + self check-off tasks)
+import MyOnboarding       from './components/employee/MyOnboarding';
 
 // Admin Pages
 import AdminDashboard  from './components/Admin/AdminDashboard';
@@ -86,6 +90,16 @@ import MessageDetail      from './components/HR/MessageDetail';
 // Shared
 import SentMessages from './components/shared/SentMessages';
 import MessageStats from './components/shared/MessageStats';
+
+// Billing pages
+import BillingPlans from "./pages/billing/BillingPlans";
+import MockCheckoutPage from "./pages/billing/MockCheckoutPage";
+// ⚠️ FIX: these three existed as components but were never routed,
+// so /billing/subscribe, /billing/success, /billing/cancel all 404'd.
+import GuestSubscribe from "./pages/subscribe/Guestsubscribe";
+import SubscriptionSuccess from "./pages/subscribe/Subscriptionsuccess";
+import SubscriptionCancel from "./pages/subscribe/Subscriptioncancel";
+import SetPassword from "./pages/SetPassword";
 
 // ─── Generic 404 ──────────────────────────────────────────────────────────────
 const Placeholder404 = ({ title = 'Page not found' }) => (
@@ -171,8 +185,6 @@ const DashboardLayout = ({ children }) => {
 };
 
 // ─── NavigateInjector ─────────────────────────────────────────────────────────
-// Runs inside <Router> so it can call useNavigate(), then wires it into
-// AuthContext so logout() can navigate without a page reload.
 const NavigateInjector = () => {
   const navigate = useNavigate();
   const { setNavigate } = useAuth();
@@ -194,11 +206,19 @@ function AppLayout({ children }) {
     location.pathname.startsWith('/employee');
 
   const isLoginPage = location.pathname === '/login';
+  // ⚠️ FIX: include /subscription/* and /set-password (guest checkout
+  // success/cancel/password-setup) alongside /billing/* so all of them
+  // skip the dashboard/login redirect logic.
+  const isBillingRoute = location.pathname.startsWith('/billing') || location.pathname.startsWith('/mock-checkout') || location.pathname.startsWith('/subscription') || location.pathname.startsWith('/set-password');
 
-  // Show spinner on ALL routes for 2 seconds on first app load (splash effect).
-  // After logout, loading stays false so this never triggers again — no flash.
+  // ⚠️ FIX: Move loading check after all route determination but before redirects
   if (loading) {
     return <LoadingScreen />;
+  }
+
+  // ⚠️ FIX: Allow public access to billing pages even when logged in
+  if (isBillingRoute) {
+    return <>{children}</>;
   }
 
   // Already logged in → redirect away from /login
@@ -232,7 +252,6 @@ function App() {
   return (
     <AuthProvider>
       <Router>
-        {/* Wires React Router's navigate() into AuthContext — no page reload on logout */}
         <NavigateInjector />
 
         <AppLayout>
@@ -247,12 +266,33 @@ function App() {
             <Route path="/jobs"         element={<Careers />} />
             <Route path="/apply/:jobId" element={<Apply />} />
 
+            {/* ── BILLING (public — no login required to subscribe) ── */}
+            <Route path="/billing" element={<BillingPlans />} />
+            <Route path="/billing/subscribe" element={<GuestSubscribe />} />
+            <Route path="/billing/success" element={<SubscriptionSuccess />} />
+            <Route path="/billing/cancel" element={<SubscriptionCancel />} />
+            <Route path="/mock-checkout/:sessionId" element={<MockCheckoutPage />} />
+
+            {/* ── GUEST SUBSCRIPTION FLOW ──
+                 subscriptionController.guestCheckout redirects here (not
+                 /billing/success|cancel — that's the logged-in-admin path
+                 in billingController.createCheckoutSession instead). Both
+                 success/cancel pages are generic enough to reuse as-is. */}
+            <Route path="/subscription/success" element={<SubscriptionSuccess />} />
+            <Route path="/subscription/cancel" element={<SubscriptionCancel />} />
+            {/* ⚠️ FIX: subscriptionOnboardingService.js emails a link to
+                 /set-password?token=... (not /subscription/set-password),
+                 so the route has to match that exactly or it 404s. */}
+            <Route path="/set-password" element={<SetPassword />} />
+
             {/* ── EMPLOYEE ── */}
             <Route path="/employee" element={<Navigate to="/employee/dashboard" replace />} />
             <Route path="/employee/dashboard"        element={<ProtectedRoute allowedRoles={['employee']}><EmployeeDashboard /></ProtectedRoute>} />
             <Route path="/employee/attendance"       element={<ProtectedRoute allowedRoles={['employee']}><EmployeeOwnAttendance /></ProtectedRoute>} />
             <Route path="/employee/payroll"          element={<ProtectedRoute allowedRoles={['employee']}><EmployeePayroll /></ProtectedRoute>} />
             <Route path="/employee/leave"            element={<ProtectedRoute allowedRoles={['employee']}><EmployeeLeave /></ProtectedRoute>} />
+            <Route path="/employee/contracts"        element={<ProtectedRoute allowedRoles={['employee']}><MyContracts /></ProtectedRoute>} />
+            <Route path="/employee/onboarding"       element={<ProtectedRoute allowedRoles={['employee']}><MyOnboarding /></ProtectedRoute>} />
             <Route path="/employee/profile"          element={<ProtectedRoute allowedRoles={['employee']}><EmployeeProfile /></ProtectedRoute>} />
             <Route path="/employee/settings"         element={<ProtectedRoute allowedRoles={['employee']}><EmployeeSettings /></ProtectedRoute>} />
             <Route path="/employee/career-coach"     element={<ProtectedRoute allowedRoles={['employee']}><CareerCoach /></ProtectedRoute>} />
@@ -293,7 +333,6 @@ function App() {
             <Route path="/hr/contacts"         element={<ProtectedRoute allowedRoles={['hr']}><ContactManagement /></ProtectedRoute>} />
             <Route path="/hr/notifications"    element={<ProtectedRoute allowedRoles={['hr']}><HRNotifications /></ProtectedRoute>} />
             <Route path="/hr/attendance"       element={<ProtectedRoute allowedRoles={['hr']}><HRAttendance /></ProtectedRoute>} />
-            {/* HR Employee Attendance - View all employees' attendance */}
             <Route path="/hr/employee-attendance" element={<ProtectedRoute allowedRoles={['hr']}><HREmployeeAttendance /></ProtectedRoute>} />
             <Route path="/hr/recruitment"      element={<ProtectedRoute allowedRoles={['hr']}><HRRecruitment /></ProtectedRoute>} />
             <Route path="/hr/leave"            element={<ProtectedRoute allowedRoles={['hr']}><HRLeave /></ProtectedRoute>} />

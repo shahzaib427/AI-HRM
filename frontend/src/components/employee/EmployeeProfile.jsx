@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useRef } from 'react';
-import axiosInstance from "@/utils/axiosInstance.js";
-import { useAuth } from "@/contexts/AuthContext.jsx";
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axiosInstance from '../../utils/axiosInstance';
+import { useAuth } from '../../contexts/AuthContext';
 import { 
   FaUser, FaEnvelope, FaPhone, FaIdCard, FaCalendarAlt, FaVenusMars, 
   FaTint, FaHeart, FaBriefcase, FaBuilding, FaMapMarkerAlt, FaCity, 
@@ -10,7 +11,6 @@ import {
   FaUserShield, FaUserGraduate, FaUpload, FaSpinner
 } from 'react-icons/fa';
 
-// ── Badge Component ──
 const Badge = ({ children, variant = 'default' }) => {
   const variants = {
     default: 'bg-gray-100 text-gray-600',
@@ -29,7 +29,6 @@ const Badge = ({ children, variant = 'default' }) => {
   );
 };
 
-// ── KPI Card Component ──
 const KpiCard = ({ icon: Icon, label, value, sub, iconBg }) => (
   <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-all duration-200">
     <div className="flex items-center justify-between">
@@ -45,8 +44,7 @@ const KpiCard = ({ icon: Icon, label, value, sub, iconBg }) => (
   </div>
 );
 
-// ── Profile Picture Modal ──
-const ProfilePictureModal = ({ isOpen, onClose, currentPhoto, onSave }) => {
+const ProfilePictureModal = ({ isOpen, onClose, currentPhoto, onSave, onRefresh }) => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -105,6 +103,7 @@ const ProfilePictureModal = ({ isOpen, onClose, currentPhoto, onSave }) => {
 
       if (response.data.success) {
         onSave(response.data.data.profilePicture);
+        if (onRefresh) await onRefresh();
         onClose();
       } else {
         setError(response.data.message || 'Upload failed');
@@ -125,6 +124,7 @@ const ProfilePictureModal = ({ isOpen, onClose, currentPhoto, onSave }) => {
       const response = await axiosInstance.delete('/employees/profile-picture');
       if (response.data.success) {
         onSave(null);
+        if (onRefresh) await onRefresh();
         onClose();
       } else {
         setError(response.data.message || 'Failed to remove profile picture');
@@ -152,7 +152,6 @@ const ProfilePictureModal = ({ isOpen, onClose, currentPhoto, onSave }) => {
         </div>
 
         <div className="space-y-4">
-          {/* Preview */}
           <div className="flex justify-center">
             <div className="relative">
               <img
@@ -223,9 +222,8 @@ const ProfilePictureModal = ({ isOpen, onClose, currentPhoto, onSave }) => {
   );
 };
 
-// ── Main Component ──
 const EmployeeProfile = () => {
-  const { user } = useAuth();
+  const { currentUser, updateUser, refreshUserData } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -321,9 +319,9 @@ const EmployeeProfile = () => {
           }
         }
         
-        if (!profileData && user?._id) {
+        if (!profileData && currentUser?._id) {
           try {
-            const res = await axiosInstance.get(`/employees/${user._id}`);
+            const res = await axiosInstance.get(`/employees/${currentUser._id}`);
             if (res.data.success) {
               profileData = res.data.data;
             }
@@ -417,6 +415,11 @@ const EmployeeProfile = () => {
           
           const yearsOfService = calculateYearsOfService(profileData.joiningDate);
           setStats(prev => ({ ...prev, yearsOfService }));
+
+          const picture = profileData.profilePicture || profileData.avatar || '';
+          if (picture && picture !== currentUser?.profilePicture) {
+            updateUser({ profilePicture: picture });
+          }
           
         } else {
           setError('No profile data found.');
@@ -430,7 +433,7 @@ const EmployeeProfile = () => {
     };
 
     fetchProfile();
-  }, [user]);
+  }, [currentUser?._id]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -489,9 +492,8 @@ const EmployeeProfile = () => {
 
   const handleProfilePictureUpdate = (newPhotoUrl) => {
     setProfile(prev => ({ ...prev, profilePicture: newPhotoUrl }));
-    if (user) {
-      user.profilePicture = newPhotoUrl;
-    }
+    updateUser({ profilePicture: newPhotoUrl });
+    setTimeout(() => refreshUserData(), 500);
   };
 
   const handleSave = async () => {
@@ -533,6 +535,7 @@ const EmployeeProfile = () => {
       try {
         const res = await axiosInstance.put('/employees/profile/me', dataToSave);
         if (res.data.success) {
+          await refreshUserData();
           alert('✅ Profile updated successfully!');
         } else {
           throw new Error(res.data.error || 'Update failed');
@@ -540,6 +543,7 @@ const EmployeeProfile = () => {
       } catch (updateError) {
         const res = await axiosInstance.put('/employees/update/profile', dataToSave);
         if (res.data.success) {
+          await refreshUserData();
           alert('✅ Profile updated via alternative endpoint!');
         } else {
           throw new Error('Both update endpoints failed');
@@ -584,7 +588,6 @@ const EmployeeProfile = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* ── Page Header ── */}
       <div className="bg-white border-b border-gray-200 px-6 py-5 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-4 flex-wrap">
           <div>
@@ -615,7 +618,6 @@ const EmployeeProfile = () => {
       </div>
 
       <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
-        {/* ── KPI Cards ── */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <KpiCard 
             icon={FaUserGraduate} 
@@ -640,7 +642,6 @@ const EmployeeProfile = () => {
           />
         </div>
 
-        {/* ── Profile Header ── */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-all duration-300">
           <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
             <div className="relative group">
@@ -701,7 +702,6 @@ const EmployeeProfile = () => {
           </div>
         </div>
 
-        {/* ── Basic Information ── */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all duration-300">
           <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
             <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
@@ -767,7 +767,6 @@ const EmployeeProfile = () => {
           </div>
         </div>
 
-        {/* ── Employment Information ── */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all duration-300">
           <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
             <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
@@ -809,7 +808,6 @@ const EmployeeProfile = () => {
           </div>
         </div>
 
-        {/* ── Address Information ── */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all duration-300">
           <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
             <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
@@ -845,7 +843,6 @@ const EmployeeProfile = () => {
           </div>
         </div>
 
-        {/* ── Emergency Contacts ── */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all duration-300">
           <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
             <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
@@ -885,7 +882,6 @@ const EmployeeProfile = () => {
           </div>
         </div>
 
-        {/* ── Bank Information ── */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all duration-300">
           <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
             <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
@@ -913,7 +909,6 @@ const EmployeeProfile = () => {
           </div>
         </div>
 
-        {/* ── Qualifications & Experience ── */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all duration-300">
           <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
             <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
@@ -965,7 +960,6 @@ const EmployeeProfile = () => {
           </div>
         </div>
 
-        {/* ── Skills ── */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all duration-300">
           <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
             <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
@@ -999,7 +993,6 @@ const EmployeeProfile = () => {
           </div>
         </div>
 
-        {/* ── Save Button ── */}
         <div className="flex justify-center pt-4 pb-8">
           <button 
             onClick={handleSave} 
@@ -1021,12 +1014,12 @@ const EmployeeProfile = () => {
         </div>
       </div>
 
-      {/* ── Profile Picture Modal ── */}
       <ProfilePictureModal
         isOpen={showPictureModal}
         onClose={() => setShowPictureModal(false)}
         currentPhoto={profile.profilePicture}
         onSave={handleProfilePictureUpdate}
+        onRefresh={refreshUserData}
       />
     </div>
   );

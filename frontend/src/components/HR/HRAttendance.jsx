@@ -194,10 +194,9 @@ const AIAttendanceModal = ({ type, isOpen, onClose, onSuccess }) => {
     return () => stopCamera();
   }, [isOpen, getGPS, stopCamera]);
 
-  useEffect(() => {
-    if (isOpen && camStatus === 'idle') startCamera();
-    return () => stopCamera();
-  }, [isOpen, camStatus, startCamera, stopCamera]);
+useEffect(() => {
+  if (isOpen && camStatus === 'idle') startCamera();
+}, [isOpen, camStatus, startCamera]);
 
   if (!isOpen) return null;
 

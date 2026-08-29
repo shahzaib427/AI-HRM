@@ -82,17 +82,18 @@ const AdminPayroll = () => {
     fetchMonthsYears();
   }, [filters]);
 
-  useEffect(() => {
-    if (employeeSearch.trim() === '') {
-      setFilteredEmployees(employees);
-    } else {
-      const searchTerm = employeeSearch.toLowerCase();
-      setFilteredEmployees(employees.filter(emp =>
-        (emp.name || '').toLowerCase().includes(searchTerm) ||
-        (emp.department || '').toLowerCase().includes(searchTerm)
-      ));
-    }
-  }, [employeeSearch, employees]);
+useEffect(() => {
+  if (employeeSearch.trim() === '') {
+    setFilteredEmployees(employees);
+  } else {
+    const searchTerm = employeeSearch.toLowerCase();
+    setFilteredEmployees(employees.filter(emp =>
+      (emp.name || '').toLowerCase().includes(searchTerm) ||
+      (emp.department || '').toLowerCase().includes(searchTerm) ||
+      (emp.employeeId || '').toLowerCase().includes(searchTerm)
+    ));
+  }
+}, [employeeSearch, employees]);
 
   const calculateTotalSalary = (payroll) =>
     (payroll.salary || 0) + (payroll.fuelAllowance || 0) +
@@ -638,12 +639,14 @@ const AdminPayroll = () => {
                   <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                   <input type="text" value={employeeSearch} onChange={(e) => setEmployeeSearch(e.target.value)} className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="Search employees..." />
                 </div>
-                <select value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" required size="5">
-                  <option value="">-- Choose Employee --</option>
-                  {filteredEmployees.map(emp => (
-                    <option key={emp._id} value={emp._id}>{emp.name} - {emp.department}</option>
-                  ))}
-                </select>
+<select value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" required size="5">
+  <option value="">-- Choose Employee --</option>
+  {filteredEmployees.map(emp => (
+    <option key={emp._id} value={emp._id}>
+      {emp.name} ({emp.employeeId || 'No ID'}) — {emp.role?.toUpperCase() || 'N/A'} — {emp.department}
+    </option>
+  ))}
+</select>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

@@ -1,14 +1,201 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axiosInstance from '../../utils/axiosInstance';
+import { useAuth } from '../../contexts/AuthContext';
+import { 
+  FaCamera, FaTimes, FaExclamationTriangle, FaInfoCircle, FaUpload, 
+  FaSpinner, FaSave, FaUser, FaEnvelope, FaPhone, FaIdCard, 
+  FaCalendarAlt, FaVenusMars, FaTint, FaHeart, FaBriefcase, 
+  FaBuilding, FaMapMarkerAlt, FaCity, FaGlobe, FaDollarSign, 
+  FaUniversity, FaGraduationCap, FaFileAlt, FaPlus, FaTrash, 
+  FaCheckCircle, FaUsers, FaUserTie, FaUserShield, FaUserGraduate
+} from 'react-icons/fa';
+import { FiShield, FiLock, FiBell } from 'react-icons/fi';
+
+const AdminProfilePictureModal = ({ isOpen, onClose, currentPhoto, onSave, onRefresh }) => {
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedFile(null);
+      setPreview(currentPhoto);
+      setError('');
+    }
+  }, [isOpen, currentPhoto]);
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setError('Please select a valid image file (JPEG, PNG, GIF, or WEBP)');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError('File size must be less than 5MB');
+      return;
+    }
+
+    setSelectedFile(file);
+    setError('');
+
+    const reader = new FileReader();
+    reader.onloadend = () => setPreview(reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile) {
+      setError('Please select a file first');
+      return;
+    }
+
+    setUploading(true);
+    setError('');
+
+    const formData = new FormData();
+    formData.append('profilePicture', selectedFile);
+
+    try {
+      const response = await axiosInstance.post('/admin/upload-profile-picture', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      if (response.data.success) {
+        onSave(response.data.data.profilePicture);
+        if (onRefresh) await onRefresh();
+        onClose();
+      } else {
+        setError(response.data.message || 'Upload failed');
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      setError(err.response?.data?.message || 'Failed to upload profile picture');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    if (!window.confirm('Are you sure you want to remove your profile picture?')) return;
+
+    setUploading(true);
+    try {
+      const response = await axiosInstance.delete('/admin/profile-picture');
+      if (response.data.success) {
+        onSave(null);
+        if (onRefresh) await onRefresh();
+        onClose();
+      } else {
+        setError(response.data.message || 'Failed to remove profile picture');
+      }
+    } catch (err) {
+      console.error('Remove error:', err);
+      setError(err.response?.data?.message || 'Failed to remove profile picture');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <FaCamera className="text-indigo-600" /> Update Profile Picture
+          </h3>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg transition-colors">
+            <FaTimes className="text-gray-400 hover:text-gray-600" />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex justify-center">
+            <div className="relative">
+              <img
+                src={preview || `https://ui-avatars.com/api/?name=Admin&background=4f46e5&color=fff&size=200`}
+                alt="Profile Preview"
+                className="w-40 h-40 rounded-full object-cover border-4 border-indigo-100 shadow-lg"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute bottom-0 right-0 bg-indigo-600 text-white p-2.5 rounded-full hover:bg-indigo-700 transition-colors shadow-lg"
+              >
+                <FaCamera className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2">
+              <FaExclamationTriangle className="text-red-500 flex-shrink-0" />
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          )}
+
+          <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+            <p className="text-xs text-gray-500 flex items-center gap-1.5">
+              <FaInfoCircle className="text-gray-400" />
+              Supported formats: JPEG, PNG, GIF, WEBP. Max size: 5MB
+            </p>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={handleRemove}
+              disabled={uploading || !currentPhoto}
+              className="flex-1 py-2.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              Remove
+            </button>
+            <button
+              onClick={handleUpload}
+              disabled={uploading || !selectedFile}
+              className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {uploading ? (
+                <>
+                  <FaSpinner className="animate-spin w-4 h-4" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <FaUpload className="w-4 h-4" />
+                  Upload
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const AdminProfile = () => {
   const navigate = useNavigate();
+  const { currentUser, updateUser, refreshUserData } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [showPictureModal, setShowPictureModal] = useState(false);
   const [profile, setProfile] = useState({
-    // BASIC INFORMATION
     name: '',
     fatherName: '',
     email: '',
@@ -21,8 +208,6 @@ const AdminProfile = () => {
     gender: 'male',
     bloodGroup: '',
     maritalStatus: 'single',
-    
-    // EMPLOYMENT INFORMATION
     employeeId: '',
     employeeType: 'permanent',
     employmentStatus: 'active',
@@ -33,42 +218,26 @@ const AdminProfile = () => {
     probationPeriod: '3',
     reportingManager: '',
     systemRole: 'admin',
-    
-    // ADDRESS INFORMATION
     presentAddress: '',
     permanentAddress: '',
     city: '',
     state: '',
     country: 'Pakistan',
     postalCode: '',
-    
-    // EMERGENCY CONTACTS
     emergencyContacts: [{ name: '', phone: '', relation: 'parent' }],
-    
-    // BANK INFORMATION
     bankName: '',
     bankAccountNumber: '',
     bankAccountTitle: '',
     bankBranchCode: '',
     ibanNumber: '',
-    
-    // ADDITIONAL INFORMATION
     qualifications: '',
     experiences: [{ company: '', position: '', duration: '', description: '' }],
     skills: [{ name: '', level: 'intermediate' }],
     previousExperience: '',
-    
-    // SYSTEM INFORMATION
     isActive: true,
     hasSystemAccess: true,
-    
-    // PROFILE
     profilePicture: '',
-    
-    // SECURITY SETTINGS
     twoFactorEnabled: false,
-    
-    // NOTIFICATION PREFERENCES
     notificationPreferences: {
       email: true,
       push: true,
@@ -76,7 +245,6 @@ const AdminProfile = () => {
     }
   });
 
-  // Fetch admin profile data
   useEffect(() => {
     fetchAdminProfile();
   }, []);
@@ -136,7 +304,6 @@ const AdminProfile = () => {
         }
         
         setProfile({
-          // Basic Information
           name: profileData.name || 'Admin User',
           fatherName: profileData.fatherName || '',
           email: profileData.email || 'admin@company.com',
@@ -149,8 +316,6 @@ const AdminProfile = () => {
           gender: profileData.gender || 'male',
           bloodGroup: profileData.bloodGroup || '',
           maritalStatus: profileData.maritalStatus || 'single',
-          
-          // Employment Information
           employeeId: profileData.employeeId || 'ADM001',
           employeeType: profileData.employeeType || 'permanent',
           employmentStatus: profileData.employmentStatus || 'active',
@@ -161,48 +326,37 @@ const AdminProfile = () => {
           probationPeriod: profileData.probationPeriod || '3',
           reportingManager: profileData.reportingManager || '',
           systemRole: profileData.systemRole || 'admin',
-          
-          // Address Information
           presentAddress: profileData.presentAddress || '',
           permanentAddress: profileData.permanentAddress || '',
           city: profileData.city || '',
           state: profileData.state || '',
           country: profileData.country || 'Pakistan',
           postalCode: profileData.postalCode || '',
-          
-          // Emergency Contacts
           emergencyContacts,
-          
-          // Bank Information
           bankName: profileData.bankName || '',
           bankAccountNumber: profileData.bankAccountNumber || '',
           bankAccountTitle: profileData.bankAccountTitle || '',
           bankBranchCode: profileData.bankBranchCode || '',
           ibanNumber: profileData.ibanNumber || '',
-          
-          // Additional Information
           qualifications: profileData.qualifications || '',
           experiences,
           skills,
           previousExperience: profileData.previousExperience || '',
-          
-          // System Information
           isActive: profileData.isActive !== undefined ? profileData.isActive : true,
           hasSystemAccess: profileData.hasSystemAccess !== undefined ? profileData.hasSystemAccess : true,
-          
-          // Profile
           profilePicture: profileData.profilePicture || profileData.avatar || '',
-          
-          // Security Settings
           twoFactorEnabled: profileData.twoFactorEnabled || false,
-          
-          // Notification Preferences
           notificationPreferences: profileData.notificationPreferences || {
             email: true,
             push: true,
             sms: false
           }
         });
+
+        const picture = profileData.profilePicture || profileData.avatar || '';
+        if (picture && picture !== currentUser?.profilePicture) {
+          updateUser({ profilePicture: picture });
+        }
       }
     } catch (error) {
       console.error('❌ Error fetching admin profile:', error);
@@ -267,6 +421,12 @@ const AdminProfile = () => {
     }));
   };
 
+  const handleProfilePictureUpdate = (newPhotoUrl) => {
+    setProfile(prev => ({ ...prev, profilePicture: newPhotoUrl }));
+    updateUser({ profilePicture: newPhotoUrl });
+    setTimeout(() => refreshUserData(), 500);
+  };
+
   const handleSaveProfile = async () => {
     setSaving(true);
     setError('');
@@ -314,6 +474,7 @@ const AdminProfile = () => {
       try {
         const res = await axiosInstance.put('/admin/profile', dataToSave);
         if (res.data.success) {
+          await refreshUserData();
           alert('✅ Admin profile updated successfully!');
           fetchAdminProfile();
         } else {
@@ -322,6 +483,7 @@ const AdminProfile = () => {
       } catch (updateError) {
         const res = await axiosInstance.put('/employees/profile/me', dataToSave);
         if (res.data.success) {
+          await refreshUserData();
           alert('✅ Profile updated via alternative endpoint!');
           fetchAdminProfile();
         } else {
@@ -391,10 +553,9 @@ const AdminProfile = () => {
 
   return (
     <div className="max-w-6xl mx-auto p-4">
-      {/* HEADER */}
       <div className="bg-white shadow-xl rounded-2xl p-8 mb-8">
         <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
-          <div className="relative">
+          <div className="relative group">
             <img
               src={profile.profilePicture 
                 ? (profile.profilePicture.startsWith('http') 
@@ -407,6 +568,13 @@ const AdminProfile = () => {
                 e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name)}&background=4f46e5&color=fff&size=200`;
               }}
             />
+            <button
+              onClick={() => setShowPictureModal(true)}
+              className="absolute bottom-0 right-0 bg-indigo-600 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-lg hover:bg-indigo-700"
+              title="Change Profile Picture"
+            >
+              <FaCamera className="w-4 h-4" />
+            </button>
           </div>
           <div className="flex-1 text-center md:text-left">
             <h1 className="text-3xl font-bold text-gray-900">{profile.name || 'Admin User'}</h1>
@@ -443,143 +611,66 @@ const AdminProfile = () => {
         </div>
       </div>
 
-      {/* BASIC INFORMATION SECTION */}
       <div className="bg-white shadow-lg rounded-2xl p-8 mb-8">
         <h3 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-3">Basic Information</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-gray-700">Full Name</label>
-            <input
-              name="name"
-              value={profile.name}
-              onChange={handleChange}
-              className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            />
+            <input name="name" value={profile.name} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-gray-700">Father's Name</label>
-            <input
-              name="fatherName"
-              value={profile.fatherName}
-              onChange={handleChange}
-              className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            />
+            <input name="fatherName" value={profile.fatherName} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-gray-700">Email</label>
-            <input
-              value={profile.email}
-              disabled
-              className="w-full px-4 py-3 border-2 rounded-xl bg-gray-50 border-gray-200 cursor-not-allowed text-gray-600"
-            />
+            <input value={profile.email} disabled className="w-full px-4 py-3 border-2 rounded-xl bg-gray-50 border-gray-200 cursor-not-allowed text-gray-600" />
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-gray-700">Phone</label>
-            <input
-              name="phone"
-              value={profile.phone}
-              onChange={handleChange}
-              className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            />
+            <input name="phone" value={profile.phone} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-gray-700">Alternate Phone</label>
-            <input
-              name="alternatePhone"
-              value={profile.alternatePhone}
-              onChange={handleChange}
-              className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            />
+            <input name="alternatePhone" value={profile.alternatePhone} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-gray-700">CNIC Number</label>
-            <input
-              name="idCardNumber"
-              value={profile.idCardNumber}
-              onChange={handleChange}
-              className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            />
+            <input name="idCardNumber" value={profile.idCardNumber} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-gray-700">CNIC Issue Date</label>
-            <input
-              type="date"
-              name="idCardIssueDate"
-              value={profile.idCardIssueDate}
-              onChange={handleChange}
-              className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            />
+            <input type="date" name="idCardIssueDate" value={profile.idCardIssueDate} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-gray-700">CNIC Expiry Date</label>
-            <input
-              type="date"
-              name="idCardExpiryDate"
-              value={profile.idCardExpiryDate}
-              onChange={handleChange}
-              className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            />
+            <input type="date" name="idCardExpiryDate" value={profile.idCardExpiryDate} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-gray-700">Date of Birth</label>
-            <input
-              type="date"
-              name="dateOfBirth"
-              value={profile.dateOfBirth}
-              onChange={handleChange}
-              className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            />
+            <input type="date" name="dateOfBirth" value={profile.dateOfBirth} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-gray-700">Gender</label>
-            <select
-              name="gender"
-              value={profile.gender}
-              onChange={handleChange}
-              className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="other">Other</option>
+            <select name="gender" value={profile.gender} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100">
+              <option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
             </select>
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-gray-700">Blood Group</label>
-            <select
-              name="bloodGroup"
-              value={profile.bloodGroup}
-              onChange={handleChange}
-              className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="">Select</option>
-              <option value="A+">A+</option>
-              <option value="A-">A-</option>
-              <option value="B+">B+</option>
-              <option value="B-">B-</option>
-              <option value="O+">O+</option>
-              <option value="O-">O-</option>
-              <option value="AB+">AB+</option>
-              <option value="AB-">AB-</option>
+            <select name="bloodGroup" value={profile.bloodGroup} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100">
+              <option value="">Select</option><option value="A+">A+</option><option value="A-">A-</option><option value="B+">B+</option><option value="B-">B-</option><option value="O+">O+</option><option value="O-">O-</option><option value="AB+">AB+</option><option value="AB-">AB-</option>
             </select>
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-gray-700">Marital Status</label>
-            <select
-              name="maritalStatus"
-              value={profile.maritalStatus}
-              onChange={handleChange}
-              className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="single">Single</option>
-              <option value="married">Married</option>
-              <option value="divorced">Divorced</option>
-              <option value="widowed">Widowed</option>
+            <select name="maritalStatus" value={profile.maritalStatus} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100">
+              <option value="single">Single</option><option value="married">Married</option><option value="divorced">Divorced</option><option value="widowed">Widowed</option>
             </select>
           </div>
         </div>
       </div>
 
-      {/* EMPLOYMENT INFORMATION */}
       <div className="bg-white shadow-lg rounded-2xl p-8 mb-8">
         <h3 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-3">Employment Information</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -602,18 +693,13 @@ const AdminProfile = () => {
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-gray-700">Employee Type</label>
             <select name="employeeType" value={profile.employeeType} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100">
-              <option value="permanent">Permanent</option>
-              <option value="contract">Contract</option>
-              <option value="probation">Probation</option>
-              <option value="intern">Intern</option>
+              <option value="permanent">Permanent</option><option value="contract">Contract</option><option value="probation">Probation</option><option value="intern">Intern</option>
             </select>
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-gray-700">Status</label>
             <select name="employmentStatus" value={profile.employmentStatus} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl transition-all border-gray-200 hover:border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100">
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-              <option value="on-leave">On Leave</option>
+              <option value="active">Active</option><option value="inactive">Inactive</option><option value="on-leave">On Leave</option>
             </select>
           </div>
           <div className="space-y-2">
@@ -631,7 +717,6 @@ const AdminProfile = () => {
         </div>
       </div>
 
-      {/* ADDRESS INFORMATION */}
       <div className="bg-white shadow-lg rounded-2xl p-8 mb-8">
         <h3 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-3">Address Information</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -662,7 +747,6 @@ const AdminProfile = () => {
         </div>
       </div>
 
-      {/* EMERGENCY CONTACTS */}
       <div className="bg-white shadow-lg rounded-2xl p-8 mb-8">
         <h3 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-3">Emergency Contacts</h3>
         <div className="space-y-4">
@@ -680,11 +764,7 @@ const AdminProfile = () => {
                 <div className="space-y-2">
                   <label className="block text-sm font-semibold text-gray-700">Relationship</label>
                   <select value={contact.relation} onChange={(e) => handleArrayFieldChange('emergencyContacts', index, 'relation', e.target.value)} className="w-full px-4 py-3 border-2 rounded-xl border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100">
-                    <option value="parent">Parent</option>
-                    <option value="spouse">Spouse</option>
-                    <option value="sibling">Sibling</option>
-                    <option value="child">Child</option>
-                    <option value="friend">Friend</option>
+                    <option value="parent">Parent</option><option value="spouse">Spouse</option><option value="sibling">Sibling</option><option value="child">Child</option><option value="friend">Friend</option>
                   </select>
                 </div>
               </div>
@@ -697,7 +777,6 @@ const AdminProfile = () => {
         </div>
       </div>
 
-      {/* BANK INFORMATION */}
       <div className="bg-white shadow-lg rounded-2xl p-8 mb-8">
         <h3 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-3">Bank Account Details</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -724,7 +803,6 @@ const AdminProfile = () => {
         </div>
       </div>
 
-      {/* QUALIFICATIONS & EXPERIENCES */}
       <div className="bg-white shadow-lg rounded-2xl p-8 mb-8">
         <h3 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-3">Qualifications & Experience</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -767,7 +845,6 @@ const AdminProfile = () => {
         </div>
       </div>
 
-      {/* SKILLS */}
       <div className="bg-white shadow-lg rounded-2xl p-8 mb-8">
         <h3 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-3">Skills</h3>
         <div className="space-y-4">
@@ -781,10 +858,7 @@ const AdminProfile = () => {
                 <div className="space-y-2">
                   <label className="block text-sm font-semibold text-gray-700">Skill Level</label>
                   <select value={skill.level} onChange={(e) => handleArrayFieldChange('skills', index, 'level', e.target.value)} className="w-full px-4 py-3 border-2 rounded-xl border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100">
-                    <option value="beginner">Beginner</option>
-                    <option value="intermediate">Intermediate</option>
-                    <option value="advanced">Advanced</option>
-                    <option value="expert">Expert</option>
+                    <option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option>
                   </select>
                 </div>
               </div>
@@ -795,7 +869,6 @@ const AdminProfile = () => {
         </div>
       </div>
 
-      {/* SECURITY SETTINGS */}
       <div className="bg-white shadow-lg rounded-2xl p-8 mb-8">
         <h3 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-3">Security Settings</h3>
         <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg mb-4">
@@ -809,7 +882,6 @@ const AdminProfile = () => {
         </div>
       </div>
 
-      {/* NOTIFICATION PREFERENCES */}
       <div className="bg-white shadow-lg rounded-2xl p-8 mb-8">
         <h3 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-3">Notification Preferences</h3>
         <div className="space-y-3">
@@ -828,22 +900,29 @@ const AdminProfile = () => {
         </div>
       </div>
 
-      {/* SAVE BUTTON */}
       <div className="mt-12 pt-8 border-t border-gray-200 flex justify-center">
-        <button onClick={handleSaveProfile} disabled={saving} className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-12 py-4 rounded-xl font-semibold text-lg hover:from-indigo-700 hover:to-indigo-800 disabled:opacity-50 transition-all shadow-lg flex items-center">
+        <button onClick={handleSaveProfile} disabled={saving} className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-12 py-4 rounded-xl font-semibold text-lg hover:from-indigo-700 hover:to-indigo-800 disabled:opacity-50 transition-all shadow-lg flex items-center gap-3">
           {saving ? (
             <>
-              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
+              <FaSpinner className="animate-spin" />
               Saving...
             </>
           ) : (
-            '💾 Save Profile'
+            <>
+              <FaSave className="w-5 h-5" />
+              💾 Save Profile
+            </>
           )}
         </button>
       </div>
+
+      <AdminProfilePictureModal
+        isOpen={showPictureModal}
+        onClose={() => setShowPictureModal(false)}
+        currentPhoto={profile.profilePicture}
+        onSave={handleProfilePictureUpdate}
+        onRefresh={refreshUserData}
+      />
     </div>
   );
 };

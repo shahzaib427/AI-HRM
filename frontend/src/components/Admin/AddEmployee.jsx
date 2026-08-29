@@ -3,6 +3,10 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
+// ─── Bank field digit limits (must match backend IBAN_MAX_LENGTH / ACCOUNT_NUMBER_MAX_LENGTH) ──
+const IBAN_MAX_LENGTH = 24;
+const ACCOUNT_NUMBER_MAX_LENGTH = 24;
+
 // ─── Pakistani Banks List ────────────────────────────────────────────────────
 const PAKISTANI_BANKS = [
   { value: '', label: 'Select Bank' },
@@ -104,7 +108,7 @@ const AddEmployee = () => {
     customSystemRole: '',
     presentAddress: '',
     permanentAddress: '',
-    sameAddress: false,        // NEW: tracks checkbox state
+    sameAddress: false,        // tracks checkbox state
     city: '',
     state: '',
     country: 'Pakistan',
@@ -119,11 +123,11 @@ const AddEmployee = () => {
     currency: 'PKR',
     salaryFrequency: 'monthly',
     bankName: '',
-    bankNameCustom: '',        // NEW: manual entry when "Other" chosen
-    showBankNameCustom: false, // NEW
+    bankNameCustom: '',        // manual entry when "Other" chosen
+    showBankNameCustom: false,
     bankAccountNumber: '',
     bankAccountTitle: '',
-    bankBranchCode: '',
+    // ❌ bankBranchCode removed — branch field no longer collected
     ibanNumber: '',
     qualifications: '',
     experiences: [{ company: '', position: '', duration: '', description: '' }],
@@ -356,6 +360,17 @@ const AddEmployee = () => {
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
   };
 
+  // ✅ NEW: digits-only, length-capped handler for bank account number & IBAN.
+  // Mirrors the backend's sanitizeDigits() so what the user sees while typing
+  // matches what will actually get saved.
+  const handleBankDigitsChange = (e) => {
+    const { name, value } = e.target;
+    const maxLength = name === 'ibanNumber' ? IBAN_MAX_LENGTH : ACCOUNT_NUMBER_MAX_LENGTH;
+    const digitsOnly = value.replace(/[^0-9]/g, '').slice(0, maxLength);
+    setFormData(prev => ({ ...prev, [name]: digitsOnly }));
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+  };
+
   const handleDropdownChange = (e) => {
     const { name, value } = e.target;
 
@@ -499,8 +514,11 @@ const AddEmployee = () => {
       if (!formData[field] || formData[field].toString().trim() === '')
         newErrors[field] = requiredFields[field];
     });
-    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
-      newErrors.email = 'Please enter a valid email address';
+    // ✅ Real email validation — blocks garbage input with a visible error
+    // instead of silently letting it through.
+    if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+      newErrors.email = 'Please enter a valid email address (e.g. name@company.com)';
+    }
     if (formData.phone && !/^[\+]?[1-9][\d]{0,15}$/.test(formData.phone.replace(/\D/g, '')))
       newErrors.phone = 'Please enter a valid phone number';
     if (formData.idCardNumber && !/^\d{5}-\d{7}-\d{1}$/.test(formData.idCardNumber))
@@ -518,6 +536,11 @@ const AddEmployee = () => {
       newErrors.idCardIssueDate = 'Issue date cannot be after expiry date';
     if (formData.idCardExpiryDate && new Date(formData.idCardExpiryDate) < new Date())
       newErrors.idCardExpiryDate = 'CNIC has expired';
+    // ✅ IBAN / account number: length-capped, digits only (mirrors backend)
+    if (formData.ibanNumber && formData.ibanNumber.length > IBAN_MAX_LENGTH)
+      newErrors.ibanNumber = `IBAN can be at most ${IBAN_MAX_LENGTH} digits`;
+    if (formData.bankAccountNumber && formData.bankAccountNumber.length > ACCOUNT_NUMBER_MAX_LENGTH)
+      newErrors.bankAccountNumber = `Account number can be at most ${ACCOUNT_NUMBER_MAX_LENGTH} digits`;
     formData.emergencyContacts.forEach((contact, index) => {
       if (contact.name  && !contact.phone) newErrors[`emergencyContactPhone_${index}`] = 'Emergency contact phone is required';
       if (contact.phone && !contact.name)  newErrors[`emergencyContactName_${index}`]  = 'Emergency contact name is required';
@@ -553,10 +576,10 @@ const AddEmployee = () => {
         catch (err) { console.warn('Profile picture upload failed:', err.message); }
       }
 
-      // ✅ NOTE: The actual login password is generated on the BACKEND from the
-      // employee's CNIC (first 6 digits, dashes removed) — see employeeController.js.
-      // We no longer generate a fake password here on the client; the real one
-      // is read back from the server response after a successful create (see below).
+      // ✅ NOTE: The login password is generated on the BACKEND as a random
+      // 8-character password (letters, numbers, symbols) — see employeeController.js.
+      // We don't generate or guess it on the client; the real one is read back
+      // from the server response after a successful create (see below).
       const resolvedSystemRole      = formData.customSystemRole      || formData.systemRole;
       const resolvedEmploymentStatus= formData.customEmploymentStatus|| formData.employmentStatus;
       // Resolve final bank name (custom if "Other" was selected)
@@ -570,7 +593,7 @@ const AddEmployee = () => {
           username: formData.email.split('@')[0],
           email:    formData.email,
           role:     resolvedSystemRole,
-          // password intentionally omitted — backend derives it from idCardNumber
+          // password intentionally omitted — backend generates a random one
         },
         employeeProfile: {
           name:             formData.name,
@@ -614,7 +637,7 @@ const AddEmployee = () => {
           bankName:          resolvedBankName,
           bankAccountNumber: formData.bankAccountNumber,
           bankAccountTitle:  formData.bankAccountTitle,
-          bankBranchCode:    formData.bankBranchCode,
+          // ❌ bankBranchCode removed — no longer sent to backend
           ibanNumber:        formData.ibanNumber,
           qualifications:    formData.qualifications,
           previousExperience: formData.previousExperience ? parseFloat(formData.previousExperience) : 0,
@@ -638,8 +661,8 @@ const AddEmployee = () => {
         // Clear draft on success
         clearDraft();
 
-        // ✅ Use the REAL password generated by the backend from the CNIC,
-        // instead of a client-guessed one.
+        // ✅ Use the REAL password generated by the backend (random,
+        // not derived from CNIC), instead of a client-guessed one.
         setGeneratedPassword(response.data.temporaryPassword || 'Check with system administrator');
         const empId =
           response.data?.data?.employeeId ??
@@ -746,7 +769,7 @@ const AddEmployee = () => {
                 </div>
                 {generatedPassword && (
                   <div>
-                    <span className="text-sm text-gray-600">Temporary Password (first 6 digits of CNIC):</span>
+                    <span className="text-sm text-gray-600">Temporary Password (auto-generated):</span>
                     <div className="flex items-center justify-between bg-yellow-50 p-2 rounded">
                       <code className="font-mono text-lg font-bold">{generatedPassword}</code>
                       <button onClick={() => navigator.clipboard.writeText(generatedPassword)} className="text-blue-600 hover:text-blue-800 text-sm">Copy</button>
@@ -933,7 +956,6 @@ const AddEmployee = () => {
                   <input type="text" name="idCardNumber" value={formData.idCardNumber} onChange={handleChange} placeholder="42101-1234567-1"
                     className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.idCardNumber ? 'border-red-500' : 'border-gray-300'}`} />
                   {errors.idCardNumber && <p className="mt-2 text-sm text-red-600">{errors.idCardNumber}</p>}
-                  <p className="mt-1 text-xs text-gray-500">The first 6 digits (without dashes) will become the employee's temporary login password.</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">CNIC Issue Date *</label>
@@ -1108,7 +1130,7 @@ const AddEmployee = () => {
                   {errors.presentAddress && <p className="mt-2 text-sm text-red-600">{errors.presentAddress}</p>}
                 </div>
 
-                {/* Same address checkbox — now truly bidirectional */}
+                {/* Same address checkbox */}
                 <div className="flex items-center p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <input
                     type="checkbox"
@@ -1294,25 +1316,47 @@ const AddEmployee = () => {
                       )}
                     </div>
 
+                    {/* ✅ Account Number — digits only, capped at ACCOUNT_NUMBER_MAX_LENGTH */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Account Number</label>
-                      <input type="text" name="bankAccountNumber" value={formData.bankAccountNumber} onChange={handleChange} placeholder="1234567890123"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Account Number
+                        <span className="ml-1 text-xs text-gray-400 font-normal">(max {ACCOUNT_NUMBER_MAX_LENGTH} digits)</span>
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        name="bankAccountNumber"
+                        value={formData.bankAccountNumber}
+                        onChange={handleBankDigitsChange}
+                        maxLength={ACCOUNT_NUMBER_MAX_LENGTH}
+                        placeholder="1234567890123"
+                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.bankAccountNumber ? 'border-red-500' : 'border-gray-300'}`}
+                      />
+                      {errors.bankAccountNumber && <p className="mt-2 text-sm text-red-600">{errors.bankAccountNumber}</p>}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Account Title</label>
                       <input type="text" name="bankAccountTitle" value={formData.bankAccountTitle} onChange={handleChange} placeholder="As per bank records"
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
                     </div>
+                    {/* ❌ Branch Code field removed per request */}
+                    {/* ✅ IBAN Number — digits only, capped at IBAN_MAX_LENGTH */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Branch Code</label>
-                      <input type="text" name="bankBranchCode" value={formData.bankBranchCode} onChange={handleChange} placeholder="0001"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">IBAN Number</label>
-                      <input type="text" name="ibanNumber" value={formData.ibanNumber} onChange={handleChange} placeholder="PK00XXXX0000000000000000"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        IBAN Number
+                        <span className="ml-1 text-xs text-gray-400 font-normal">(max {IBAN_MAX_LENGTH} digits)</span>
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        name="ibanNumber"
+                        value={formData.ibanNumber}
+                        onChange={handleBankDigitsChange}
+                        maxLength={IBAN_MAX_LENGTH}
+                        placeholder="e.g. 000123456789012345678901"
+                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.ibanNumber ? 'border-red-500' : 'border-gray-300'}`}
+                      />
+                      {errors.ibanNumber && <p className="mt-2 text-sm text-red-600">{errors.ibanNumber}</p>}
                     </div>
                   </div>
                 </div>

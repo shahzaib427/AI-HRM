@@ -367,6 +367,10 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+// face 
+hasFaceRegistered: { type: Boolean, default: false },
+faceRegistrationDate: { type: Date, default: null },
+registeredImageCount: { type: Number, default: 0 },
   
   // Email notification tracking
   welcomeEmailSent: {
@@ -377,6 +381,10 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  contractEndDate: {
+  type: Date,
+  default: null
+},
   emailNotificationPreferences: {
     type: Map,
     of: Boolean,

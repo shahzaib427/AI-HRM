@@ -70,6 +70,14 @@ router.patch('/dashboard/notifications/:id/read', adminController.markNotificati
 router.get('/dashboard/performance-metrics', adminController.getPerformanceMetrics);
 router.get('/dashboard/quick-actions', adminController.getQuickActions);
 
+// NEW: Dashboard enhancement routes — attendance chart, leave breakdown,
+// system status widget, and AI insights. Same protect/authorize chain as
+// every other route in this file (applied globally above via router.use).
+router.get('/dashboard/attendance-overview', adminController.getAttendanceOverview);
+router.get('/dashboard/leave-overview', adminController.getLeaveOverview);
+router.get('/dashboard/system-status', adminController.getSystemStatus);
+router.get('/dashboard/ai-insights', adminController.getAIInsights);
+
 // 2FA Toggle
 router.post('/toggle-2fa', adminController.toggle2FA);
 

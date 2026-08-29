@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import axios from 'axios';
 import { 
   FaCalendarAlt, FaFileAlt, FaExclamationTriangle, FaSync, 
-  FaPlus, FaEye, FaEdit, FaTrash, FaCheckCircle, FaClock
+  FaPlus, FaEye, FaEdit, FaTrash, FaCheckCircle, FaClock,
+  FaChartPie, FaLeaf, FaHourglassHalf, FaPlane, FaUserCheck
 } from 'react-icons/fa';
 
 // API Configuration
@@ -91,10 +92,10 @@ const MONTHLY_LEAVE_CONFIG = {
 
 // Status configuration
 const STATUS_CONFIG = {
-  pending: { label: 'Pending', className: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
-  approved: { label: 'Approved', className: 'bg-green-100 text-green-800 border-green-200' },
-  rejected: { label: 'Rejected', className: 'bg-red-100 text-red-800 border-red-200' },
-  cancelled: { label: 'Cancelled', className: 'bg-gray-100 text-gray-800 border-gray-200' }
+  pending: { label: 'Pending', variant: 'warning' },
+  approved: { label: 'Approved', variant: 'success' },
+  rejected: { label: 'Rejected', variant: 'danger' },
+  cancelled: { label: 'Cancelled', variant: 'default' }
 };
 
 // Helper functions
@@ -107,33 +108,61 @@ const formatDate = (dateString) => {
   });
 };
 
-// Badge Component
+// Badge Component - Matching Payroll style
 const Badge = ({ children, variant = 'default' }) => {
-  const v = {
+  const variants = {
     default: 'bg-gray-100 text-gray-600',
-    success: 'bg-green-50 text-green-700',
-    warning: 'bg-yellow-50 text-yellow-700',
-    info: 'bg-blue-50 text-blue-700',
-    danger: 'bg-red-50 text-red-700',
+    success: 'bg-green-100 text-green-700',
+    warning: 'bg-yellow-100 text-yellow-700',
+    danger: 'bg-red-100 text-red-700',
+    info: 'bg-blue-100 text-blue-700',
+    purple: 'bg-purple-100 text-purple-700'
   };
-  return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${v[variant]}`}>{children}</span>;
+  return (
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${variants[variant]}`}>
+      {children}
+    </span>
+  );
+};
+
+// KpiCard Component - Matching Payroll style
+const KpiCard = ({ title, value, icon, color, subtitle }) => {
+  const colors = {
+    blue: 'bg-blue-500', green: 'bg-green-500', yellow: 'bg-yellow-500',
+    purple: 'bg-purple-500', indigo: 'bg-indigo-500', emerald: 'bg-emerald-500',
+    rose: 'bg-rose-500', cyan: 'bg-cyan-500', orange: 'bg-orange-500'
+  };
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-gray-500 mb-1">{title}</p>
+          <p className="text-2xl font-bold text-gray-800">{value}</p>
+          {subtitle && <p className="text-xs text-gray-400 mt-1">{subtitle}</p>}
+        </div>
+        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${colors[color]}`}>
+          {icon}
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // Loading Spinner Component
 const LoadingSpinner = ({ text = 'Loading...' }) => (
-  <div className="flex items-center justify-center py-8">
-    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-    <span className="ml-2 text-gray-600">{text}</span>
+  <div className="flex items-center justify-center py-12">
+    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+    <span className="ml-3 text-gray-600">{text}</span>
   </div>
 );
 
 // Error Message Component
 const ErrorMessage = ({ message, onRetry }) => (
-  <div className="text-center py-8">
-    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-100 mb-4">
-      <FaExclamationTriangle className="text-red-500 text-xl" />
+  <div className="text-center py-12">
+    <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-100 mb-4">
+      <FaExclamationTriangle className="text-red-500 text-2xl" />
     </div>
-    <p className="text-lg text-gray-700 mb-4">{message}</p>
+    <p className="text-gray-700 mb-4">{message}</p>
     {onRetry && (
       <button onClick={onRetry} className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors">
         Retry
@@ -143,301 +172,471 @@ const ErrorMessage = ({ message, onRetry }) => (
 );
 
 // Success Message Component
-const SuccessMessage = ({ message }) => (
-  <div className="p-4 bg-green-50 border border-green-100 rounded-lg mb-4">
-    <div className="flex items-center">
-      <FaCheckCircle className="h-5 w-5 text-green-500" />
-      <div className="ml-3">
-        <p className="text-sm text-green-700">{message}</p>
-      </div>
-    </div>
+const SuccessMessage = ({ message, onClose }) => (
+  <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm">
+    <FaCheckCircle className="text-green-500 flex-shrink-0 w-5 h-5" />
+    <span className="text-green-700 flex-1">{message}</span>
+    <button onClick={onClose} className="text-green-400 hover:text-green-600">✕</button>
   </div>
 );
 
-// Monthly Leave Balance Card Component
-const MonthlyLeaveBalanceCard = ({ balance, month, year, isLoading }) => {
-  const percentage = Math.min((balance / MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth) * 100, 100);
-  
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <p className="text-sm text-gray-500 mb-1">Monthly Leave Balance</p>
-          <p className="text-2xl font-bold text-gray-800">
-            {isLoading ? '...' : `${balance} / ${MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth}`}
-          </p>
-          <p className="text-xs text-gray-400 mt-1">{month} {year}</p>
-        </div>
-        <div className="w-12 h-12 rounded-xl bg-indigo-500 flex items-center justify-center">
-          <FaCalendarAlt className="w-6 h-6 text-white" />
-        </div>
-      </div>
-      
-      <div className="space-y-2">
-        <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-          <div 
-            className="h-full bg-indigo-600 rounded-full transition-all duration-1000 ease-out"
-            style={{ width: `${percentage}%` }}
-          ></div>
-        </div>
-        <p className="text-xs text-gray-400">
-          {Math.round(percentage)}% of monthly allocation remaining
-        </p>
-      </div>
-    </div>
-  );
-};
+// Main EmployeeLeave Component
+const EmployeeLeave = () => {
+  const [monthlyBalance, setMonthlyBalance] = useState(MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [loading, setLoading] = useState({ balances: true, requests: true });
+  const [error, setError] = useState({ balances: '', requests: '' });
+  const [showLeaveForm, setShowLeaveForm] = useState(false);
+  const [showLeaveDetails, setShowLeaveDetails] = useState(false);
+  const [selectedLeaveId, setSelectedLeaveId] = useState(null);
+  const [editingLeave, setEditingLeave] = useState(null);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
 
-// Leave Request Card Component
-const LeaveRequestCard = ({ request, onEdit, onCancel, onViewDetails }) => {
-  const typeInfo = MONTHLY_LEAVE_CONFIG.leaveTypes.find(t => t.id === request.type);
-  const statusConfig = STATUS_CONFIG[request.status] || STATUS_CONFIG.pending;
-  
+  const fetchMonthlyBalance = useCallback(async () => {
+    try {
+      setLoading(prev => ({ ...prev, balances: true }));
+      setError(prev => ({ ...prev, balances: '' }));
+      
+      const response = await api.get('/balance');
+      
+      if (response.data?.success) {
+        const data = response.data.data;
+        if (typeof data === 'object' && data !== null) {
+          if ('monthly' in data) {
+            setMonthlyBalance(data.monthly);
+          } else if ('leavesAvailable' in data) {
+            setMonthlyBalance(data.leavesAvailable);
+          } else {
+            setMonthlyBalance(MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth);
+          }
+        } else {
+          setMonthlyBalance(MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth);
+        }
+      } else {
+        setMonthlyBalance(MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching monthly balance:', error);
+      const errorMsg = handleApiError(error, 'Failed to load balance');
+      setError(prev => ({ ...prev, balances: errorMsg }));
+      setMonthlyBalance(MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth);
+    } finally {
+      setLoading(prev => ({ ...prev, balances: false }));
+    }
+  }, []);
+
+  const fetchLeaveRequests = useCallback(async () => {
+    try {
+      setLoading(prev => ({ ...prev, requests: true }));
+      setError(prev => ({ ...prev, requests: '' }));
+      
+      const response = await api.get('/my-leaves');
+      
+      if (response.data?.success) {
+        setLeaveRequests(response.data.data || []);
+      } else {
+        setError(prev => ({ 
+          ...prev, 
+          requests: response.data?.message || 'Failed to load leave requests' 
+        }));
+      }
+    } catch (error) {
+      console.error('❌ Error fetching leave requests:', error);
+      const errorMsg = handleApiError(error, 'Failed to load leave requests');
+      setError(prev => ({ ...prev, requests: errorMsg }));
+    } finally {
+      setLoading(prev => ({ ...prev, requests: false }));
+    }
+  }, []);
+
+  const fetchAllData = useCallback(() => {
+    fetchMonthlyBalance();
+    fetchLeaveRequests();
+  }, [fetchMonthlyBalance, fetchLeaveRequests]);
+
+  useEffect(() => {
+    fetchAllData();
+  }, [fetchAllData]);
+
+  const usedLeavesThisMonth = useMemo(() => {
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+    
+    return leaveRequests
+      .filter(request => {
+        const requestDate = new Date(request.startDate || request.createdAt);
+        return requestDate.getMonth() === currentMonth && 
+               requestDate.getFullYear() === currentYear &&
+               request.status === 'approved';
+      })
+      .reduce((total, request) => total + (request.leaveCount || 1), 0);
+  }, [leaveRequests]);
+
+  const filteredLeaveRequests = useMemo(() => {
+    if (statusFilter === 'all') return leaveRequests;
+    return leaveRequests.filter(req => req.status === statusFilter);
+  }, [leaveRequests, statusFilter]);
+
+  const getFilteredCounts = useMemo(() => {
+    const pending = leaveRequests.filter(req => req.status === 'pending').length;
+    const approved = leaveRequests.filter(req => req.status === 'approved').length;
+    const rejected = leaveRequests.filter(req => req.status === 'rejected').length;
+    return { pending, approved, rejected, total: leaveRequests.length };
+  }, [leaveRequests]);
+
+  const handleSubmitLeave = useCallback(async (formData) => {
+    try {
+      if (editingLeave) {
+        const response = await api.put(`/${editingLeave}`, formData);
+        if (response.data.success) {
+          setSuccessMessage('Leave request updated successfully!');
+          fetchAllData();
+          setEditingLeave(null);
+          setShowLeaveForm(false);
+        }
+      } else {
+        const response = await api.post('/apply', formData);
+        if (response.data.success) {
+          setSuccessMessage('Leave application submitted successfully!');
+          fetchAllData();
+          setShowLeaveForm(false);
+        }
+      }
+      return Promise.resolve();
+    } catch (error) {
+      console.error('❌ Error submitting leave:', error);
+      const errorMessage = handleApiError(error, 'Failed to submit leave application');
+      return Promise.reject(new Error(errorMessage));
+    }
+  }, [editingLeave, fetchAllData]);
+
+  const handleEditLeave = useCallback((leave) => {
+    setEditingLeave(leave._id);
+    setShowLeaveForm(true);
+  }, []);
+
+  const handleCancelLeave = useCallback(async (leaveId) => {
+    if (!window.confirm('Are you sure you want to cancel this leave request?')) {
+      return;
+    }
+
+    try {
+      await api.delete(`/${leaveId}`);
+      setSuccessMessage('Leave request cancelled successfully!');
+      fetchAllData();
+    } catch (error) {
+      console.error('❌ Error cancelling leave:', error);
+      alert(handleApiError(error, 'Failed to cancel leave request'));
+    }
+  }, [fetchAllData]);
+
+  const handleViewDetails = useCallback((leaveId) => {
+    setSelectedLeaveId(leaveId);
+    setShowLeaveDetails(true);
+  }, []);
+
+  const handleDeleteFromModal = useCallback(() => {
+    fetchAllData();
+  }, [fetchAllData]);
+
+  const handleCloseForm = useCallback(() => {
+    setShowLeaveForm(false);
+    setEditingLeave(null);
+  }, []);
+
+  const handleCloseDetails = useCallback(() => {
+    setShowLeaveDetails(false);
+    setSelectedLeaveId(null);
+  }, []);
+
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => setSuccessMessage(''), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
+
+  const currentMonth = new Date().toLocaleString('default', { month: 'long' });
+  const currentYear = new Date().getFullYear();
+
+  const getStatusBadge = (status) => {
+    const config = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
+    const icons = {
+      pending: <FaClock className="mr-1 text-xs" />,
+      approved: <FaCheckCircle className="mr-1 text-xs" />,
+      rejected: <FaExclamationTriangle className="mr-1 text-xs" />,
+      cancelled: <FaClock className="mr-1 text-xs" />
+    };
+    return (
+      <Badge variant={config.variant}>
+        {icons[status]} {config.label}
+      </Badge>
+    );
+  };
+
+  if (loading.balances && loading.requests) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading leave data...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-4 hover:border-indigo-200 hover:shadow-md transition-all">
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center space-x-3">
-          <div className="text-2xl">{typeInfo?.icon}</div>
-          <div>
-            <h4 className="font-semibold text-gray-900">{typeInfo?.name}</h4>
-            <p className="text-xs text-gray-400">
-              {formatDate(request.startDate)} - {formatDate(request.endDate)}
+    <div className="min-h-screen bg-gray-50">
+      {/* Header - Matching Payroll Style */}
+      <div className="bg-white border-b border-gray-200 px-6 py-5 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <FaCalendarAlt className="text-indigo-600" /> Leave Management
+              </h1>
+              <p className="text-sm text-gray-500 mt-1">
+                You have {MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth} leaves per month
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-gray-400">
+              <FaPlane className="w-5 h-5" />
+              <span className="text-sm">Leave Portal</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+        {/* Error Message */}
+        {error.balances || error.requests ? (
+          <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm">
+            <FaExclamationTriangle className="text-red-500 flex-shrink-0 w-5 h-5" />
+            <span className="text-red-700 flex-1">{error.balances || error.requests}</span>
+            <button onClick={() => { setError({ balances: '', requests: '' }); fetchAllData(); }} className="text-red-400 hover:text-red-600">✕</button>
+          </div>
+        ) : null}
+
+        {/* Success Message */}
+        {successMessage && (
+          <SuccessMessage message={successMessage} onClose={() => setSuccessMessage('')} />
+        )}
+
+        {/* KPI Cards - Matching Payroll Style */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+          <KpiCard 
+            title="Remaining Balance" 
+            value={monthlyBalance} 
+            icon={<FaLeaf className="w-6 h-6 text-white" />} 
+            color="emerald"
+            subtitle={`${currentMonth} ${currentYear}`}
+          />
+          <KpiCard 
+            title="Used This Month" 
+            value={usedLeavesThisMonth} 
+            icon={<FaChartPie className="w-6 h-6 text-white" />} 
+            color="blue"
+            subtitle={`${Math.round((usedLeavesThisMonth / MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth) * 100)}% used`}
+          />
+          <KpiCard 
+            title="Pending Requests" 
+            value={getFilteredCounts.pending} 
+            icon={<FaHourglassHalf className="w-6 h-6 text-white" />} 
+            color="yellow"
+            subtitle="Awaiting approval"
+          />
+          <KpiCard 
+            title="Approved Leaves" 
+            value={getFilteredCounts.approved} 
+            icon={<FaUserCheck className="w-6 h-6 text-white" />} 
+            color="purple"
+            subtitle="Total approved"
+          />
+        </div>
+
+        {/* Leave Requests Table - Matching Payroll Style */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                  <FaFileAlt className="w-4 h-4 text-indigo-500" /> My Leave History
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">{leaveRequests.length} total requests</p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={fetchAllData} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors">
+                  <FaSync className={`w-3.5 h-3.5 ${loading.requests ? 'animate-spin' : ''}`} /> Refresh
+                </button>
+                <button onClick={() => setShowLeaveForm(true)} className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg transition-colors">
+                  <FaPlus className="w-3.5 h-3.5" /> Apply
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Filters - Matching Payroll Style */}
+          <div className="p-4 border-b border-gray-100">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <select 
+                value={statusFilter} 
+                onChange={(e) => setStatusFilter(e.target.value)} 
+                className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all bg-white"
+              >
+                <option value="all">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+              <button 
+                onClick={() => { setStatusFilter('all'); }} 
+                className="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
+              >
+                <FaCalendarAlt className="w-3 h-3" /> Reset Filters
+              </button>
+              <div className="col-span-2 flex items-center gap-3 text-xs text-gray-400">
+                <span>Pending: {getFilteredCounts.pending}</span>
+                <span>Approved: {getFilteredCounts.approved}</span>
+                <span>Rejected: {getFilteredCounts.rejected}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Table - Matching Payroll Style */}
+          <div className="overflow-x-auto">
+            {error.requests ? (
+              <ErrorMessage message={error.requests} onRetry={fetchLeaveRequests} />
+            ) : loading.requests ? (
+              <LoadingSpinner text="Loading leave requests..." />
+            ) : filteredLeaveRequests.length === 0 ? (
+              <div className="px-6 py-12 text-center text-gray-400">
+                <FaCalendarAlt className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p>No leave requests found</p>
+                <p className="text-xs text-gray-400 mt-1">Apply for a new leave to get started</p>
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Leave Type</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date Range</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Days</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Applied</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredLeaveRequests.map((request) => {
+                    const typeInfo = MONTHLY_LEAVE_CONFIG.leaveTypes.find(t => t.id === request.type);
+                    return (
+                      <tr key={request._id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">{typeInfo?.icon || '📅'}</span>
+                            <div>
+                              <div className="text-sm font-medium text-gray-800">{typeInfo?.name || 'Leave'}</div>
+                              <div className="text-xs text-gray-400">{request.reason?.substring(0, 30)}...</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="text-sm text-gray-800">{formatDate(request.startDate)}</div>
+                          <div className="text-xs text-gray-400">to {formatDate(request.endDate)}</div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="text-sm font-semibold text-indigo-600">{request.leaveCount || 1}</div>
+                          <div className="text-xs text-gray-400">day(s)</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {getStatusBadge(request.status)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="text-sm text-gray-600">{formatDate(request.appliedAt || request.createdAt)}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleViewDetails(request._id)}
+                              className="flex items-center gap-1 px-2 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-medium rounded-lg transition-colors"
+                              title="View Details"
+                            >
+                              <FaEye className="w-3 h-3" /> View
+                            </button>
+                            {request.status === 'pending' && (
+                              <>
+                                <button
+                                  onClick={() => handleEditLeave(request)}
+                                  className="flex items-center gap-1 px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-600 text-xs font-medium rounded-lg transition-colors"
+                                  title="Edit"
+                                >
+                                  <FaEdit className="w-3 h-3" /> Edit
+                                </button>
+                                <button
+                                  onClick={() => handleCancelLeave(request._id)}
+                                  className="flex items-center gap-1 px-2 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-medium rounded-lg transition-colors"
+                                  title="Cancel"
+                                >
+                                  <FaTrash className="w-3 h-3" /> Cancel
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
+        {/* Help Section - Matching Payroll Style */}
+        <div className="bg-gray-50 rounded-xl border border-gray-200 p-5 flex items-start gap-4">
+          <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
+            <FaCalendarAlt className="w-5 h-5 text-white" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-gray-800 mb-1">Need Help with Your Leave?</p>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              For leave queries, approvals, or policy questions, contact our HR team at <span className="text-indigo-600 font-medium">hr@company.com</span>
             </p>
           </div>
         </div>
-        <Badge variant={
-          request.status === 'approved' ? 'success' : 
-          request.status === 'pending' ? 'warning' : 
-          request.status === 'rejected' ? 'danger' : 'default'
-        }>
-          {statusConfig.label}
-        </Badge>
       </div>
-      
-      <div className="space-y-1 mb-3 text-sm">
-        <div className="flex justify-between">
-          <span className="text-gray-400">Leave Count</span>
-          <span className="font-medium text-gray-700">{request.leaveCount || 1} day(s)</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-gray-400">Applied on</span>
-          <span className="text-gray-600">{formatDate(request.appliedAt || request.createdAt)}</span>
-        </div>
-      </div>
-      
-      <div className="mb-3">
-        <p className="text-sm text-gray-600">
-          <span className="font-medium">Reason:</span> {request.reason}
-        </p>
-      </div>
-      
-      <div className="flex space-x-2">
-        {request.status === 'pending' && (
-          <>
-            <button 
-              onClick={() => onEdit(request)}
-              className="flex-1 flex items-center justify-center gap-1 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-medium rounded-lg transition-colors"
-            >
-              <FaEdit className="text-xs" /> Edit
-            </button>
-            <button 
-              onClick={() => onCancel(request._id)}
-              className="flex-1 flex items-center justify-center gap-1 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-medium rounded-lg transition-colors"
-            >
-              <FaTrash className="text-xs" /> Cancel
-            </button>
-          </>
-        )}
-        <button 
-          onClick={() => onViewDetails(request._id)}
-          className={`flex-1 flex items-center justify-center gap-1 py-2 bg-gray-50 hover:bg-gray-100 text-gray-600 text-xs font-medium rounded-lg transition-colors ${request.status !== 'pending' ? 'flex-2' : ''}`}
-        >
-          <FaEye className="text-xs" /> View
-        </button>
-      </div>
+
+      {/* Leave Form Modal - Matching Payroll Style */}
+      {showLeaveForm && (
+        <LeaveFormModal
+          isOpen={showLeaveForm}
+          onClose={handleCloseForm}
+          onSubmit={handleSubmitLeave}
+          initialData={editingLeave ? leaveRequests.find(l => l._id === editingLeave) : null}
+          monthlyBalance={monthlyBalance}
+          currentMonth={currentMonth}
+          currentYear={currentYear}
+        />
+      )}
+
+      {/* Leave Details Modal - Matching Payroll Style */}
+      {showLeaveDetails && (
+        <LeaveDetailsModal
+          isOpen={showLeaveDetails}
+          leaveId={selectedLeaveId}
+          onClose={handleCloseDetails}
+          onSuccess={fetchAllData}
+          onDelete={handleDeleteFromModal}
+        />
+      )}
     </div>
   );
 };
 
-// Leave Details Modal
-const LeaveDetailsModal = ({ isOpen, leaveId, onClose, onSuccess, onDelete }) => {
-  const [loading, setLoading] = useState(false);
-  const [leave, setLeave] = useState(null);
-  const [error, setError] = useState('');
-  const [deleting, setDeleting] = useState(false);
-  const modalRef = useRef(null);
-
-  const fetchLeaveDetails = useCallback(async () => {
-    if (!leaveId) return;
-    
-    setLoading(true);
-    setError('');
-    try {
-      const response = await api.get(`/${leaveId}`);
-      if (response.data.success) {
-        setLeave(response.data.data);
-      } else {
-        setError('Failed to load leave details');
-      }
-    } catch (error) {
-      setError(handleApiError(error, 'Failed to load leave details'));
-    } finally {
-      setLoading(false);
-    }
-  }, [leaveId]);
-
-  useEffect(() => {
-    if (isOpen && leaveId) {
-      fetchLeaveDetails();
-    }
-  }, [isOpen, leaveId, fetchLeaveDetails]);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (modalRef.current && !modalRef.current.contains(event.target)) {
-        onClose();
-      }
-    };
-
-    const handleEscapeKey = (event) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', handleEscapeKey);
-      document.body.style.overflow = 'hidden';
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscapeKey);
-      document.body.style.overflow = 'unset';
-    };
-  }, [isOpen, onClose]);
-
-  const handleDelete = async () => {
-    if (!leave || leave.status !== 'pending') {
-      alert('Only pending leave requests can be deleted');
-      return;
-    }
-    
-    const confirmDelete = window.confirm('Are you sure you want to delete this leave request? This action cannot be undone.');
-    if (!confirmDelete) return;
-    
-    setDeleting(true);
-    try {
-      await api.delete(`/${leaveId}`);
-      alert('Leave request deleted successfully!');
-      onClose();
-      if (onDelete) onDelete();
-      if (onSuccess) onSuccess();
-    } catch (error) {
-      console.error('❌ Error deleting leave:', error);
-      alert(handleApiError(error, 'Failed to delete leave request'));
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  if (!isOpen) return null;
-
-  const typeInfo = leave ? MONTHLY_LEAVE_CONFIG.leaveTypes.find(t => t.id === leave.type) : null;
-  const statusConfig = leave ? STATUS_CONFIG[leave.status] : STATUS_CONFIG.pending;
-  const isPending = leave?.status === 'pending';
-
-  return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div ref={modalRef} className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-semibold text-gray-900">Leave Details</h3>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl transition-colors">×</button>
-          </div>
-          
-          {loading ? (
-            <LoadingSpinner text="Loading leave details..." />
-          ) : error ? (
-            <ErrorMessage message={error} onRetry={fetchLeaveDetails} />
-          ) : leave ? (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <div className="text-3xl">{typeInfo?.icon}</div>
-                  <div>
-                    <h4 className="text-lg font-semibold text-gray-900">{typeInfo?.name}</h4>
-                    <Badge variant={
-                      leave.status === 'approved' ? 'success' : 
-                      leave.status === 'pending' ? 'warning' : 
-                      leave.status === 'rejected' ? 'danger' : 'default'
-                    }>
-                      {statusConfig.label}
-                    </Badge>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-gray-900">{leave.leaveCount || 1}</p>
-                  <p className="text-xs text-gray-400">day(s)</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 border border-gray-100 rounded-lg">
-                  <p className="text-xs text-gray-400 mb-1">Start Date</p>
-                  <p className="font-medium text-gray-900">{formatDate(leave.startDate)}</p>
-                </div>
-                <div className="p-4 border border-gray-100 rounded-lg">
-                  <p className="text-xs text-gray-400 mb-1">End Date</p>
-                  <p className="font-medium text-gray-900">{formatDate(leave.endDate)}</p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <h4 className="font-semibold text-gray-900">Reason for Leave</h4>
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-gray-700 whitespace-pre-line">{leave.reason}</p>
-                </div>
-              </div>
-
-              <div className="flex space-x-3 pt-6 border-t border-gray-100">
-                <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium py-2.5 px-4 rounded-lg transition-colors">
-                  Close
-                </button>
-                {isPending && (
-                  <button 
-                    onClick={handleDelete}
-                    disabled={deleting}
-                    className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {deleting ? (
-                      <>
-                        <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Deleting...
-                      </>
-                    ) : (
-                      <>
-                        <FaTrash className="text-xs" />
-                        Delete Request
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Leave Form Modal
-const LeaveFormModal = ({ isOpen, onClose, onSubmit, initialData, monthlyBalance }) => {
+// Leave Form Modal - Redesigned
+const LeaveFormModal = ({ isOpen, onClose, onSubmit, initialData, monthlyBalance, currentMonth, currentYear }) => {
   const [formData, setFormData] = useState({
     type: 'monthly',
     startDate: '',
@@ -587,35 +786,41 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, initialData, monthlyBalance
 
   if (!isOpen) return null;
 
-  const currentMonth = new Date().toLocaleString('default', { month: 'long' });
-  const currentYear = new Date().getFullYear();
-
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div ref={modalRef} className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-semibold text-gray-900">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div ref={modalRef} className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50 rounded-t-xl">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">
               {initialData ? 'Edit Leave Request' : 'Apply for Leave'}
             </h3>
-            <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 text-2xl transition-colors">×</button>
+            <p className="text-sm text-gray-500">{currentMonth} {currentYear}</p>
           </div>
-          
+          <button onClick={handleClose} className="p-2 hover:bg-gray-200 rounded-lg transition-colors">
+            <FaTimes className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+        
+        <div className="flex-1 overflow-auto p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-lg">
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Monthly Leave Balance</p>
-                  <p className="text-xs text-gray-500">
-                    {currentMonth} {currentYear}: {monthlyBalance} of {MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth} leaves remaining
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-lg font-bold text-indigo-600">{monthlyBalance}/{MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth}</p>
-                </div>
+            {/* Balance Info */}
+            <div className="flex items-center gap-4 bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+              <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                <FaLeaf className="w-6 h-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-700">Monthly Leave Balance</p>
+                <p className="text-xs text-gray-500">
+                  {monthlyBalance} of {MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth} leaves remaining
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-bold text-indigo-600">{monthlyBalance}</p>
+                <p className="text-xs text-gray-400">days left</p>
               </div>
             </div>
 
+            {/* Leave Type Selection */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-3">
                 Select Leave Type *
@@ -626,14 +831,14 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, initialData, monthlyBalance
                     type="button"
                     key={type.id}
                     onClick={() => handleTypeSelect(type.id)}
-                    className={`p-4 rounded-lg border transition-all duration-200 text-left ${
+                    className={`p-4 rounded-xl border transition-all duration-200 text-left ${
                       formData.type === type.id
-                        ? 'border-indigo-600 bg-indigo-50'
+                        ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600/20'
                         : 'border-gray-200 hover:border-indigo-300 hover:bg-indigo-50'
                     } ${initialData ? 'opacity-50 cursor-not-allowed' : ''}`}
                     disabled={!!initialData}
                   >
-                    <div className="flex items-center space-x-3">
+                    <div className="flex items-center gap-3">
                       <span className="text-2xl">{type.icon}</span>
                       <div>
                         <p className="font-medium text-gray-900">{type.name}</p>
@@ -645,6 +850,7 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, initialData, monthlyBalance
               </div>
             </div>
 
+            {/* Date Range */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-2">
@@ -658,7 +864,7 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, initialData, monthlyBalance
                   value={formData.startDate}
                   onChange={handleInputChange}
                   min={new Date().toISOString().split('T')[0]}
-                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-colors ${
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all ${
                     errors.startDate ? 'border-red-400' : 'border-gray-200'
                   }`}
                 />
@@ -676,7 +882,7 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, initialData, monthlyBalance
                   value={formData.endDate}
                   onChange={handleInputChange}
                   min={formData.startDate || new Date().toISOString().split('T')[0]}
-                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-colors ${
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all ${
                     errors.endDate ? 'border-red-400' : 'border-gray-200'
                   }`}
                 />
@@ -684,11 +890,18 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, initialData, monthlyBalance
               </div>
             </div>
 
+            {errors.days && (
+              <div className="text-xs text-red-600 flex items-center gap-1.5">
+                <FaExclamationTriangle className="w-3.5 h-3.5" /> {errors.days}
+              </div>
+            )}
+
+            {/* Leave Count */}
             <div>
               <label htmlFor="leaveCount" className="block text-sm font-medium text-gray-700 mb-2">
                 Number of Leaves to Use *
               </label>
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center gap-6">
                 <div className="flex-1">
                   <input
                     type="range"
@@ -705,14 +918,15 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, initialData, monthlyBalance
                     <span>{Math.min(monthlyBalance, MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth)} days</span>
                   </div>
                 </div>
-                <div className="w-16 text-center">
-                  <span className="text-2xl font-bold text-gray-900">{formData.leaveCount}</span>
+                <div className="w-16 text-center bg-gray-50 rounded-lg p-2">
+                  <span className="text-2xl font-bold text-indigo-600">{formData.leaveCount}</span>
                   <p className="text-xs text-gray-500">day(s)</p>
                 </div>
               </div>
               {errors.leaveCount && <p className="mt-1 text-xs text-red-600">{errors.leaveCount}</p>}
             </div>
 
+            {/* Reason */}
             <div>
               <label htmlFor="reason" className="block text-sm font-medium text-gray-700 mb-2">
                 Reason for Leave *
@@ -724,370 +938,245 @@ const LeaveFormModal = ({ isOpen, onClose, onSubmit, initialData, monthlyBalance
                 value={formData.reason}
                 onChange={handleInputChange}
                 rows={4}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-colors resize-none ${
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all resize-none ${
                   errors.reason ? 'border-red-400' : 'border-gray-200'
                 }`}
                 placeholder="Please provide details about your leave..."
               />
               {errors.reason && <p className="mt-1 text-xs text-red-600">{errors.reason}</p>}
             </div>
-
-            <div className="flex justify-end space-x-3 pt-6 border-t border-gray-100">
-              <button type="button" onClick={handleClose} className="px-6 py-2.5 border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors font-medium" disabled={loading}>
-                Cancel
-              </button>
-              <button type="submit" disabled={loading || formData.leaveCount > monthlyBalance} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed">
-                {loading ? (
-                  <span className="flex items-center">
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    {initialData ? 'Updating...' : 'Submitting...'}
-                  </span>
-                ) : initialData ? 'Update Leave' : 'Submit Application'}
-              </button>
-            </div>
           </form>
         </div>
-      </div>
-    </div>
-  );
-};
 
-// Main EmployeeLeave Component
-const EmployeeLeave = () => {
-  const [monthlyBalance, setMonthlyBalance] = useState(MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth);
-  const [leaveRequests, setLeaveRequests] = useState([]);
-  const [loading, setLoading] = useState({ balances: true, requests: true });
-  const [error, setError] = useState({ balances: '', requests: '' });
-  const [showLeaveForm, setShowLeaveForm] = useState(false);
-  const [showLeaveDetails, setShowLeaveDetails] = useState(false);
-  const [selectedLeaveId, setSelectedLeaveId] = useState(null);
-  const [editingLeave, setEditingLeave] = useState(null);
-  const [successMessage, setSuccessMessage] = useState('');
-
-  useEffect(() => {
-    console.log('🔍 EmployeeLeave Component Mounted');
-    const token = localStorage.getItem('token');
-    console.log('🔍 Token exists:', !!token);
-    if (token) {
-      const decoded = decodeToken();
-      console.log('🔍 Decoded token:', decoded);
-    }
-  }, []);
-
-  const fetchMonthlyBalance = useCallback(async () => {
-    try {
-      setLoading(prev => ({ ...prev, balances: true }));
-      setError(prev => ({ ...prev, balances: '' }));
-      
-      console.log('📊 Fetching monthly leave balance...');
-      const response = await api.get('/balance');
-      console.log('📊 Monthly balance API response:', response.data);
-      
-      if (response.data?.success) {
-        const data = response.data.data;
-        if (typeof data === 'object' && data !== null) {
-          if ('monthly' in data) {
-            setMonthlyBalance(data.monthly);
-          } else if ('leavesAvailable' in data) {
-            setMonthlyBalance(data.leavesAvailable);
-          } else {
-            setMonthlyBalance(MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth);
-          }
-        } else {
-          setMonthlyBalance(MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth);
-        }
-      } else {
-        console.error('📊 API returned success: false', response.data);
-        setMonthlyBalance(MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth);
-      }
-    } catch (error) {
-      console.error('❌ Error fetching monthly balance:', error);
-      const errorMsg = handleApiError(error, 'Failed to load balance');
-      setError(prev => ({ ...prev, balances: errorMsg }));
-      setMonthlyBalance(MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth);
-    } finally {
-      setLoading(prev => ({ ...prev, balances: false }));
-    }
-  }, []);
-
-  const fetchLeaveRequests = useCallback(async () => {
-    try {
-      setLoading(prev => ({ ...prev, requests: true }));
-      setError(prev => ({ ...prev, requests: '' }));
-      
-      console.log('📋 Fetching leave requests...');
-      const response = await api.get('/my-leaves');
-      console.log('📋 Leave requests API response:', response.data);
-      
-      if (response.data?.success) {
-        setLeaveRequests(response.data.data || []);
-      } else {
-        setError(prev => ({ 
-          ...prev, 
-          requests: response.data?.message || 'Failed to load leave requests' 
-        }));
-      }
-    } catch (error) {
-      console.error('❌ Error fetching leave requests:', error);
-      const errorMsg = handleApiError(error, 'Failed to load leave requests');
-      setError(prev => ({ ...prev, requests: errorMsg }));
-    } finally {
-      setLoading(prev => ({ ...prev, requests: false }));
-    }
-  }, []);
-
-  const fetchAllData = useCallback(() => {
-    fetchMonthlyBalance();
-    fetchLeaveRequests();
-  }, [fetchMonthlyBalance, fetchLeaveRequests]);
-
-  useEffect(() => {
-    fetchAllData();
-  }, [fetchAllData]);
-
-  const usedLeavesThisMonth = useMemo(() => {
-    const currentMonth = new Date().getMonth();
-    const currentYear = new Date().getFullYear();
-    
-    return leaveRequests
-      .filter(request => {
-        const requestDate = new Date(request.startDate || request.createdAt);
-        return requestDate.getMonth() === currentMonth && 
-               requestDate.getFullYear() === currentYear &&
-               request.status === 'approved';
-      })
-      .reduce((total, request) => total + (request.leaveCount || 1), 0);
-  }, [leaveRequests]);
-
-  const handleSubmitLeave = useCallback(async (formData) => {
-    try {
-      console.log('📝 Submitting leave application:', formData);
-      
-      if (editingLeave) {
-        const response = await api.put(`/${editingLeave}`, formData);
-        if (response.data.success) {
-          setSuccessMessage('Leave request updated successfully!');
-          fetchAllData();
-          setEditingLeave(null);
-          setShowLeaveForm(false);
-        }
-      } else {
-        const response = await api.post('/apply', formData);
-        console.log('✅ Leave application response:', response.data);
-        if (response.data.success) {
-          setSuccessMessage('Leave application submitted successfully!');
-          fetchAllData();
-          setShowLeaveForm(false);
-        }
-      }
-      return Promise.resolve();
-    } catch (error) {
-      console.error('❌ Error submitting leave:', error);
-      const errorMessage = handleApiError(error, 'Failed to submit leave application');
-      return Promise.reject(new Error(errorMessage));
-    }
-  }, [editingLeave, fetchAllData]);
-
-  const handleEditLeave = useCallback((leave) => {
-    console.log('✏️ Editing leave:', leave._id);
-    setEditingLeave(leave._id);
-    setShowLeaveForm(true);
-  }, []);
-
-  const handleCancelLeave = useCallback(async (leaveId) => {
-    if (!window.confirm('Are you sure you want to cancel this leave request?')) {
-      return;
-    }
-
-    try {
-      console.log('🗑️ Cancelling leave:', leaveId);
-      await api.delete(`/${leaveId}`);
-      setSuccessMessage('Leave request cancelled successfully!');
-      fetchAllData();
-    } catch (error) {
-      console.error('❌ Error cancelling leave:', error);
-      alert(handleApiError(error, 'Failed to cancel leave request'));
-    }
-  }, [fetchAllData]);
-
-  const handleViewDetails = useCallback((leaveId) => {
-    console.log('👁️ Viewing leave details:', leaveId);
-    setSelectedLeaveId(leaveId);
-    setShowLeaveDetails(true);
-  }, []);
-
-  const handleDeleteFromModal = useCallback(() => {
-    fetchAllData();
-  }, [fetchAllData]);
-
-  const handleCloseForm = useCallback(() => {
-    setShowLeaveForm(false);
-    setEditingLeave(null);
-  }, []);
-
-  const handleCloseDetails = useCallback(() => {
-    setShowLeaveDetails(false);
-    setSelectedLeaveId(null);
-  }, []);
-
-  useEffect(() => {
-    if (successMessage) {
-      const timer = setTimeout(() => setSuccessMessage(''), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [successMessage]);
-
-  const currentMonth = new Date().toLocaleString('default', { month: 'long' });
-  const currentYear = new Date().getFullYear();
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Page Header - Matching Payroll Style */}
-      <div className="bg-white border-b border-gray-200 px-6 py-5 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                <FaCalendarAlt className="text-indigo-600" /> Leave Management
-              </h1>
-              <p className="text-sm text-gray-500 mt-1">
-                You have {MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth} leaves per month
-              </p>
-            </div>
-            <div className="flex items-center gap-2 text-gray-400">
-              <FaCalendarAlt className="w-5 h-5" />
-              <span className="text-sm">Leave Portal</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
-        {/* Success Message */}
-        {successMessage && <SuccessMessage message={successMessage} />}
-
-        {/* Monthly Leave Balance and Apply Button Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <MonthlyLeaveBalanceCard
-            balance={monthlyBalance}
-            month={currentMonth}
-            year={currentYear}
-            isLoading={loading.balances}
-          />
-          
-          {/* Leave Usage Summary */}
-          {!error.balances && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
-              <p className="text-sm font-semibold text-gray-800 mb-4">Leave Usage Summary</p>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Total Monthly Allocation</span>
-                  <span className="font-medium text-gray-900">{MONTHLY_LEAVE_CONFIG.totalLeavesPerMonth} days</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Used this Month</span>
-                  <span className="font-medium text-red-600">{usedLeavesThisMonth} days</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Remaining Balance</span>
-                  <span className="font-medium text-green-600">{monthlyBalance} days</span>
-                </div>
-                <div className="pt-4 border-t border-gray-100">
-                  <div className="text-xs text-gray-400 space-y-1">
-                    <p>• Each leave counts as 1 day against your monthly balance</p>
-                    <p>• Maximum {MONTHLY_LEAVE_CONFIG.maxConsecutiveDays} consecutive days per leave</p>
-                    <p>• Balance resets at the start of each month</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Apply Leave Button Row */}
-        <div className="flex justify-end">
+        <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+          <button onClick={handleClose} className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors" disabled={loading}>
+            Cancel
+          </button>
           <button 
-            onClick={() => setShowLeaveForm(true)} 
-            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
+            onClick={handleSubmit}
+            disabled={loading || formData.leaveCount > monthlyBalance} 
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
-            <FaPlus className="text-xs" />
-            Apply for Leave
+            {loading ? (
+              <>
+                <FaSync className="animate-spin w-4 h-4" /> 
+                {initialData ? 'Updating...' : 'Submitting...'}
+              </>
+            ) : (
+              <>
+                <FaPlus className="w-4 h-4" />
+                {initialData ? 'Update Leave' : 'Submit Application'}
+              </>
+            )}
           </button>
         </div>
-
-        {/* Leave Requests */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
-                <FaFileAlt className="text-indigo-600 text-sm" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-gray-800">My Leave Requests</p>
-                <p className="text-xs text-gray-400">{leaveRequests.length} requests</p>
-              </div>
-            </div>
-            <button onClick={fetchAllData} disabled={loading.requests} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors">
-              <FaSync className={`text-xs ${loading.requests ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
-          </div>
-          
-          {error.requests ? (
-            <ErrorMessage message={error.requests} onRetry={fetchLeaveRequests} />
-          ) : loading.requests ? (
-            <LoadingSpinner text="Loading leave requests..." />
-          ) : leaveRequests.length === 0 ? (
-            <div className="py-16 text-center">
-              <div className="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                <FaCalendarAlt className="text-gray-400 text-lg" />
-              </div>
-              <p className="text-gray-700 font-medium">No leave requests</p>
-              <p className="text-gray-400 text-sm mt-1">Get started by applying for a new leave</p>
-              <button onClick={() => setShowLeaveForm(true)} className="mt-4 px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors">
-                Apply for Leave
-              </button>
-            </div>
-          ) : (
-            <div className="p-5">
-              <div className="space-y-4">
-                {leaveRequests.map((request) => (
-                  <LeaveRequestCard
-                    key={request._id}
-                    request={request}
-                    onEdit={handleEditLeave}
-                    onCancel={handleCancelLeave}
-                    onViewDetails={handleViewDetails}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
       </div>
-
-      {/* Leave Form Modal */}
-      <LeaveFormModal
-        isOpen={showLeaveForm}
-        onClose={handleCloseForm}
-        onSubmit={handleSubmitLeave}
-        initialData={editingLeave ? leaveRequests.find(l => l._id === editingLeave) : null}
-        monthlyBalance={monthlyBalance}
-      />
-
-      {/* Leave Details Modal */}
-      <LeaveDetailsModal
-        isOpen={showLeaveDetails}
-        leaveId={selectedLeaveId}
-        onClose={handleCloseDetails}
-        onSuccess={fetchAllData}
-        onDelete={handleDeleteFromModal}
-      />
     </div>
   );
 };
+
+// Leave Details Modal - Redesigned
+const LeaveDetailsModal = ({ isOpen, leaveId, onClose, onSuccess, onDelete }) => {
+  const [loading, setLoading] = useState(false);
+  const [leave, setLeave] = useState(null);
+  const [error, setError] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const modalRef = useRef(null);
+
+  const fetchLeaveDetails = useCallback(async () => {
+    if (!leaveId) return;
+    
+    setLoading(true);
+    setError('');
+    try {
+      const response = await api.get(`/${leaveId}`);
+      if (response.data.success) {
+        setLeave(response.data.data);
+      } else {
+        setError('Failed to load leave details');
+      }
+    } catch (error) {
+      setError(handleApiError(error, 'Failed to load leave details'));
+    } finally {
+      setLoading(false);
+    }
+  }, [leaveId]);
+
+  useEffect(() => {
+    if (isOpen && leaveId) {
+      fetchLeaveDetails();
+    }
+  }, [isOpen, leaveId, fetchLeaveDetails]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (modalRef.current && !modalRef.current.contains(event.target)) {
+        onClose();
+      }
+    };
+
+    const handleEscapeKey = (event) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscapeKey);
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscapeKey);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen, onClose]);
+
+  const handleDelete = async () => {
+    if (!leave || leave.status !== 'pending') {
+      alert('Only pending leave requests can be deleted');
+      return;
+    }
+    
+    const confirmDelete = window.confirm('Are you sure you want to delete this leave request? This action cannot be undone.');
+    if (!confirmDelete) return;
+    
+    setDeleting(true);
+    try {
+      await api.delete(`/${leaveId}`);
+      onClose();
+      if (onDelete) onDelete();
+      if (onSuccess) onSuccess();
+    } catch (error) {
+      console.error('❌ Error deleting leave:', error);
+      alert(handleApiError(error, 'Failed to delete leave request'));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  const typeInfo = leave ? MONTHLY_LEAVE_CONFIG.leaveTypes.find(t => t.id === leave.type) : null;
+  const isPending = leave?.status === 'pending';
+
+  const getStatusBadge = (status) => {
+    const config = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
+    const icons = {
+      pending: <FaClock className="mr-1 text-xs" />,
+      approved: <FaCheckCircle className="mr-1 text-xs" />,
+      rejected: <FaExclamationTriangle className="mr-1 text-xs" />,
+      cancelled: <FaClock className="mr-1 text-xs" />
+    };
+    return (
+      <Badge variant={config.variant}>
+        {icons[status]} {config.label}
+      </Badge>
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div ref={modalRef} className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50 rounded-t-xl">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Leave Details</h3>
+            <p className="text-sm text-gray-500">Complete leave information</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-lg transition-colors">
+            <FaTimes className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+        
+        <div className="flex-1 overflow-auto p-6">
+          {loading ? (
+            <LoadingSpinner text="Loading leave details..." />
+          ) : error ? (
+            <ErrorMessage message={error} onRetry={fetchLeaveDetails} />
+          ) : leave ? (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                <div className="flex items-center gap-4">
+                  <div className="text-4xl">{typeInfo?.icon || '📅'}</div>
+                  <div>
+                    <h4 className="text-lg font-semibold text-gray-900">{typeInfo?.name || 'Leave'}</h4>
+                    {getStatusBadge(leave.status)}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-bold text-indigo-600">{leave.leaveCount || 1}</p>
+                  <p className="text-xs text-gray-400">day(s)</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-xs text-gray-500 mb-1">Start Date</p>
+                  <p className="font-medium text-gray-900">{formatDate(leave.startDate)}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-xs text-gray-500 mb-1">End Date</p>
+                  <p className="font-medium text-gray-900">{formatDate(leave.endDate)}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-xs text-gray-500 mb-1">Applied On</p>
+                  <p className="font-medium text-gray-900">{formatDate(leave.appliedAt || leave.createdAt)}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-xs text-gray-500 mb-1">Leave Count</p>
+                  <p className="font-medium text-gray-900">{leave.leaveCount || 1} day(s)</p>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-2">Reason for Leave</h4>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-gray-700 whitespace-pre-line">{leave.reason}</p>
+                </div>
+              </div>
+
+              {leave.contactNumber && (
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-2">Contact Number</h4>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <p className="text-gray-700">{leave.contactNumber}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+          <button onClick={onClose} className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+            Close
+          </button>
+          {isPending && (
+            <button 
+              onClick={handleDelete}
+              disabled={deleting}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {deleting ? (
+                <>
+                  <FaSync className="animate-spin w-4 h-4" /> Deleting...
+                </>
+              ) : (
+                <>
+                  <FaTrash className="w-4 h-4" /> Delete Request
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Add FaTimes import at the top
+import { FaTimes } from 'react-icons/fa';
 
 export default EmployeeLeave;

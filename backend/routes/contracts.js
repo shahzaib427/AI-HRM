@@ -16,11 +16,11 @@ router.get('/', protect, authorize(['hr', 'admin']), async (req, res) => {
   try {
     const { status, search, page = 1, limit = 10 } = req.query;
     let query = {};
-    
+
     if (status && status !== 'all') {
       query.status = status;
     }
-    
+
     if (search) {
       query.$or = [
         { contractNumber: { $regex: search, $options: 'i' } },
@@ -28,24 +28,34 @@ router.get('/', protect, authorize(['hr', 'admin']), async (req, res) => {
         { position: { $regex: search, $options: 'i' } }
       ];
     }
-    
+
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const contracts = await Contract.find(query)
-      .populate('employeeId', 'name email')
+      // NOTE: also populate the human-readable employeeId (e.g. EMP123456789)
+      // so the UI can disambiguate employees with the same name.
+      .populate('employeeId', 'name email employeeId')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
-    
+
     const total = await Contract.countDocuments(query);
-    
+
+    // Flatten the populated employee code onto each contract as `employeeCode`
+    // so the frontend doesn't need to know about the populate shape.
+    const data = contracts.map(contract => {
+      const obj = contract.toObject();
+      obj.employeeCode = contract.employeeId?.employeeId || null;
+      return obj;
+    });
+
     res.json({
       success: true,
-      data: contracts,
-      pagination: { 
-        page: parseInt(page), 
-        limit: parseInt(limit), 
-        total, 
-        pages: Math.ceil(total / parseInt(limit)) 
+      data,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
       }
     });
   } catch (error) {
@@ -61,7 +71,7 @@ router.get('/stats', protect, authorize(['hr', 'admin']), async (req, res) => {
     const active = await Contract.countDocuments({ status: 'active' });
     const expired = await Contract.countDocuments({ status: 'expired' });
     const pending = await Contract.countDocuments({ status: 'pending' });
-    
+
     res.json({
       total,
       active,
@@ -74,14 +84,36 @@ router.get('/stats', protect, authorize(['hr', 'admin']), async (req, res) => {
   }
 });
 
+// Get logged-in employee's own contracts
+// NOTE: this route must stay ABOVE the '/:id' route below — Express matches
+// routes top-down, and '/:id' would otherwise swallow '/my-contracts' as if
+// "my-contracts" were an _id value.
+router.get('/my-contracts', protect, authorize(['employee', 'manager', 'team-lead', 'hr', 'admin']), async (req, res) => {
+  try {
+    const contracts = await Contract.find({ employeeId: req.user.id })
+      .sort({ createdAt: -1 });
+
+    res.json({ success: true, data: contracts });
+  } catch (error) {
+    console.error('Error fetching my contracts:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Get single contract
 router.get('/:id', protect, authorize(['hr', 'admin']), async (req, res) => {
   try {
-    const contract = await Contract.findById(req.params.id).populate('employeeId', 'name email phone');
+    const contract = await Contract.findById(req.params.id)
+      .populate('employeeId', 'name email phone employeeId');
+
     if (!contract) {
       return res.status(404).json({ success: false, error: 'Contract not found' });
     }
-    res.json({ success: true, data: contract });
+
+    const obj = contract.toObject();
+    obj.employeeCode = contract.employeeId?.employeeId || null;
+
+    res.json({ success: true, data: obj });
   } catch (error) {
     console.error('Error fetching contract:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -129,11 +161,11 @@ router.patch('/:id/sign', protect, authorize(['hr', 'admin', 'employee']), async
   try {
     const { role, signature, signedDate } = req.body;
     const contract = await Contract.findById(req.params.id);
-    
+
     if (!contract) {
       return res.status(404).json({ success: false, error: 'Contract not found' });
     }
-    
+
     if (role === 'employee') {
       contract.signedByEmployee = true;
       contract.employeeSignature = signature;
@@ -143,16 +175,16 @@ router.patch('/:id/sign', protect, authorize(['hr', 'admin', 'employee']), async
       contract.employerSignature = signature;
       contract.signedDate = signedDate || new Date();
     }
-    
+
     if (contract.signedByEmployee && contract.signedByEmployer) {
       contract.status = 'active';
     } else {
       contract.status = 'pending';
     }
-    
+
     contract.updatedAt = Date.now();
     await contract.save();
-    
+
     res.json({ success: true, data: contract });
   } catch (error) {
     console.error('Error signing contract:', error);
@@ -165,17 +197,17 @@ router.patch('/:id/terminate', protect, authorize(['hr', 'admin']), async (req, 
   try {
     const { reason, effectiveDate, notes } = req.body;
     const contract = await Contract.findById(req.params.id);
-    
+
     if (!contract) {
       return res.status(404).json({ success: false, error: 'Contract not found' });
     }
-    
+
     contract.status = 'terminated';
     contract.terminationReason = reason;
     contract.terminationDate = effectiveDate || new Date();
     contract.terminationNotes = notes;
     contract.updatedAt = Date.now();
-    
+
     await contract.save();
     res.json({ success: true, data: contract });
   } catch (error) {
@@ -189,16 +221,16 @@ router.post('/:id/renew', protect, authorize(['hr', 'admin']), async (req, res) 
   try {
     const { newEndDate, newSalary, reason } = req.body;
     const oldContract = await Contract.findById(req.params.id);
-    
+
     if (!oldContract) {
       return res.status(404).json({ success: false, error: 'Contract not found' });
     }
-    
+
     // Mark old contract as renewed
     oldContract.status = 'renewed';
     oldContract.renewalReason = reason;
     await oldContract.save();
-    
+
     // Create new contract
     const newContractNumber = await generateContractNumber();
     const newContract = new Contract({
@@ -215,7 +247,7 @@ router.post('/:id/renew', protect, authorize(['hr', 'admin']), async (req, res) 
       createdAt: new Date(),
       updatedAt: new Date()
     });
-    
+
     await newContract.save();
     res.json({ success: true, data: newContract });
   } catch (error) {

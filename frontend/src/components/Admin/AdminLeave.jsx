@@ -45,13 +45,13 @@ const getUserRole = () => {
   try {
     const token = localStorage.getItem('token');
     if (!token) return 'employee';
-    
+
     const parts = token.split('.');
     if (parts.length !== 3) {
       console.error('Invalid token format');
       return 'employee';
     }
-    
+
     const payload = JSON.parse(atob(parts[1]));
     return payload?.role || 'employee';
   } catch (error) {
@@ -112,6 +112,9 @@ const AdminLeave = () => {
   const [processingId, setProcessingId] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [leaveToDelete, setLeaveToDelete] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [editForm, setEditForm] = useState({
     startDate: '',
     endDate: '',
@@ -181,10 +184,10 @@ const AdminLeave = () => {
       const cancelled = leaves.filter(l => l.status === 'cancelled').length;
       const thisMonth = leaves.filter(l => {
         const startDate = new Date(l.startDate);
-        return startDate.getMonth() === new Date().getMonth() && 
+        return startDate.getMonth() === new Date().getMonth() &&
                startDate.getFullYear() === new Date().getFullYear();
       }).length;
-      
+
       setStats({
         pending,
         approved,
@@ -200,16 +203,39 @@ const AdminLeave = () => {
   const filteredLeaves = leaves.filter(leave => {
     const employeeName = leave.employee?.name || '';
     const employeeId = leave.employee?.employeeId || '';
-    
-    const matchesSearch = 
+
+    const matchesSearch =
       employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       employeeId.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     const matchesStatus = statusFilter === 'All' || leave.status === statusFilter;
     const matchesType = leaveTypeFilter === 'All' || leave.type === leaveTypeFilter;
-    
+
     return matchesSearch && matchesStatus && matchesType;
   });
+
+  // Clear any selection when the visible rows change (search/filter/refetch)
+  // so we never bulk-delete an id that's no longer visible/valid.
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [searchTerm, statusFilter, leaveTypeFilter, leaves]);
+
+  const isAllVisibleSelected =
+    filteredLeaves.length > 0 && filteredLeaves.every(l => selectedIds.includes(l._id));
+
+  const toggleSelectAll = () => {
+    if (isAllVisibleSelected) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredLeaves.map(l => l._id));
+    }
+  };
+
+  const toggleSelectOne = (id) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
 
   // Handle approve leave
   const handleApprove = async (id) => {
@@ -279,22 +305,55 @@ const AdminLeave = () => {
   };
 
   // Handle delete/cancel leave
-  const handleDelete = async (id) => {
+  // Pending leaves go through the cancel endpoint (soft cancel + HR notification).
+  // Any other status (approved/rejected/cancelled) is permanently deleted via the
+  // dedicated admin/hr-only /:id/permanent route, since cancelLeave rejects anything
+  // that isn't pending or approved.
+  const handleDelete = async (id, status) => {
     try {
       setProcessingId(id);
-      const response = await api.delete(`/${id}`);
+
+      const endpoint = status === 'pending' ? `/${id}` : `/${id}/permanent`;
+      const response = await api.delete(endpoint);
 
       if (response.data.success) {
-        alert('Leave cancelled successfully!');
+        alert(status === 'pending' ? 'Leave cancelled successfully!' : 'Leave record deleted successfully!');
         setDeleteConfirm(false);
         setLeaveToDelete(null);
         fetchLeaves();
       }
     } catch (error) {
       console.error('Delete error:', error);
-      alert(error.response?.data?.message || 'Failed to cancel leave');
+      alert(error.response?.data?.message || 'Failed to delete/cancel leave');
     } finally {
       setProcessingId(null);
+    }
+  };
+
+  // Handle bulk delete of selected leave requests
+  // Permanently deletes regardless of status (pending/approved included) -
+  // this is a deliberate "select and wipe" admin action, distinct from the
+  // per-row cancel-vs-delete logic in handleDelete above.
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+
+    try {
+      setBulkDeleting(true);
+      const response = await api.delete('/bulk/delete', {
+        data: { leaveIds: selectedIds }
+      });
+
+      if (response.data.success) {
+        alert(`Deleted ${response.data.data.deletedCount} leave request(s) successfully!`);
+        setBulkDeleteConfirm(false);
+        setSelectedIds([]);
+        fetchLeaves();
+      }
+    } catch (error) {
+      console.error('Bulk delete error:', error);
+      alert(error.response?.data?.message || 'Failed to bulk delete leaves');
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -310,7 +369,7 @@ const AdminLeave = () => {
       alert('Only pending leaves can be edited.');
       return;
     }
-    
+
     setEditingLeave(leave);
     setEditForm({
       startDate: formatDateForInput(leave.startDate),
@@ -340,7 +399,7 @@ const AdminLeave = () => {
   const handleEditSubmit = (e) => {
     e.preventDefault();
     if (!editingLeave) return;
-    
+
     if (window.confirm('Are you sure you want to update this leave request?')) {
       handleUpdate(editingLeave._id, editForm);
     }
@@ -365,7 +424,9 @@ const AdminLeave = () => {
       'casual': <Badge variant="default">Casual</Badge>,
       'earned': <Badge variant="info">Earned</Badge>,
       'maternity': <Badge variant="default">Maternity</Badge>,
-      'paternity': <Badge variant="default">Paternity</Badge>
+      'paternity': <Badge variant="default">Paternity</Badge>,
+      'monthly': <Badge variant="info">Monthly</Badge>,
+      'emergency': <Badge variant="danger">Emergency</Badge>
     };
     return types[type] || <Badge>{type}</Badge>;
   };
@@ -378,9 +439,26 @@ const AdminLeave = () => {
       'sick': 'Sick Leave',
       'earned': 'Earned Leave',
       'maternity': 'Maternity Leave',
-      'paternity': 'Paternity Leave'
+      'paternity': 'Paternity Leave',
+      'monthly': 'Monthly Leave',
+      'emergency': 'Emergency Leave'
     };
     return types[type] || type;
+  };
+
+  // Get role badge
+  const getRoleBadge = (role) => {
+    const roleColors = {
+      'admin': 'bg-purple-100 text-purple-700',
+      'hr': 'bg-blue-100 text-blue-700',
+      'manager': 'bg-amber-100 text-amber-700',
+      'employee': 'bg-gray-100 text-gray-700'
+    };
+    return (
+      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${roleColors[role] || roleColors.employee}`}>
+        {role ? role.toUpperCase() : 'N/A'}
+      </span>
+    );
   };
 
   if (loading) {
@@ -436,7 +514,7 @@ const AdminLeave = () => {
                 {userRole === 'manager' && 'Manager View - Team Leaves'}
               </p>
             </div>
-            <button 
+            <button
               onClick={fetchLeaves}
               className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
             >
@@ -449,38 +527,38 @@ const AdminLeave = () => {
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {/* Stats Grid with Colored Icons */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          <KpiCard 
-            label="Total Leaves" 
-            value={stats.total} 
-            icon="📋" 
+          <KpiCard
+            label="Total Leaves"
+            value={stats.total}
+            icon="📋"
             iconBg="bg-indigo-500"
             sub="All time"
           />
-          <KpiCard 
-            label="Pending" 
-            value={stats.pending} 
-            icon="⏳" 
+          <KpiCard
+            label="Pending"
+            value={stats.pending}
+            icon="⏳"
             iconBg="bg-amber-500"
             sub="Awaiting approval"
           />
-          <KpiCard 
-            label="Approved" 
-            value={stats.approved} 
-            icon="✅" 
+          <KpiCard
+            label="Approved"
+            value={stats.approved}
+            icon="✅"
             iconBg="bg-emerald-500"
             sub="Confirmed"
           />
-          <KpiCard 
-            label="Rejected" 
-            value={stats.rejected} 
-            icon="❌" 
+          <KpiCard
+            label="Rejected"
+            value={stats.rejected}
+            icon="❌"
             iconBg="bg-red-500"
             sub="Declined"
           />
-          <KpiCard 
-            label="This Month" 
-            value={stats.thisMonth} 
-            icon="📊" 
+          <KpiCard
+            label="This Month"
+            value={stats.thisMonth}
+            icon="📊"
             iconBg="bg-purple-500"
             sub="Current period"
           />
@@ -500,7 +578,7 @@ const AdminLeave = () => {
               />
             </div>
             <div className="flex gap-3">
-              <select 
+              <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors min-w-[130px]"
@@ -511,7 +589,7 @@ const AdminLeave = () => {
                   </option>
                 ))}
               </select>
-              <select 
+              <select
                 value={leaveTypeFilter}
                 onChange={(e) => setLeaveTypeFilter(e.target.value)}
                 className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors min-w-[150px]"
@@ -539,9 +617,29 @@ const AdminLeave = () => {
                   <p className="text-xs text-slate-500">{filteredLeaves.length} requests</p>
                 </div>
               </div>
+
+              {selectedIds.length > 0 && (
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-slate-600">
+                    {selectedIds.length} selected
+                  </span>
+                  <button
+                    onClick={() => setSelectedIds([])}
+                    className="text-sm text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    onClick={() => setBulkDeleteConfirm(true)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+                  >
+                    <span className="text-sm">🗑️</span> Delete Selected
+                  </button>
+                </div>
+              )}
             </div>
           </div>
-          
+
           {filteredLeaves.length === 0 ? (
             <div className="py-16 text-center">
               <div className="w-14 h-14 bg-slate-100 rounded-xl flex items-center justify-center mx-auto mb-4">
@@ -549,7 +647,7 @@ const AdminLeave = () => {
               </div>
               <h3 className="text-gray-700 font-medium mb-2">No leave requests found</h3>
               <p className="text-slate-400 text-sm mb-4">
-                {searchTerm || statusFilter !== 'All' || leaveTypeFilter !== 'All' 
+                {searchTerm || statusFilter !== 'All' || leaveTypeFilter !== 'All'
                   ? 'Try changing your search filters'
                   : 'No leave requests to display at the moment'}
               </p>
@@ -569,6 +667,15 @@ const AdminLeave = () => {
               <table className="w-full">
                 <thead className="bg-slate-50 border-b border-slate-100">
                   <tr>
+                    <th className="px-5 py-3 text-left w-10">
+                      <input
+                        type="checkbox"
+                        checked={isAllVisibleSelected}
+                        onChange={toggleSelectAll}
+                        className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 cursor-pointer"
+                        aria-label="Select all visible leave requests"
+                      />
+                    </th>
                     <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Employee</th>
                     <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Leave Type</th>
                     <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Duration</th>
@@ -579,7 +686,19 @@ const AdminLeave = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredLeaves.map((leave) => (
-                    <tr key={leave._id} className="hover:bg-slate-50 transition-colors">
+                    <tr
+                      key={leave._id}
+                      className={`hover:bg-slate-50 transition-colors ${selectedIds.includes(leave._id) ? 'bg-indigo-50/40' : ''}`}
+                    >
+                      <td className="px-5 py-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(leave._id)}
+                          onChange={() => toggleSelectOne(leave._id)}
+                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 cursor-pointer"
+                          aria-label={`Select leave request for ${leave.employee?.name || 'employee'}`}
+                        />
+                      </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <div className="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
@@ -615,25 +734,25 @@ const AdminLeave = () => {
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex gap-1">
-                          <button 
+                          <button
                             onClick={() => handleViewDetails(leave)}
                             className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                             title="View Details"
                           >
                             <span className="text-sm">👁️</span>
                           </button>
-                          
+
                           {leave.status === 'pending' && (
                             <>
-                              <button 
+                              <button
                                 onClick={() => handleEditClick(leave)}
                                 className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
                                 title="Edit"
                               >
                                 <span className="text-sm">✏️</span>
                               </button>
-                              
-                              <button 
+
+                              <button
                                 onClick={() => handleApprove(leave._id)}
                                 disabled={processingId === leave._id}
                                 className="p-1.5 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
@@ -645,8 +764,8 @@ const AdminLeave = () => {
                                   <span className="text-sm">✅</span>
                                 )}
                               </button>
-                              
-                              <button 
+
+                              <button
                                 onClick={() => handleReject(leave._id)}
                                 disabled={processingId === leave._id}
                                 className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
@@ -660,9 +779,9 @@ const AdminLeave = () => {
                               </button>
                             </>
                           )}
-                          
+
                           {/* Delete Button - Always visible for all statuses */}
-                          <button 
+                          <button
                             onClick={() => confirmDelete(leave)}
                             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                             title={leave.status === 'pending' ? "Cancel Leave" : "Delete Record"}
@@ -690,7 +809,7 @@ const AdminLeave = () => {
                   <span className="text-indigo-500">📋</span>
                   Leave Request Details
                 </h3>
-                <button 
+                <button
                   onClick={() => setShowDetails(false)}
                   className="text-slate-400 hover:text-slate-600 text-2xl transition-colors"
                 >
@@ -744,11 +863,24 @@ const AdminLeave = () => {
                       <span className="text-sm text-slate-700">{formatDate(selectedLeave.appliedAt || selectedLeave.createdAt)}</span>
                     </div>
                     {selectedLeave.approvedBy && (
-                      <div className="flex justify-between">
+                      <div className="flex justify-between items-start">
                         <span className="text-sm text-slate-500">Approved By:</span>
-                        <span className="text-sm font-medium text-slate-700">
-                          {selectedLeave.approvedBy?.name || 'N/A'}
-                        </span>
+                        <div className="text-right">
+                          <span className="text-sm font-medium text-slate-700">
+                            {selectedLeave.approvedBy?.name || 'N/A'}
+                          </span>
+                          <div className="flex items-center gap-2 mt-0.5 justify-end">
+                            {getRoleBadge(selectedLeave.approvedBy?.role)}
+                            <span className="text-xs text-slate-400">
+                              ID: {selectedLeave.approvedBy?.employeeId || selectedLeave.approvedBy?._id?.slice(-6) || 'N/A'}
+                            </span>
+                          </div>
+                          {selectedLeave.approvedAt && (
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              {formatDate(selectedLeave.approvedAt)}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -757,11 +889,11 @@ const AdminLeave = () => {
                 <div>
                   <h4 className="text-sm font-semibold text-slate-700 mb-3">Reason</h4>
                   <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
-                    <p className="text-sm text-slate-600">
+                    <p className="text-sm text-slate-600 whitespace-pre-wrap">
                       {selectedLeave.reason || 'No reason provided'}
                     </p>
                   </div>
-                  
+
                   {selectedLeave.contactNumber && (
                     <div className="mt-4">
                       <h4 className="text-sm font-semibold text-slate-700 mb-2">Contact Number</h4>
@@ -770,7 +902,7 @@ const AdminLeave = () => {
                       </p>
                     </div>
                   )}
-                  
+
                   {selectedLeave.rejectionReason && (
                     <div className="mt-4">
                       <h4 className="text-sm font-semibold text-red-600 mb-2">Rejection Reason</h4>
@@ -781,10 +913,10 @@ const AdminLeave = () => {
                       </div>
                     </div>
                   )}
-                  
+
                   {selectedLeave.status === 'pending' && (
                     <div className="mt-6 flex gap-3">
-                      <button 
+                      <button
                         onClick={() => {
                           handleApprove(selectedLeave._id);
                           setShowDetails(false);
@@ -793,7 +925,7 @@ const AdminLeave = () => {
                       >
                         <span>✅</span> Approve
                       </button>
-                      <button 
+                      <button
                         onClick={() => {
                           handleReject(selectedLeave._id);
                           setShowDetails(false);
@@ -804,10 +936,10 @@ const AdminLeave = () => {
                       </button>
                     </div>
                   )}
-                  
+
                   {/* Delete button in details modal */}
                   <div className="mt-4">
-                    <button 
+                    <button
                       onClick={() => {
                         setShowDetails(false);
                         confirmDelete(selectedLeave);
@@ -834,7 +966,7 @@ const AdminLeave = () => {
                   <span className="text-indigo-500">✏️</span>
                   Edit Leave Request
                 </h3>
-                <button 
+                <button
                   onClick={() => {
                     setShowEdit(false);
                     setEditingLeave(null);
@@ -863,7 +995,7 @@ const AdminLeave = () => {
                       className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1.5">
                       End Date
@@ -878,7 +1010,7 @@ const AdminLeave = () => {
                       className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
                     />
                   </div>
-                  
+
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-slate-700 mb-1.5">
                       Reason
@@ -892,7 +1024,7 @@ const AdminLeave = () => {
                       className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors resize-none"
                     />
                   </div>
-                  
+
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-slate-700 mb-1.5">
                       Contact Number (Optional)
@@ -906,7 +1038,7 @@ const AdminLeave = () => {
                     />
                   </div>
                 </div>
-                
+
                 <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
                   <button
                     type="button"
@@ -951,7 +1083,7 @@ const AdminLeave = () => {
                 </h3>
               </div>
             </div>
-            
+
             <div className="p-6">
               <p className="text-sm text-slate-600 mb-4">
                 Are you sure you want to {leaveToDelete.status === 'pending' ? 'cancel' : 'delete'} this leave request? This action cannot be undone.
@@ -978,7 +1110,7 @@ const AdminLeave = () => {
                   Cancel
                 </button>
                 <button
-                  onClick={() => handleDelete(leaveToDelete._id)}
+                  onClick={() => handleDelete(leaveToDelete._id, leaveToDelete.status)}
                   disabled={processingId === leaveToDelete._id}
                   className="flex-1 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
@@ -989,6 +1121,52 @@ const AdminLeave = () => {
                     </>
                   ) : (
                     leaveToDelete.status === 'pending' ? 'Yes, Cancel Leave' : 'Yes, Delete Record'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {bulkDeleteConfirm && selectedIds.length > 0 && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="px-6 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <span className="text-xl text-red-500">⚠️</span>
+                <h3 className="text-lg font-semibold text-slate-800">
+                  Delete {selectedIds.length} Leave Request{selectedIds.length > 1 ? 's' : ''}
+                </h3>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <p className="text-sm text-slate-600 mb-4">
+                Are you sure you want to permanently delete {selectedIds.length} selected leave request{selectedIds.length > 1 ? 's' : ''}?
+                This applies regardless of status (pending, approved, rejected, or cancelled) and cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setBulkDeleteConfirm(false)}
+                  disabled={bulkDeleting}
+                  className="flex-1 px-4 py-2 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={bulkDeleting}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {bulkDeleting ? (
+                    <>
+                      <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Deleting...
+                    </>
+                  ) : (
+                    `Yes, Delete ${selectedIds.length}`
                   )}
                 </button>
               </div>

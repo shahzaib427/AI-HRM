@@ -9,6 +9,26 @@ import {
 } from 'react-icons/fa';
 import { format } from 'date-fns';
 
+// Helper to get user role from JWT token (matches AdminLeave.jsx pattern)
+const getUserRole = () => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) return 'employee';
+
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      console.error('Invalid token format');
+      return 'employee';
+    }
+
+    const payload = JSON.parse(atob(parts[1]));
+    return payload?.role || 'employee';
+  } catch (error) {
+    console.error('Error getting user role:', error);
+    return 'employee';
+  }
+};
+
 // Badge Component
 const Badge = ({ children, variant = 'default' }) => {
   const variants = {
@@ -73,10 +93,25 @@ const ContactManagement = () => {
   });
   const [noteText, setNoteText] = useState('');
   const [statusUpdate, setStatusUpdate] = useState('');
-  
-  // Get user role from localStorage
-  const userRole = localStorage.getItem('userRole') || 'hr';
+
+  // Reply modal state
+  const [showReplyModal, setShowReplyModal] = useState(false);
+  const [replySubject, setReplySubject] = useState('');
+  const [replyMessage, setReplyMessage] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
+
+  // Bulk delete state
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  // Get user role from JWT token
+  const [userRole, setUserRole] = useState('employee');
   const isAdmin = userRole === 'admin';
+
+  useEffect(() => {
+    setUserRole(getUserRole());
+  }, []);
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
@@ -123,6 +158,29 @@ const ContactManagement = () => {
     fetchSubmissions();
     fetchStats();
   }, [searchTerm, statusFilter, currentPage]);
+
+  // Clear selection whenever the visible list changes (search/filter/page/refetch)
+  // so a stale id from a no-longer-visible row can never be bulk-deleted.
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [submissions]);
+
+  const isAllVisibleSelected =
+    submissions.length > 0 && submissions.every(s => selectedIds.includes(s._id));
+
+  const toggleSelectAll = () => {
+    if (isAllVisibleSelected) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(submissions.map(s => s._id));
+    }
+  };
+
+  const toggleSelectOne = (id) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
 
   // Update submission status
   const handleStatusUpdate = async () => {
@@ -180,6 +238,68 @@ const ContactManagement = () => {
     } catch (error) {
       console.error('Error deleting submission:', error);
       alert('Failed to delete submission');
+    }
+  };
+
+  // Bulk delete submissions (Admin only)
+  const handleBulkDelete = async () => {
+    if (!isAdmin) {
+      alert('Only admins can delete submissions');
+      return;
+    }
+    if (selectedIds.length === 0) return;
+
+    try {
+      setBulkDeleting(true);
+      const token = localStorage.getItem('token');
+      const response = await axios.delete(`${API_URL}/contact/bulk/delete`, {
+        headers: { Authorization: `Bearer ${token}` },
+        data: { ids: selectedIds }
+      });
+      alert(`Deleted ${response.data.data.deletedCount} submission(s) successfully`);
+      setBulkDeleteConfirm(false);
+      setSelectedIds([]);
+      fetchSubmissions();
+      fetchStats();
+    } catch (error) {
+      console.error('Error bulk deleting submissions:', error);
+      alert(error.response?.data?.error || 'Failed to bulk delete submissions');
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  // Open reply modal with a sensible default subject
+  const handleOpenReply = () => {
+    setReplySubject(`Re: Your inquiry`);
+    setReplyMessage('');
+    setShowReplyModal(true);
+  };
+
+  // Send email reply via backend (uses your existing nodemailer sendEmail utility)
+  const handleSendReply = async () => {
+    if (!replySubject.trim() || !replyMessage.trim()) {
+      alert('Please fill in both subject and message');
+      return;
+    }
+    try {
+      setSendingReply(true);
+      const token = localStorage.getItem('token');
+      await axios.post(
+        `${API_URL}/contact/${selectedSubmission._id}/reply`,
+        { subject: replySubject.trim(), message: replyMessage.trim() },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      alert('Reply sent successfully!');
+      setShowReplyModal(false);
+      setReplySubject('');
+      setReplyMessage('');
+      fetchSubmissions();
+    } catch (error) {
+      console.error('Error sending reply:', error);
+      alert(error.response?.data?.error || 'Failed to send reply email');
+    } finally {
+      setSendingReply(false);
     }
   };
 
@@ -266,6 +386,41 @@ const ContactManagement = () => {
           </div>
         </div>
 
+        {/* Bulk Action Bar (Admin only) */}
+        {isAdmin && submissions.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 px-5 py-3 flex items-center justify-between">
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isAllVisibleSelected}
+                onChange={toggleSelectAll}
+                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500/20 cursor-pointer"
+              />
+              Select all on this page
+            </label>
+
+            {selectedIds.length > 0 && (
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-gray-600">
+                  {selectedIds.length} selected
+                </span>
+                <button
+                  onClick={() => setSelectedIds([])}
+                  className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={() => setBulkDeleteConfirm(true)}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+                >
+                  <FaTrash className="text-xs" /> Delete Selected
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Submissions List */}
         {loading ? (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
@@ -283,44 +438,69 @@ const ContactManagement = () => {
         ) : (
           <div className="space-y-4">
             {submissions.map((submission) => (
-              <div key={submission._id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-all">
+              <div
+                key={submission._id}
+                className={`bg-white rounded-xl shadow-sm border p-5 hover:shadow-md transition-all ${
+                  selectedIds.includes(submission._id) ? 'border-indigo-300 bg-indigo-50/30' : 'border-gray-200'
+                }`}
+              >
                 <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 flex-wrap mb-2">
-                      <h3 className="text-base font-semibold text-gray-900">{submission.fullName}</h3>
-                      <StatusBadge status={submission.status} />
-                      {!submission.isRead && (
-                        <Badge variant="info">
-                          <FaStar className="mr-1 text-xs" /> New
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <FaEnvelope className="text-indigo-400 w-4 h-4" />
-                        <span className="truncate">{submission.email}</span>
-                      </div>
-                      {submission.phone && (
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <FaPhone className="text-indigo-400 w-4 h-4" />
-                          <span>{submission.phone}</span>
-                        </div>
-                      )}
-                      {submission.companyName && (
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <FaBuilding className="text-indigo-400 w-4 h-4" />
-                          <span>{submission.companyName}</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="mt-2 text-xs text-gray-400">
-                      Received: {format(new Date(submission.createdAt), 'MMM dd, yyyy h:mm a')}
-                    </div>
-                    {submission.message && (
-                      <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                        <p className="text-sm text-gray-600 line-clamp-2">{submission.message}</p>
-                      </div>
+                  <div className="flex items-start gap-3 flex-1">
+                    {isAdmin && (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(submission._id)}
+                        onChange={() => toggleSelectOne(submission._id)}
+                        className="mt-1.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500/20 cursor-pointer flex-shrink-0"
+                        aria-label={`Select submission from ${submission.fullName}`}
+                      />
                     )}
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 flex-wrap mb-2">
+                        <h3 className="text-base font-semibold text-gray-900">{submission.fullName}</h3>
+                        <StatusBadge status={submission.status} />
+                        {!submission.isRead && (
+                          <Badge variant="info">
+                            <FaStar className="mr-1 text-xs" /> New
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+                        <div className="flex items-start gap-2 text-gray-600">
+                          <FaEnvelope className="text-indigo-400 w-4 h-4 mt-0.5" />
+                          <div>
+                            <p className="text-xs text-gray-400">Email</p>
+                            <span className="truncate">{submission.email}</span>
+                          </div>
+                        </div>
+                        {submission.phone && (
+                          <div className="flex items-start gap-2 text-gray-600">
+                            <FaPhone className="text-indigo-400 w-4 h-4 mt-0.5" />
+                            <div>
+                              <p className="text-xs text-gray-400">Phone</p>
+                              <span>{submission.phone}</span>
+                            </div>
+                          </div>
+                        )}
+                        {submission.companyName && (
+                          <div className="flex items-start gap-2 text-gray-600">
+                            <FaBuilding className="text-indigo-400 w-4 h-4 mt-0.5" />
+                            <div>
+                              <p className="text-xs text-gray-400">Company</p>
+                              <span>{submission.companyName}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-2 text-xs text-gray-400">
+                        Received: {format(new Date(submission.createdAt), 'MMM dd, yyyy h:mm a')}
+                      </div>
+                      {submission.message && (
+                        <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                          <p className="text-sm text-gray-600 line-clamp-2">{submission.message}</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -491,10 +671,17 @@ const ContactManagement = () => {
                 </button>
                 <a
                   href={`mailto:${selectedSubmission.email}`}
+                  className="px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors inline-flex items-center gap-2"
+                  title="Open in your default mail app instead"
+                >
+                  Open Mail App
+                </a>
+                <button
+                  onClick={handleOpenReply}
                   className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors inline-flex items-center gap-2"
                 >
                   <FaReply className="text-xs" /> Reply via Email
-                </a>
+                </button>
               </div>
             </div>
           </div>
@@ -522,6 +709,115 @@ const ContactManagement = () => {
                 </button>
                 <button onClick={handleAddNote} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
                   Add Note
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reply via Email Modal */}
+      {showReplyModal && selectedSubmission && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+            <div className="border-b border-gray-100 px-6 py-4 flex justify-between items-center">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Reply via Email</h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Sending to {selectedSubmission.email}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowReplyModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <FaTimes className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs text-gray-500 font-medium mb-1.5">Subject</label>
+                <input
+                  type="text"
+                  value={replySubject}
+                  onChange={(e) => setReplySubject(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  placeholder="Subject"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 font-medium mb-1.5">Message</label>
+                <textarea
+                  value={replyMessage}
+                  onChange={(e) => setReplyMessage(e.target.value)}
+                  rows="6"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 resize-none"
+                  placeholder="Write your reply here..."
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setShowReplyModal(false)}
+                  disabled={sendingReply}
+                  className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSendReply}
+                  disabled={sendingReply}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {sendingReply ? (
+                    <>
+                      <FaSpinner className="animate-spin text-xs" /> Sending...
+                    </>
+                  ) : (
+                    <>
+                      <FaReply className="text-xs" /> Send Reply
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {bulkDeleteConfirm && selectedIds.length > 0 && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="border-b border-gray-100 px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <FaTrash className="text-red-500" />
+                Delete {selectedIds.length} Submission{selectedIds.length > 1 ? 's' : ''}
+              </h2>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-600 mb-5">
+                Are you sure you want to permanently delete {selectedIds.length} selected contact submission{selectedIds.length > 1 ? 's' : ''}? This cannot be undone.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setBulkDeleteConfirm(false)}
+                  disabled={bulkDeleting}
+                  className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={bulkDeleting}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {bulkDeleting ? (
+                    <>
+                      <FaSpinner className="animate-spin text-xs" /> Deleting...
+                    </>
+                  ) : (
+                    `Yes, Delete ${selectedIds.length}`
+                  )}
                 </button>
               </div>
             </div>

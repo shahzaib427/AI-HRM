@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import axiosInstance from '../utils/axiosInstance';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -15,6 +15,14 @@ const Login = () => {
   const [forgotError, setForgotError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // If the user was redirected here from a protected page (e.g. /billing
+  // after clicking Subscribe), send them back there after login instead
+  // of always to their role dashboard. planId lets BillingPlans resume
+  // checkout for the specific plan they picked.
+  const from = location.state?.from || null;
+  const pendingPlanId = location.state?.planId || null;
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -27,35 +35,42 @@ const Login = () => {
     try {
       setLoading(true);
       setError('');
-      
+
       const res = await axiosInstance.post('/auth/login', formData);
       const token = res.data.token || res.data.data?.token;
       const user = res.data.user || res.data.data?.user;
-      
-      if (!token || !user) { 
-        setError('Invalid response from server'); 
+
+      if (!token || !user) {
+        setError('Invalid response from server');
         return;
       }
-      
+
       // Store tokens first
       localStorage.setItem('authToken', token);
       localStorage.setItem('token', token);
-      
-      // Call login from context
-      const loginSuccess = login(user, token);
-      
+
+      // ⚠️ FIX: login() is async — must be awaited, otherwise loginSuccess
+      // is a pending Promise (always truthy) and navigate() can fire
+      // before localStorage/currentUser are actually updated, causing
+      // ProtectedRoute to bounce the user right back to /login.
+      const loginSuccess = await login(user, token);
+
       if (!loginSuccess) {
         setError('Login failed - please try again');
         return;
       }
-      
-      // Small delay to ensure auth state is updated
-      setTimeout(() => {
-        if (user.role === 'admin') navigate('/admin/dashboard', { replace: true });
-        else if (user.role === 'hr') navigate('/hr/dashboard', { replace: true });
-        else navigate('/employee/dashboard', { replace: true });
-      }, 100);
-      
+
+      // Came from a specific page (e.g. /billing) → go back there.
+      if (from) {
+        navigate(from, { replace: true, state: pendingPlanId ? { resumePlanId: pendingPlanId } : undefined });
+        return;
+      }
+
+      // Default: role-based dashboard
+      if (user.role === 'admin') navigate('/admin/dashboard', { replace: true });
+      else if (user.role === 'hr') navigate('/hr/dashboard', { replace: true });
+      else navigate('/employee/dashboard', { replace: true });
+
     } catch (err) {
       setError(err.response?.data?.error || err.response?.data?.message || 'Login failed');
     } finally {
@@ -206,10 +221,7 @@ const Login = () => {
               ) : 'Sign In'}
             </button>
 
-            <p className="register-link">
-              Don't have an account?{' '}
-              <a href="/register" className="register-anchor">Register as Applicant</a>
-            </p>
+
           </form>
         ) : (
           <form onSubmit={handleForgotPasswordSubmit} className="login-form">

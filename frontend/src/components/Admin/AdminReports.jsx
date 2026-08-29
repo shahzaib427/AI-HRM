@@ -105,7 +105,7 @@ const AdminReports = () => {
     try {
       setLoading(true);
       const response = await axiosInstance.post('/reports/generate', newReport);
-      
+
       if (response.data.success) {
         showNotification('Report generated successfully!', 'success');
         setShowGenerateModal(false);
@@ -123,12 +123,12 @@ const AdminReports = () => {
   // Update report visibility
   const handleUpdateVisibility = async () => {
     if (!selectedReport) return;
-    
+
     try {
       const response = await axiosInstance.put(`/reports/${selectedReport._id}/visibility`, {
         visibility: selectedReport.visibility
       });
-      
+
       if (response.data.success) {
         showNotification(`Report visibility updated to ${selectedReport.visibility}`, 'success');
         setShowVisibilityModal(false);
@@ -143,7 +143,7 @@ const AdminReports = () => {
   // Delete report
   const handleDeleteReport = async (reportId) => {
     if (!window.confirm('Are you sure you want to delete this report?')) return;
-    
+
     try {
       const response = await axiosInstance.delete(`/reports/${reportId}`);
       if (response.data.success) {
@@ -210,11 +210,7 @@ const AdminReports = () => {
       Payroll: 'bg-blue-100 text-blue-700',
       Attendance: 'bg-green-100 text-green-700',
       Leaves: 'bg-yellow-100 text-yellow-700',
-      Recruitment: 'bg-purple-100 text-purple-700',
-      Performance: 'bg-indigo-100 text-indigo-700',
-      Training: 'bg-cyan-100 text-cyan-700',
-      Finance: 'bg-pink-100 text-pink-700',
-      System: 'bg-gray-100 text-gray-700'
+      Recruitment: 'bg-purple-100 text-purple-700'
     };
     return colors[type] || 'bg-gray-100 text-gray-700';
   };
@@ -335,10 +331,6 @@ const AdminReports = () => {
                 <option value="Attendance">Attendance</option>
                 <option value="Leaves">Leaves</option>
                 <option value="Recruitment">Recruitment</option>
-                <option value="Performance">Performance</option>
-                <option value="Training">Training</option>
-                <option value="Finance">Finance</option>
-                <option value="System">System</option>
               </select>
             </div>
             <div>
@@ -544,10 +536,6 @@ const AdminReports = () => {
                   <option value="Attendance">Attendance Report</option>
                   <option value="Leaves">Leave Report</option>
                   <option value="Recruitment">Recruitment Report</option>
-                  <option value="Performance">Performance Report</option>
-                  <option value="Training">Training Report</option>
-                  <option value="Finance">Finance Report</option>
-                  <option value="System">System Report</option>
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -578,7 +566,6 @@ const AdminReports = () => {
                   onChange={(e) => setNewReport({...newReport, format: e.target.value})}
                 >
                   <option value="PDF">PDF</option>
-                  <option value="Excel">Excel</option>
                   <option value="CSV">CSV</option>
                 </select>
               </div>

@@ -826,7 +826,7 @@ const AdminEmployee = () => {
             {/* Tab Navigation */}
             <div className="border-b border-gray-100 flex-shrink-0 px-6 pt-4">
               <div className="flex space-x-2 overflow-x-auto">
-                {['personal', 'employment', 'address', 'emergency', 'salary', 'additional', 'system'].map((tab) => (
+                {['personal', 'employment', 'address', 'emergency', 'salary',  'system'].map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -918,41 +918,39 @@ const AdminEmployee = () => {
                 </div>
               )}
 
-              {/* Emergency Contact Tab */}
-              {activeTab === 'emergency' && (
-                <div className="space-y-6">
-                  <h3 className="text-base font-semibold text-gray-800 border-b pb-2">Emergency Contact Information</h3>
-                  {selectedEmployee.emergencyContact ? (
-                    <div className="bg-indigo-50 rounded-lg p-6 border border-indigo-100">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div>
-                          <label className="block text-xs font-medium text-indigo-700 mb-1">Contact Name</label>
-                          <p className="text-base font-semibold text-indigo-900">
-                            {selectedEmployee.emergencyContact.name}
-                          </p>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-indigo-700 mb-1">Relationship</label>
-                          <p className="text-base font-semibold text-indigo-900">
-                            {selectedEmployee.emergencyContact.relationship}
-                          </p>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-indigo-700 mb-1">Phone Number</label>
-                          <p className="text-base font-semibold text-indigo-900">
-                            {selectedEmployee.emergencyContact.phone}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-100">
-                      <span className="text-5xl mb-4 block">📞</span>
-                      <p className="text-gray-500">No emergency contact information available</p>
-                    </div>
-                  )}
-                </div>
-              )}
+{/* Emergency Contact Tab */}
+{activeTab === 'emergency' && (
+  <div className="space-y-6">
+    <h3 className="text-base font-semibold text-gray-800 border-b pb-2">Emergency Contact Information</h3>
+    {selectedEmployee.emergencyContacts && selectedEmployee.emergencyContacts.length > 0 ? (
+      <div className="space-y-4">
+        {selectedEmployee.emergencyContacts.map((contact, index) => (
+          <div key={index} className="bg-indigo-50 rounded-lg p-6 border border-indigo-100">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-xs font-medium text-indigo-700 mb-1">Contact Name</label>
+                <p className="text-base font-semibold text-indigo-900">{contact.name}</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-indigo-700 mb-1">Relationship</label>
+                <p className="text-base font-semibold text-indigo-900 capitalize">{contact.relation}</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-indigo-700 mb-1">Phone Number</label>
+                <p className="text-base font-semibold text-indigo-900">{contact.phone}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-100">
+        <span className="text-5xl mb-4 block">📞</span>
+        <p className="text-gray-500">No emergency contact information available</p>
+      </div>
+    )}
+  </div>
+)}
 
               {/* Salary & Bank Information Tab */}
               {activeTab === 'salary' && (
@@ -972,7 +970,7 @@ const AdminEmployee = () => {
                 </div>
               )}
 
-              {/* Additional Information Tab */}
+              {/* Additional Information Tab
               {activeTab === 'additional' && (
                 <div className="space-y-6">
                   <div className="space-y-4">
@@ -993,7 +991,7 @@ const AdminEmployee = () => {
                     )}
                   </div>
                 </div>
-              )}
+              )} */}
 
               {/* System Information Tab */}
               {activeTab === 'system' && (

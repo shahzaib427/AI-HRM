@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const Leave = require('../models/Leave');
+const Job = require('../models/Job');
 const fs = require('fs');
 const path = require('path');
 const NotificationService = require('../services/notificationService');
@@ -36,7 +37,6 @@ exports.updateHRProfile = async (req, res) => {
     const userId = req.user.id;
     const updateData = req.body;
 
-    // Get old user data before update for comparison
     const oldUser = await User.findById(userId).select('name email department position');
 
     const allowedFields = {
@@ -62,6 +62,7 @@ exports.updateHRProfile = async (req, res) => {
       position: updateData.position,
       reportingManager: updateData.reportingManager,
       probationPeriod: updateData.probationPeriod,
+      contractEndDate: updateData.contractEndDate,
       hrSpecialization: updateData.hrSpecialization,
       hrExperience: updateData.hrExperience,
       employeeCountManaged: updateData.employeeCountManaged,
@@ -104,13 +105,11 @@ exports.updateHRProfile = async (req, res) => {
       { new: true, runValidators: true, context: 'query' }
     ).select('-password -passwordHistory');
 
-    // ✅ SEND NOTIFICATION to Admin about HR profile update
     const io = req.app.get('io');
     const notificationService = new NotificationService(io);
-    
+
     const adminUsers = await User.find({ role: 'admin' });
-    
-    // Check what changed to send specific notification
+
     let changeDescription = '';
     if (oldUser.department !== updateData.department) {
       changeDescription = `Department changed from ${oldUser.department} to ${updateData.department}`;
@@ -119,7 +118,7 @@ exports.updateHRProfile = async (req, res) => {
     } else {
       changeDescription = 'Profile information updated';
     }
-    
+
     for (const admin of adminUsers) {
       await notificationService.createNotification({
         recipient: {
@@ -148,7 +147,7 @@ exports.updateHRProfile = async (req, res) => {
     });
   } catch (error) {
     console.error('Error updating HR profile:', error);
-    
+
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({
@@ -178,26 +177,27 @@ exports.getHRStats = async (req, res) => {
   try {
     const [
       totalEmployees,
-      activeRecruitments,
+      openJobPositions,
       pendingLeaves,
       contractsExpiring,
       departmentStats
     ] = await Promise.all([
       User.countDocuments({ isActive: true, role: { $ne: 'admin' } }),
-      User.countDocuments({ employmentStatus: 'active', role: { $in: ['employee', 'manager'] } }),
+      Job.countDocuments({ status: 'Open' }),
       Leave.countDocuments({ status: 'pending' }),
-      User.countDocuments({ 
-        contractEndDate: { 
+      User.countDocuments({
+        contractEndDate: {
           $gte: new Date(),
           $lte: new Date(new Date().setDate(new Date().getDate() + 30))
-        }
+        },
+        isActive: true
       }),
       getDepartmentStats()
     ]);
 
     const stats = {
       totalEmployees,
-      activeRecruitments,
+      activeRecruitments: openJobPositions,
       pendingLeaves,
       contractsExpiring,
       totalDepartments: departmentStats.length,
@@ -227,7 +227,7 @@ async function getDepartmentStats() {
     ]);
 
     const colors = ['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EF4444', '#6366F1'];
-    
+
     return departmentStats.map((dept, index) => ({
       ...dept,
       color: colors[index % colors.length]
@@ -249,7 +249,7 @@ exports.uploadProfilePicture = async (req, res) => {
     }
 
     const profilePictureUrl = `/uploads/profile-pictures/${req.file.filename}`;
-    
+
     const user = await User.findByIdAndUpdate(
       req.user.id,
       { profilePicture: profilePictureUrl },
@@ -263,10 +263,9 @@ exports.uploadProfilePicture = async (req, res) => {
       });
     }
 
-    // ✅ Send notification to Admin
     const io = req.app.get('io');
     const notificationService = new NotificationService(io);
-    
+
     const adminUsers = await User.find({ role: 'admin' });
     for (const admin of adminUsers) {
       await notificationService.createNotification({
@@ -303,7 +302,7 @@ exports.uploadProfilePicture = async (req, res) => {
 exports.deleteProfilePicture = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -334,19 +333,23 @@ exports.deleteProfilePicture = async (req, res) => {
   }
 };
 
-// Dashboard Stats - Real data only
+// Dashboard Stats — real data only. Training Progress removed (no model to back it).
 exports.getDashboardStats = async (req, res) => {
   try {
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
     const totalEmployees = await User.countDocuments({ isActive: true, role: { $ne: 'admin' } });
+
+    // ✅ Now real: count of open job postings from the Job model
+    const openPositions = await Job.countDocuments({ status: 'Open' });
+
     const recentHires = await User.countDocuments({
       joiningDate: { $gte: firstDayOfMonth, $exists: true, $ne: null },
       role: { $ne: 'admin' }
     });
     const pendingLeaveRequests = await Leave.countDocuments({ status: 'pending' });
-    
+
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
     const employeesLeft = await User.countDocuments({
@@ -357,11 +360,11 @@ exports.getDashboardStats = async (req, res) => {
 
     const stats = {
       totalEmployees: totalEmployees,
-      openPositions: 0,
+      openPositions: openPositions,
       pendingLeave: pendingLeaveRequests,
       newHires: recentHires,
-      turnoverRate: parseFloat(turnoverRate),
-      trainingProgress: 0
+      turnoverRate: parseFloat(turnoverRate)
+      // trainingProgress removed — no Training model exists to back it
     };
 
     res.status(200).json({
@@ -382,31 +385,30 @@ exports.getRecentActivity = async (req, res) => {
   try {
     const activities = [];
 
-    // Get recent leave requests
+    // ✅ FIX: Leave schema uses `employee`, not `userId` — the old check
+    // `if (leave.userId)` was always false, so leave activity never appeared.
     const recentLeaves = await Leave.find()
       .sort({ createdAt: -1 })
       .limit(5)
+      .populate('employee', 'name')
       .lean();
 
-    for (const leave of recentLeaves) {
-      if (leave.userId) {
-        const user = await User.findById(leave.userId).select('name').lean();
-        if (user && user.name) {
-          activities.push({
-            id: leave._id.toString(),
-            message: `${user.name} requested ${leave.type || 'leave'} leave`,
-            time: leave.createdAt,
-            status: leave.status || 'pending',
-            icon: getLeaveIcon(leave.type)
-          });
-        }
+    recentLeaves.forEach(leave => {
+      if (leave.employee && leave.employee.name) {
+        activities.push({
+          id: leave._id.toString(),
+          message: `${leave.employee.name} requested ${leave.type || 'leave'} leave`,
+          time: leave.createdAt,
+          status: leave.status || 'pending',
+          icon: getLeaveIcon(leave.type)
+        });
       }
-    }
+    });
 
     // Get recent new employees (last 30 days)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
+
     const recentEmployees = await User.find({
       role: { $ne: 'admin' },
       joiningDate: { $gte: thirtyDaysAgo, $exists: true, $ne: null }
@@ -425,8 +427,24 @@ exports.getRecentActivity = async (req, res) => {
       });
     });
 
+    // Real: recently posted/opened job listings
+    const recentJobs = await Job.find({ status: 'Open' })
+      .sort({ publishedAt: -1, createdAt: -1 })
+      .limit(5)
+      .lean();
+
+    recentJobs.forEach(job => {
+      activities.push({
+        id: job._id.toString(),
+        message: `New job posted: ${job.title} (${job.department})`,
+        time: job.publishedAt || job.createdAt,
+        status: 'completed',
+        icon: '📋'
+      });
+    });
+
     activities.sort((a, b) => new Date(b.time) - new Date(a.time));
-    
+
     const formattedActivities = activities.slice(0, 10).map(activity => ({
       ...activity,
       time: formatTimeAgo(activity.time)
@@ -445,7 +463,7 @@ exports.getRecentActivity = async (req, res) => {
   }
 };
 
-// Pending Approvals - Real data only
+// Pending Approvals - Real data only (contractEndDate now exists on User)
 exports.getPendingApprovals = async (req, res) => {
   try {
     const approvals = [];
@@ -474,11 +492,12 @@ exports.getPendingApprovals = async (req, res) => {
       });
     }
 
+    // ✅ Now real: contractEndDate exists on User, so this actually matches records
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
     const contractsExpiring = await User.countDocuments({
-      contractEndDate: { 
-        $lte: thirtyDaysFromNow, 
+      contractEndDate: {
+        $lte: thirtyDaysFromNow,
         $gte: new Date(),
         $exists: true,
         $ne: null
@@ -507,12 +526,42 @@ exports.getPendingApprovals = async (req, res) => {
   }
 };
 
-// Recruitment Data - Real data only
+// Recruitment Data — now real, built from the Job model
 exports.getRecruitmentData = async (req, res) => {
   try {
+    const openJobs = await Job.find({ status: 'Open' })
+      .sort({ publishedAt: -1, createdAt: -1 })
+      .limit(6)
+      .lean();
+
+    const now = new Date();
+
+    const recruitmentData = openJobs.map(job => {
+      // Progress is a time-based proxy: how far through the posting-to-deadline
+      // window we are. There's no applicant-pipeline/stage field in the Job
+      // schema, so this is NOT a literal "screening/interview/offer" percentage —
+      // it's how much of the hiring window has elapsed.
+      let progress = 0;
+      if (job.deadline && job.publishedAt) {
+        const totalWindow = new Date(job.deadline) - new Date(job.publishedAt);
+        const elapsed = now - new Date(job.publishedAt);
+        if (totalWindow > 0) {
+          progress = Math.min(100, Math.max(0, Math.round((elapsed / totalWindow) * 100)));
+        }
+      }
+
+      return {
+        id: job._id.toString(),
+        position: job.title,
+        applicants: job.applicantsCount || 0,
+        stage: job.status,
+        progress
+      };
+    });
+
     res.status(200).json({
       success: true,
-      data: []
+      data: recruitmentData
     });
   } catch (error) {
     console.error('Error fetching recruitment data:', error);
@@ -555,30 +604,30 @@ exports.getHRMetrics = async (req, res) => {
         }
       }
     ]);
-    
+
     const avgTimeToHire = timeToHireAgg[0]?.averageDays;
     if (avgTimeToHire && avgTimeToHire > 0) {
       metrics.push({
         label: 'Time to Hire',
         value: Math.round(avgTimeToHire),
         color: 'from-blue-500 to-cyan-500',
-        description: 'Average days to fill position'
+        description: 'Average days from account creation to joining'
       });
     }
-    
+
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-    
+
     const employeesStartOfPeriod = await User.countDocuments({
       createdAt: { $lte: sixMonthsAgo },
       role: { $ne: 'admin' }
     });
-    
+
     const currentEmployees = await User.countDocuments({
       isActive: true,
       role: { $ne: 'admin' }
     });
-    
+
     if (employeesStartOfPeriod > 0 && currentEmployees > 0) {
       const retentionRate = Math.round((currentEmployees / employeesStartOfPeriod) * 100);
       metrics.push({
@@ -588,12 +637,12 @@ exports.getHRMetrics = async (req, res) => {
         description: '6 month retention'
       });
     }
-    
+
     const genderStats = await User.aggregate([
       {
-        $match: { 
-          gender: { $exists: true, $ne: null, $ne: '' }, 
-          role: { $ne: 'admin' } 
+        $match: {
+          gender: { $exists: true, $ne: null, $ne: '' },
+          role: { $ne: 'admin' }
         }
       },
       {
@@ -603,7 +652,7 @@ exports.getHRMetrics = async (req, res) => {
         }
       }
     ]);
-    
+
     const totalWithGender = genderStats.reduce((sum, g) => sum + g.count, 0);
     if (totalWithGender > 0) {
       const femaleCount = genderStats.find(g => g._id === 'female')?.count || 0;
@@ -617,6 +666,22 @@ exports.getHRMetrics = async (req, res) => {
           description: 'Gender diversity metric'
         });
       }
+    }
+
+    // ✅ New real metric, now possible thanks to the Job model
+    const totalOpenJobs = await Job.countDocuments({ status: 'Open' });
+    if (totalOpenJobs > 0) {
+      const avgApplicantsAgg = await Job.aggregate([
+        { $match: { status: 'Open' } },
+        { $group: { _id: null, avgApplicants: { $avg: '$applicantsCount' } } }
+      ]);
+      const avgApplicants = avgApplicantsAgg[0]?.avgApplicants || 0;
+      metrics.push({
+        label: 'Avg Applicants/Job',
+        value: Math.round(avgApplicants),
+        color: 'from-emerald-500 to-teal-500',
+        description: `Across ${totalOpenJobs} open position${totalOpenJobs !== 1 ? 's' : ''}`
+      });
     }
 
     if (metrics.length === 0) {
@@ -644,12 +709,12 @@ exports.getHRMetrics = async (req, res) => {
 // Helper functions
 function formatTimeAgo(date) {
   if (!date) return 'Just now';
-  
+
   const dateObj = new Date(date);
   if (isNaN(dateObj.getTime())) return 'Just now';
-  
+
   const seconds = Math.floor((new Date() - dateObj) / 1000);
-  
+
   const intervals = {
     year: 31536000,
     month: 2592000,
@@ -658,7 +723,7 @@ function formatTimeAgo(date) {
     hour: 3600,
     minute: 60
   };
-  
+
   for (const [unit, secondsInUnit] of Object.entries(intervals)) {
     const interval = Math.floor(seconds / secondsInUnit);
     if (interval >= 1) {
@@ -669,13 +734,10 @@ function formatTimeAgo(date) {
 }
 
 function getLeaveIcon(type) {
+  // Matches the current Leave.type enum: ['monthly', 'emergency']
   const icons = {
-    annual: '🏖️',
-    sick: '🤒',
-    casual: '🎯',
-    maternity: '👶',
-    paternity: '👨‍👦',
-    unpaid: '💰'
+    monthly: '🏖️',
+    emergency: '🚨'
   };
   return icons[type] || '📝';
 }

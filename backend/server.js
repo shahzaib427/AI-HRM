@@ -26,6 +26,11 @@ const adminProfileRoutes    = require('./routes/adminProfileRoutes');
 const hrProfileRoutes       = require('./routes/hrProfileRoutes');
 const employeeProfileRoutes = require('./routes/employeeProfileRoutes');
 
+const billingRoutes = require('./routes/billingRoutes');
+// ⚠️ FIX: this was never imported or mounted, so /api/subscription/*
+// (used by the guest checkout page) 404'd on every request.
+const subscriptionRoutes = require('./routes/subscriptionRoutes');
+
 const app = express();
 const server = http.createServer(app);
 
@@ -139,6 +144,10 @@ app.use('/api/messages',           messageRoutes);
 
 // ✅ REPORTS ROUTE - ADD THIS LINE
 app.use('/api/reports',            reportRoutes);
+
+app.use('/api/billing', billingRoutes);
+// ⚠️ FIX: mount the guest checkout route
+app.use('/api/subscription', subscriptionRoutes);
 
 // ── Health check ───────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {

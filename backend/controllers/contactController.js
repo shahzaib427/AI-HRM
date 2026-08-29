@@ -1,5 +1,6 @@
 const Contact = require('../models/Contact');
 const User = require('../models/User');
+const sendEmail = require('../utils/emailService');
 
 // @desc    Submit contact form
 // @route   POST /api/contact
@@ -242,6 +243,44 @@ const deleteContactSubmission = async (req, res) => {
     });
   }
 };
+const bulkDeleteContactSubmissions = async (req, res) => {
+  try {
+    const { ids } = req.body;
+ 
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'ids must be a non-empty array'
+      });
+    }
+ 
+    // Sanity cap so a bad payload can't wipe the whole collection
+    if (ids.length > 500) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot delete more than 500 submissions at once'
+      });
+    }
+ 
+    const result = await Contact.deleteMany({ _id: { $in: ids } });
+ 
+    res.status(200).json({
+      success: true,
+      message: `Successfully deleted ${result.deletedCount} submission(s)`,
+      data: {
+        requestedCount: ids.length,
+        deletedCount: result.deletedCount
+      }
+    });
+  } catch (error) {
+    console.error('Bulk delete contact submissions error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to bulk delete contact submissions'
+    });
+  }
+};
+ 
 
 // @desc    Get contact statistics
 // @route   GET /api/contact/stats/summary
@@ -279,6 +318,64 @@ const getContactStats = async (req, res) => {
   }
 };
 
+const replyToContactSubmission = async (req, res) => {
+  try {
+    const { subject, message } = req.body;
+ 
+    if (!subject || !subject.trim() || !message || !message.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Subject and message are required'
+      });
+    }
+ 
+    const submission = await Contact.findById(req.params.id);
+ 
+    if (!submission) {
+      return res.status(404).json({
+        success: false,
+        error: 'Contact submission not found'
+      });
+    }
+ 
+    // Convert plain-text line breaks to <br> for basic HTML formatting
+    const html = `<div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
+      ${message.trim().replace(/\n/g, '<br>')}
+    </div>`;
+ 
+    await sendEmail({
+      to: submission.email,
+      subject: subject.trim(),
+      html
+    });
+ 
+    // Log the reply as an internal note and auto-advance status from pending
+    submission.notes.push({
+      text: `Replied via email — Subject: "${subject.trim()}"`,
+      addedBy: req.user._id,
+      addedAt: new Date()
+    });
+ 
+    if (submission.status === 'pending') {
+      submission.status = 'contacted';
+    }
+ 
+    await submission.save();
+ 
+    res.status(200).json({
+      success: true,
+      message: 'Reply sent successfully',
+      data: submission
+    });
+  } catch (error) {
+    console.error('Reply to contact submission error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to send reply email. Please check your SMTP configuration.'
+    });
+  }
+};
+
 module.exports = {
   submitContactForm,
   getContactSubmissions,
@@ -286,5 +383,7 @@ module.exports = {
   updateContactStatus,
   addContactNote,
   deleteContactSubmission,
+  bulkDeleteContactSubmissions, 
+  replyToContactSubmission,
   getContactStats
 };

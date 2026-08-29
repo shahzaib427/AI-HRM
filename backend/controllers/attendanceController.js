@@ -1046,3 +1046,37 @@ exports.testEndpoint = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+exports.bulkDeleteAttendance = async (req, res) => {
+  try {
+    const { attendanceIds } = req.body;
+ 
+    if (!Array.isArray(attendanceIds) || attendanceIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'attendanceIds must be a non-empty array'
+      });
+    }
+ 
+    // Basic sanity cap so a mistaken payload can't wipe the whole collection
+    if (attendanceIds.length > 500) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete more than 500 attendance records at once'
+      });
+    }
+ 
+    const result = await Attendance.deleteMany({ _id: { $in: attendanceIds } });
+ 
+    res.json({
+      success: true,
+      data: {
+        requestedCount: attendanceIds.length,
+        deletedCount: result.deletedCount
+      },
+      message: `Successfully deleted ${result.deletedCount} attendance record(s)`
+    });
+  } catch (error) {
+    console.error('❌ Bulk delete attendance error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};

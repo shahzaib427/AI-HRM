@@ -96,7 +96,7 @@ const Home = () => {
           Streamline recruitment, automate interviews, manage payroll, and gain actionable insights — all powered by artificial intelligence.
         </p>
         <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <Link to="/contact" className="btn-primary">Start 7-Day Free Trial</Link>
+          <Link to="/billing" className="btn-primary">Start 7-Day Free Trial</Link>
         </div>
       </section>
 

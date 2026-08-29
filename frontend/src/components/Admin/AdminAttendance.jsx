@@ -40,6 +40,11 @@ const AdminAttendance = () => {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState(null);
 
+  // ── Bulk select/delete state ────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
   const csvLinkRef = useRef(null);
   const actionsRefs = useRef({});
 
@@ -114,7 +119,7 @@ const AdminAttendance = () => {
     setCsvData(formattedData);
   };
 
-  // Delete
+  // Delete (single)
   const handleDeleteClick = (record) => {
     setRecordToDelete(record);
     setDeleteConfirm(true);
@@ -134,6 +139,52 @@ const AdminAttendance = () => {
     } finally {
       setDeleteConfirm(false);
       setRecordToDelete(null);
+    }
+  };
+
+  // ── Bulk select helpers ──────────────────────────────────────────────────
+  // Clear any selection when the visible rows change (search/filter/page/refetch)
+  // so we never bulk-delete an id that's no longer visible/valid.
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [filters, pagination.page, attendances]);
+
+  const isAllVisibleSelected =
+    attendances.length > 0 && attendances.every(a => selectedIds.includes(a._id));
+
+  const toggleSelectAll = () => {
+    if (isAllVisibleSelected) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(attendances.map(a => a._id));
+    }
+  };
+
+  const toggleSelectOne = (id) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    try {
+      setBulkDeleting(true);
+      const { data } = await axiosInstance.delete('/attendance/bulk/delete', {
+        data: { attendanceIds: selectedIds }
+      });
+      if (data.success) {
+        alert(`Deleted ${data.data.deletedCount} attendance record(s) successfully!`);
+        setBulkDeleteConfirm(false);
+        setSelectedIds([]);
+        fetchAttendance();
+      } else {
+        alert(data.message || 'Bulk delete failed');
+      }
+    } catch (error) {
+      alert(error.response?.data?.message || 'Failed to bulk delete attendance records');
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -341,7 +392,28 @@ const AdminAttendance = () => {
                   <p className="text-xs text-gray-400">{pagination.total} records</p>
                 </div>
               </div>
-              <div className="text-sm text-gray-500">Page {pagination.page} of {pagination.pages}</div>
+
+              {selectedIds.length > 0 ? (
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-gray-600">
+                    {selectedIds.length} selected
+                  </span>
+                  <button
+                    onClick={() => setSelectedIds([])}
+                    className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    onClick={() => setBulkDeleteConfirm(true)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+                  >
+                    <FiTrash2 className="w-4 h-4" /> Delete Selected
+                  </button>
+                </div>
+              ) : (
+                <div className="text-sm text-gray-500">Page {pagination.page} of {pagination.pages}</div>
+              )}
             </div>
           </div>
 
@@ -363,6 +435,15 @@ const AdminAttendance = () => {
                 <table className="w-full">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
+                      <th className="px-5 py-3 text-left w-10">
+                        <input
+                          type="checkbox"
+                          checked={isAllVisibleSelected}
+                          onChange={toggleSelectAll}
+                          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500/20 cursor-pointer"
+                          aria-label="Select all visible attendance records"
+                        />
+                      </th>
                       <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
                       <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                       <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check-in</th>
@@ -374,7 +455,19 @@ const AdminAttendance = () => {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {attendances.map((record) => (
-                      <tr key={record._id} className="hover:bg-gray-50 transition-colors">
+                      <tr
+                        key={record._id}
+                        className={`hover:bg-gray-50 transition-colors ${selectedIds.includes(record._id) ? 'bg-indigo-50/40' : ''}`}
+                      >
+                        <td className="px-5 py-4">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(record._id)}
+                            onChange={() => toggleSelectOne(record._id)}
+                            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500/20 cursor-pointer"
+                            aria-label={`Select attendance record for ${record.employee?.name || 'employee'}`}
+                          />
+                        </td>
                         <td className="px-5 py-4">
                           <div className="font-medium text-gray-900">{record.employee?.name}</div>
                           <div className="text-xs text-gray-500">{record.employee?.employeeId}</div>
@@ -589,7 +682,7 @@ const AdminAttendance = () => {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation Modal (single) */}
       {deleteConfirm && recordToDelete && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
@@ -621,6 +714,53 @@ const AdminAttendance = () => {
                   className="flex-1 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2">
                   <FiTrash2 className="w-4 h-4" />
                   Delete Record
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {bulkDeleteConfirm && selectedIds.length > 0 && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
+                  <FiTrash2 className="text-red-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Delete {selectedIds.length} Attendance Record{selectedIds.length > 1 ? 's' : ''}
+                </h3>
+              </div>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-600 mb-4">
+                Are you sure you want to permanently delete {selectedIds.length} selected attendance record{selectedIds.length > 1 ? 's' : ''}?
+                This cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setBulkDeleteConfirm(false)}
+                  disabled={bulkDeleting}
+                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={bulkDeleting}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {bulkDeleting ? (
+                    <>
+                      <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Deleting...
+                    </>
+                  ) : (
+                    `Yes, Delete ${selectedIds.length}`
+                  )}
                 </button>
               </div>
             </div>

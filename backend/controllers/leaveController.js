@@ -178,7 +178,7 @@ exports.applyLeave = async (req, res) => {
     });
     
     await leave.save();
-    await leave.populate('employee', 'name email department position');
+    await leave.populate('employee', 'name email department position role employeeId');
     
     // ✅ SEND NOTIFICATION TO HR/ADMIN about new leave request
     const io = req.app.get('io');
@@ -244,7 +244,7 @@ exports.reviewLeave = async (req, res) => {
       });
     }
     
-    const leave = await Leave.findById(leaveId).populate('employee', 'name email department position');
+    const leave = await Leave.findById(leaveId).populate('employee', 'name email department position role employeeId');
     
     if (!leave) {
       return res.status(404).json({
@@ -303,6 +303,9 @@ exports.reviewLeave = async (req, res) => {
       leave.approvedAt = new Date();
       
       await leave.save();
+      
+      // Populate the approvedBy field with role and employeeId
+      await leave.populate('approvedBy', 'name email role employeeId');
       
       // ✅ NOTIFY EMPLOYEE that leave is APPROVED
       await notificationService.createNotification({
@@ -370,6 +373,9 @@ exports.reviewLeave = async (req, res) => {
       leave.approvedAt = new Date();
       
       await leave.save();
+      
+      // Populate the approvedBy field with role and employeeId
+      await leave.populate('approvedBy', 'name email role employeeId');
       
       // ✅ NOTIFY EMPLOYEE that leave is REJECTED
       await notificationService.createNotification({
@@ -441,7 +447,7 @@ exports.cancelLeave = async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
     
-    const leave = await Leave.findById(leaveId).populate('employee', 'name email');
+    const leave = await Leave.findById(leaveId).populate('employee', 'name email role employeeId');
     
     if (!leave) {
       return res.status(404).json({
@@ -499,9 +505,9 @@ exports.cancelLeave = async (req, res) => {
     }
     
     const cancelledLeave = await Leave.findById(leaveId)
-      .populate('employee', 'name email department position')
-      .populate('approvedBy', 'name email')
-      .populate('cancelledBy', 'name email');
+      .populate('employee', 'name email department position role employeeId')
+      .populate('approvedBy', 'name email role employeeId')
+      .populate('cancelledBy', 'name email role employeeId');
     
     res.json({
       success: true,
@@ -525,7 +531,7 @@ exports.updateLeave = async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
     
-    const leave = await Leave.findById(leaveId).populate('employee', 'name email');
+    const leave = await Leave.findById(leaveId).populate('employee', 'name email role employeeId');
     
     if (!leave) {
       return res.status(404).json({
@@ -620,8 +626,8 @@ exports.updateLeave = async (req, res) => {
     }
     
     const updatedLeave = await Leave.findById(leaveId)
-      .populate('employee', 'name email department position')
-      .populate('approvedBy', 'name email');
+      .populate('employee', 'name email department position role employeeId')
+      .populate('approvedBy', 'name email role employeeId');
     
     res.json({
       success: true,
@@ -629,7 +635,7 @@ exports.updateLeave = async (req, res) => {
       message: 'Leave request updated successfully'
     });
   } catch (err) {
-    console.error('Update leave error:', error);
+    console.error('Update leave error:', err);
     res.status(500).json({
       success: false,
       error: err.message || 'Server error'
@@ -637,7 +643,7 @@ exports.updateLeave = async (req, res) => {
   }
 };
 
-// Keep all your existing functions unchanged below
+// Get monthly balance
 exports.getMonthlyBalance = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -664,6 +670,7 @@ exports.getMonthlyBalance = async (req, res) => {
   }
 };
 
+// Get my leaves
 exports.getMyLeaves = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -681,8 +688,8 @@ exports.getMyLeaves = async (req, res) => {
     }
     
     const leaves = await Leave.find(query)
-      .populate('employee', 'name email department position')
-      .populate('approvedBy', 'name email')
+      .populate('employee', 'name email department position role employeeId')
+      .populate('approvedBy', 'name email role employeeId')
       .sort({ startDate: -1 });
     
     const currentDate = new Date();
@@ -705,11 +712,12 @@ exports.getMyLeaves = async (req, res) => {
   }
 };
 
+// Get leave by ID
 exports.getLeaveById = async (req, res) => {
   try {
     const leave = await Leave.findById(req.params.id)
-      .populate('employee', 'name email department position')
-      .populate('approvedBy', 'name email');
+      .populate('employee', 'name email department position role employeeId')
+      .populate('approvedBy', 'name email role employeeId');
     
     if (!leave) {
       return res.status(404).json({
@@ -740,6 +748,7 @@ exports.getLeaveById = async (req, res) => {
   }
 };
 
+// Get leave statistics
 exports.getLeaveStatistics = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -797,6 +806,7 @@ exports.getLeaveStatistics = async (req, res) => {
   }
 };
 
+// Get upcoming leaves
 exports.getUpcomingLeaves = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -807,6 +817,8 @@ exports.getUpcomingLeaves = async (req, res) => {
       status: 'approved',
       startDate: { $gte: today }
     })
+    .populate('employee', 'name email department position role employeeId')
+    .populate('approvedBy', 'name email role employeeId')
     .sort({ startDate: 1 })
     .limit(10);
     
@@ -824,6 +836,7 @@ exports.getUpcomingLeaves = async (req, res) => {
   }
 };
 
+// Get team leaves
 exports.getTeamLeaves = async (req, res) => {
   try {
     const managerId = req.user.id;
@@ -838,8 +851,8 @@ exports.getTeamLeaves = async (req, res) => {
       }
       
       const leaves = await Leave.find(query)
-        .populate('employee', 'name email department position avatar employeeId')
-        .populate('approvedBy', 'name email')
+        .populate('employee', 'name email department position avatar employeeId role')
+        .populate('approvedBy', 'name email role employeeId')
         .sort({ startDate: -1 });
       
       return res.json({
@@ -864,8 +877,8 @@ exports.getTeamLeaves = async (req, res) => {
     }
     
     const leaves = await Leave.find(query)
-      .populate('employee', 'name email department position avatar employeeId')
-      .populate('approvedBy', 'name email')
+      .populate('employee', 'name email department position avatar employeeId role')
+      .populate('approvedBy', 'name email role employeeId')
       .sort({ startDate: -1 });
     
     res.json({
@@ -882,6 +895,7 @@ exports.getTeamLeaves = async (req, res) => {
   }
 };
 
+// Get all leaves
 exports.getAllLeaves = async (req, res) => {
   try {
     const { status, startDate, endDate, department, page = 1, limit = 50 } = req.query;
@@ -904,8 +918,8 @@ exports.getAllLeaves = async (req, res) => {
     const total = await Leave.countDocuments(query);
     
     const leaves = await Leave.find(query)
-      .populate('employee', 'name email department position employeeId avatar')
-      .populate('approvedBy', 'name email')
+      .populate('employee', 'name email department position employeeId avatar role')
+      .populate('approvedBy', 'name email role employeeId')
       .sort({ startDate: -1, createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -930,6 +944,7 @@ exports.getAllLeaves = async (req, res) => {
   }
 };
 
+// Check leave access middleware
 exports.checkLeaveAccess = async (req, res, next) => {
   try {
     const leave = await Leave.findById(req.params.id);
@@ -959,6 +974,7 @@ exports.checkLeaveAccess = async (req, res, next) => {
   }
 };
 
+// Get leave balance
 exports.getLeaveBalance = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -984,6 +1000,7 @@ exports.getLeaveBalance = async (req, res) => {
   }
 };
 
+// Delete all leaves
 exports.deleteAllLeaves = async (req, res) => {
   try {
     const { confirmation, filters } = req.body;
@@ -1028,6 +1045,7 @@ exports.deleteAllLeaves = async (req, res) => {
   }
 };
 
+// Cleanup old leaves
 exports.cleanupOldLeaves = async (req, res) => {
   try {
     const userRole = req.user.role;
@@ -1062,6 +1080,7 @@ exports.cleanupOldLeaves = async (req, res) => {
   }
 };
 
+// Export leaves to CSV
 exports.exportLeavesToCSV = async (req, res) => {
   try {
     const userRole = req.user.role;
@@ -1089,13 +1108,13 @@ exports.exportLeavesToCSV = async (req, res) => {
     }
     
     const leaves = await Leave.find(query)
-      .populate('employee', 'name email department position employeeId')
-      .populate('approvedBy', 'name email')
-      .populate('cancelledBy', 'name email')
+      .populate('employee', 'name email department position employeeId role')
+      .populate('approvedBy', 'name email role employeeId')
+      .populate('cancelledBy', 'name email role employeeId')
       .sort({ startDate: -1, createdAt: -1 });
     
     if (format === 'csv') {
-      let csvContent = 'Employee Name,Employee ID,Department,Leave Type,Start Date,End Date,Days,Leaves Used,Status,Reason,Applied Date,Approved By,Approved Date,Rejection Reason\n';
+      let csvContent = 'Employee Name,Employee ID,Department,Leave Type,Start Date,End Date,Days,Leaves Used,Status,Reason,Applied Date,Approved By,Approved By Role,Approved Date,Rejection Reason\n';
       
       leaves.forEach(leave => {
         const employeeName = leave.employee?.name || 'Unknown';
@@ -1110,10 +1129,11 @@ exports.exportLeavesToCSV = async (req, res) => {
         const reason = `"${(leave.reason || '').replace(/"/g, '""')}"`;
         const appliedDate = new Date(leave.createdAt).toLocaleDateString('en-US');
         const approvedByName = leave.approvedBy?.name || 'N/A';
+        const approvedByRole = leave.approvedBy?.role || 'N/A';
         const approvedDate = leave.approvedAt ? new Date(leave.approvedAt).toLocaleDateString('en-US') : 'N/A';
         const rejectionReason = leave.rejectionReason ? `"${leave.rejectionReason.replace(/"/g, '""')}"` : 'N/A';
         
-        csvContent += `${employeeName},${employeeId},${departmentName},${leaveType},${startDateFormatted},${endDateFormatted},${days},${leavesUsed},${status},${reason},${appliedDate},${approvedByName},${approvedDate},${rejectionReason}\n`;
+        csvContent += `${employeeName},${employeeId},${departmentName},${leaveType},${startDateFormatted},${endDateFormatted},${days},${leavesUsed},${status},${reason},${appliedDate},${approvedByName},${approvedByRole},${approvedDate},${rejectionReason}\n`;
       });
       
       res.setHeader('Content-Type', 'text/csv');
@@ -1128,6 +1148,7 @@ exports.exportLeavesToCSV = async (req, res) => {
   }
 };
 
+// Export monthly report
 exports.exportMonthlyReport = async (req, res) => {
   try {
     const userRole = req.user.role;
@@ -1146,7 +1167,8 @@ exports.exportMonthlyReport = async (req, res) => {
       startDate: { $gte: startOfMonth, $lte: endOfMonth },
       status: 'approved'
     })
-    .populate('employee', 'name email department position employeeId')
+    .populate('employee', 'name email department position employeeId role')
+    .populate('approvedBy', 'name email role employeeId')
     .sort({ employee: 1, startDate: 1 });
     
     const employeeLeaves = {};
@@ -1165,7 +1187,7 @@ exports.exportMonthlyReport = async (req, res) => {
     
     let csvContent = 'Monthly Leave Report\n';
     csvContent += `Month: ${startOfMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}\n\n`;
-    csvContent += 'Employee Name,Employee ID,Department,Total Leaves Used,Leave 1 Dates,Leave 2 Dates,Remaining Leaves\n';
+    csvContent += 'Employee Name,Employee ID,Department,Total Leaves Used,Leave 1 Dates,Leave 2 Dates,Remaining Leaves,Approved By\n';
     
     Object.values(employeeLeaves).forEach(data => {
       const employeeName = data.employee.name;
@@ -1189,7 +1211,9 @@ exports.exportMonthlyReport = async (req, res) => {
         leave2Dates = `${start2} - ${end2}`;
       }
       
-      csvContent += `${employeeName},${employeeId},${department},${totalLeavesUsed},${leave1Dates},${leave2Dates},${remainingLeaves}\n`;
+      const approvedBy = data.leaves[0]?.approvedBy?.name || 'N/A';
+      
+      csvContent += `${employeeName},${employeeId},${department},${totalLeavesUsed},${leave1Dates},${leave2Dates},${remainingLeaves},${approvedBy}\n`;
     });
     
     csvContent += `\nSummary\n`;
@@ -1203,5 +1227,89 @@ exports.exportMonthlyReport = async (req, res) => {
   } catch (err) {
     console.error('Export monthly report error:', err);
     res.status(500).json({ success: false, error: err.message || 'Server error' });
+  }
+};
+
+// Delete a single leave request (admin/hr only) - permanent, any status
+exports.deleteLeave = async (req, res) => {
+  try {
+    const leaveId = req.params.id;
+    const userRole = req.user.role;
+
+    if (!['admin', 'hr'].includes(userRole)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only admin or HR can delete leave requests'
+      });
+    }
+
+    const leave = await Leave.findById(leaveId);
+    if (!leave) {
+      return res.status(404).json({
+        success: false,
+        message: 'Leave request not found'
+      });
+    }
+
+    await Leave.findByIdAndDelete(leaveId);
+
+    res.json({
+      success: true,
+      data: { deletedId: leaveId },
+      message: 'Leave request deleted successfully'
+    });
+  } catch (err) {
+    console.error('Delete leave error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Server error'
+    });
+  }
+};
+
+// Bulk delete leave requests by IDs (admin/hr only) - permanent, any status
+exports.bulkDeleteLeaves = async (req, res) => {
+  try {
+    const { leaveIds } = req.body;
+    const userRole = req.user.role;
+
+    if (!['admin', 'hr'].includes(userRole)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only admin or HR can bulk delete leave requests'
+      });
+    }
+
+    if (!Array.isArray(leaveIds) || leaveIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'leaveIds must be a non-empty array'
+      });
+    }
+
+    // Basic sanity cap so a mistaken payload can't wipe the whole collection
+    if (leaveIds.length > 500) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete more than 500 leave requests at once'
+      });
+    }
+
+    const result = await Leave.deleteMany({ _id: { $in: leaveIds } });
+
+    res.json({
+      success: true,
+      data: {
+        requestedCount: leaveIds.length,
+        deletedCount: result.deletedCount
+      },
+      message: `Successfully deleted ${result.deletedCount} leave request(s)`
+    });
+  } catch (err) {
+    console.error('Bulk delete leaves error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Server error'
+    });
   }
 };

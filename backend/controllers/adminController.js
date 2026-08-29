@@ -1,7 +1,34 @@
 const User = require('../models/User');
 const Leave = require('../models/Leave');
+const Attendance = require('../models/Attendance');
+const Payroll = require('../models/Payroll');
+const mongoose = require('mongoose');
+const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+
+// ==================== DATE RANGE HELPER ====================
+function getDateRangeFilter(timeRange) {
+  const now = new Date();
+  const start = new Date(now);
+  switch (timeRange) {
+    case 'daily':
+      start.setHours(0, 0, 0, 0);
+      break;
+    case 'weekly':
+      start.setDate(now.getDate() - 7);
+      break;
+    case 'monthly':
+      start.setDate(now.getDate() - 30);
+      break;
+    case 'yearly':
+      start.setDate(now.getDate() - 365);
+      break;
+    default:
+      start.setDate(now.getDate() - 30);
+  }
+  return { $gte: start, $lte: now };
+}
 
 exports.getAdminProfile = async (req, res) => {
   try {
@@ -102,7 +129,7 @@ exports.updateAdminProfile = async (req, res) => {
     });
   } catch (error) {
     console.error('Error updating admin profile:', error);
-    
+
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({
@@ -185,7 +212,7 @@ exports.uploadProfilePicture = async (req, res) => {
     }
 
     const profilePictureUrl = `/uploads/profile-pictures/${req.file.filename}`;
-    
+
     const user = await User.findByIdAndUpdate(
       req.user.id,
       { profilePicture: profilePictureUrl },
@@ -217,7 +244,7 @@ exports.uploadProfilePicture = async (req, res) => {
 exports.deleteProfilePicture = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -251,7 +278,7 @@ exports.deleteProfilePicture = async (req, res) => {
 exports.toggle2FA = async (req, res) => {
   try {
     const userId = req.user.id;
-    
+
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
@@ -277,35 +304,94 @@ exports.toggle2FA = async (req, res) => {
   }
 };
 
-// Dashboard Stats
+// ==================== DASHBOARD STATS (real, timeRange-aware) ====================
 exports.getDashboardStats = async (req, res) => {
   try {
-    const totalEmployees = await User.countDocuments({ 
-      isActive: true, 
-      role: { $ne: 'admin' } 
+    const { timeRange = 'monthly' } = req.query;
+    const dateFilter = getDateRangeFilter(timeRange);
+
+    const totalEmployees = await User.countDocuments({
+      isActive: true,
+      role: { $ne: 'admin' }
     });
-    
-    const activeDepartments = await User.distinct('department', { 
+
+    const activeDepartments = await User.distinct('department', {
       isActive: true,
       department: { $exists: true, $ne: null, $ne: '' }
     });
-    
+
     const pendingLeaves = await Leave.countDocuments({ status: 'pending' });
-    
-    const systemHealth = 98;
-    const employeeSatisfaction = 87;
-    const performance = 92;
+
+    // Real "system health": % of active employees who checked in at least
+    // once within the selected time range (was locked to "today only" before)
+    const distinctCheckedIn = await Attendance.distinct('employee', {
+      date: dateFilter,
+      $or: [
+        { approvedCheckIn: { $exists: true, $ne: null } },
+        { checkIn: { $exists: true, $ne: null } }
+      ]
+    });
+
+    const systemHealth = totalEmployees > 0
+      ? Math.round((distinctCheckedIn.length / totalEmployees) * 100)
+      : 0;
+
+    // Real "employee satisfaction" proxy: on-time check-in rate within timeRange
+    // (before 9:00 AM cutoff, matching the schema's own late-detection logic)
+    const attendanceInRange = await Attendance.find({
+      date: dateFilter,
+      $or: [
+        { approvedCheckIn: { $exists: true, $ne: null } },
+        { checkIn: { $exists: true, $ne: null } }
+      ]
+    }).select('approvedCheckIn checkIn lateMinutes').lean();
+
+    const onTimeCount = attendanceInRange.filter(a => (a.lateMinutes || 0) === 0).length;
+    const employeeSatisfaction = attendanceInRange.length > 0
+      ? Math.round((onTimeCount / attendanceInRange.length) * 100)
+      : 0;
+
+    // Real "performance": average hours worked vs 8h target, within timeRange
+    const withHours = await Attendance.find({
+      date: dateFilter,
+      totalHours: { $exists: true, $gt: 0 }
+    }).select('totalHours').lean();
+
+    const avgHours = withHours.length > 0
+      ? withHours.reduce((sum, a) => sum + a.totalHours, 0) / withHours.length
+      : 0;
+    const performance = Math.min(100, Math.round((avgHours / 8) * 100));
+
+    // Real "payroll cost": Payroll records are month/year-granular, so this
+    // is the finest real precision available — 'yearly' sums every month of
+    // the current year; daily/weekly/monthly all show the current month's
+    // paid total, since payroll simply doesn't run at daily/weekly granularity.
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonthName = now.toLocaleString('default', { month: 'long' });
+
+    const payrollQuery = timeRange === 'yearly'
+      ? { year: currentYear, paymentStatus: 'Paid' }
+      : { month: currentMonthName, year: currentYear, paymentStatus: 'Paid' };
+
+    const paidPayrolls = await Payroll.find(payrollQuery).lean();
+
+    const payrollCost = paidPayrolls.reduce((sum, p) => {
+      const total = (p.salary || 0) + (p.fuelAllowance || 0) + (p.medicalAllowance || 0) +
+                    (p.specialAllowance || 0) + (p.otherAllowance || 0);
+      return sum + total;
+    }, 0);
 
     res.status(200).json({
       success: true,
       data: {
-        totalEmployees: totalEmployees,
+        totalEmployees,
         activeDepartments: activeDepartments.length,
-        systemHealth: systemHealth,
+        systemHealth,
         pendingTasks: pendingLeaves,
-        revenue: 0,
-        performance: performance,
-        employeeSatisfaction: employeeSatisfaction
+        payrollCost, // real: sum of Paid payroll for the current month
+        performance,
+        employeeSatisfaction
       }
     });
   } catch (error) {
@@ -325,26 +411,24 @@ exports.getRecentActivity = async (req, res) => {
     const recentLeaves = await Leave.find()
       .sort({ createdAt: -1 })
       .limit(5)
+      .populate('employee', 'name')
       .lean();
 
-    for (const leave of recentLeaves) {
-      if (leave.userId) {
-        const user = await User.findById(leave.userId).select('name').lean();
-        if (user) {
-          activities.push({
-            id: leave._id.toString(),
-            message: `${user.name} requested ${leave.type || 'leave'} leave`,
-            time: formatTimeAgo(leave.createdAt),
-            status: leave.status || 'pending',
-            icon: '📝'
-          });
-        }
+    recentLeaves.forEach(leave => {
+      if (leave.employee) {
+        activities.push({
+          id: leave._id.toString(),
+          message: `${leave.employee.name} requested ${leave.type || 'leave'} leave (${leave.days} day${leave.days !== 1 ? 's' : ''})`,
+          time: formatTimeAgo(leave.createdAt),
+          status: leave.status || 'pending',
+          icon: '📝'
+        });
       }
-    }
+    });
 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
+
     const recentEmployees = await User.find({
       role: { $ne: 'admin' },
       joiningDate: { $gte: thirtyDaysAgo, $exists: true, $ne: null }
@@ -360,6 +444,24 @@ exports.getRecentActivity = async (req, res) => {
         time: formatTimeAgo(emp.joiningDate),
         status: 'completed',
         icon: '👋'
+      });
+    });
+
+    // Real: recent AI-verified check-ins (uses your actual checkInRequest.remarks field)
+    const recentCheckIns = await Attendance.find({
+      approvedCheckIn: { $exists: true, $ne: null }
+    })
+      .sort({ 'checkInRequest.approvedAt': -1, createdAt: -1 })
+      .limit(5)
+      .lean();
+
+    recentCheckIns.forEach(att => {
+      activities.push({
+        id: att._id.toString(),
+        message: `${att.employeeName || 'An employee'} checked in${att.checkInRequest?.remarks?.includes('AI') ? ' (AI verified)' : ''}`,
+        time: formatTimeAgo(att.checkInRequest?.approvedAt || att.createdAt),
+        status: att.lateMinutes > 0 ? 'pending' : 'completed',
+        icon: '🕘'
       });
     });
 
@@ -382,25 +484,71 @@ exports.getRecentActivity = async (req, res) => {
   }
 };
 
-// Team Members
+// ==================== TEAM MEMBERS (real productivity, real online status) ====================
+// Expected working days per range — used as the denominator for the
+// productivity %. Rough business-day estimates; adjust if you track a real
+// work calendar/holidays.
+function getExpectedWorkingDays(timeRange) {
+  switch (timeRange) {
+    case 'daily': return 1;
+    case 'weekly': return 5;
+    case 'monthly': return 22;
+    case 'yearly': return 260;
+    default: return 22;
+  }
+}
+
 exports.getTeamMembers = async (req, res) => {
   try {
+    const { timeRange = 'monthly' } = req.query;
+    const dateFilter = getDateRangeFilter(timeRange);
+    const expectedDays = getExpectedWorkingDays(timeRange);
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+
     const teamMembers = await User.find({
       isActive: true,
       role: { $ne: 'admin' }
-    })
-      .select('name role department')
-      .limit(10)
-      .lean();
+    }).select('name role department').limit(10).lean();
 
-    const formattedMembers = teamMembers.map(member => ({
-      id: member._id,
-      name: member.name,
-      role: member.role || 'Employee',
-      department: member.department || 'General',
-      status: 'online',
-      productivity: Math.floor(Math.random() * 30) + 70,
-      avatar: member.name?.charAt(0) || 'U'
+    const formattedMembers = await Promise.all(teamMembers.map(async (member) => {
+      const presentDays = await Attendance.countDocuments({
+        employee: member._id,
+        date: dateFilter,
+        $or: [
+          { approvedCheckIn: { $exists: true, $ne: null } },
+          { checkIn: { $exists: true, $ne: null } }
+        ]
+      });
+
+      const productivity = Math.min(100, Math.round((presentDays / expectedDays) * 100));
+
+      const checkedInToday = await Attendance.exists({
+        employee: member._id,
+        date: { $gte: todayStart, $lte: todayEnd },
+        $or: [
+          { approvedCheckIn: { $exists: true, $ne: null } },
+          { checkIn: { $exists: true, $ne: null } }
+        ],
+        $and: [{
+          $or: [
+            { approvedCheckOut: { $exists: false } },
+            { approvedCheckOut: null },
+            { checkOut: { $exists: false } },
+            { checkOut: null }
+          ]
+        }]
+      });
+
+      return {
+        id: member._id,
+        name: member.name,
+        role: member.role || 'Employee',
+        department: member.department || 'General',
+        status: checkedInToday ? 'online' : 'offline',
+        productivity,
+        avatar: member.name?.charAt(0) || 'U'
+      };
     }));
 
     res.status(200).json({
@@ -420,7 +568,7 @@ exports.getTeamMembers = async (req, res) => {
 exports.getNotifications = async (req, res) => {
   try {
     const notifications = [];
-    
+
     const pendingLeaves = await Leave.countDocuments({ status: 'pending' });
     if (pendingLeaves > 0) {
       notifications.push({
@@ -431,7 +579,7 @@ exports.getNotifications = async (req, res) => {
         createdAt: new Date().toISOString()
       });
     }
-    
+
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const newEmployees = await User.countDocuments({
@@ -447,22 +595,38 @@ exports.getNotifications = async (req, res) => {
         createdAt: new Date().toISOString()
       });
     }
-    
-    const thirtyDaysFromNow = new Date();
-    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-    const contractsExpiring = await User.countDocuments({
-      contractEndDate: { 
-        $lte: thirtyDaysFromNow, 
-        $gte: new Date(),
-        $exists: true,
-        $ne: null
-      }
+
+    // Real: pending attendance approval requests (uses your actual workflow fields)
+    const pendingAttendanceApprovals = await Attendance.countDocuments({
+      $or: [
+        { 'checkInRequest.approved': false },
+        { 'checkOutRequest.approved': false }
+      ]
     });
-    if (contractsExpiring > 0) {
+    if (pendingAttendanceApprovals > 0) {
       notifications.push({
-        id: 'contracts-expiring',
-        message: `${contractsExpiring} contract${contractsExpiring > 1 ? 's are' : ' is'} expiring soon`,
-        type: 'contract',
+        id: 'pending-attendance',
+        message: `${pendingAttendanceApprovals} attendance request${pendingAttendanceApprovals > 1 ? 's need' : ' needs'} approval`,
+        type: 'attendance',
+        read: false,
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    // Real: unpaid payroll for the current month
+    const now = new Date();
+    const currentMonthName = now.toLocaleString('default', { month: 'long' });
+    const currentYear = now.getFullYear();
+    const unpaidPayrolls = await Payroll.countDocuments({
+      month: currentMonthName,
+      year: currentYear,
+      paymentStatus: { $ne: 'Paid' }
+    });
+    if (unpaidPayrolls > 0) {
+      notifications.push({
+        id: 'unpaid-payroll',
+        message: `${unpaidPayrolls} payroll record${unpaidPayrolls > 1 ? 's are' : ' is'} unpaid for ${currentMonthName}`,
+        type: 'payroll',
         read: false,
         createdAt: new Date().toISOString()
       });
@@ -484,32 +648,64 @@ exports.getNotifications = async (req, res) => {
   }
 };
 
-// Performance Metrics
+// ==================== PERFORMANCE METRICS (real, timeRange-aware) ====================
 exports.getPerformanceMetrics = async (req, res) => {
   try {
     const { timeRange = 'monthly' } = req.query;
-    
+    const dateFilter = getDateRangeFilter(timeRange);
+
+    const totalEmployees = await User.countDocuments({ isActive: true, role: { $ne: 'admin' } });
+
+    // 1. Attendance Rate: % of employees who checked in at least once in range
+    const distinctCheckedIn = await Attendance.distinct('employee', {
+      date: dateFilter,
+      $or: [
+        { approvedCheckIn: { $exists: true, $ne: null } },
+        { checkIn: { $exists: true, $ne: null } }
+      ]
+    });
+    const attendanceRate = totalEmployees > 0
+      ? Math.round((distinctCheckedIn.length / totalEmployees) * 100)
+      : 0;
+
+    // 2. Punctuality Rate: % of check-ins in range that were on-time (lateMinutes === 0)
+    const attendanceRecords = await Attendance.find({
+      date: dateFilter,
+      $or: [
+        { approvedCheckIn: { $exists: true, $ne: null } },
+        { checkIn: { $exists: true, $ne: null } }
+      ]
+    }).select('lateMinutes').lean();
+
+    const onTimeCount = attendanceRecords.filter(a => (a.lateMinutes || 0) === 0).length;
+    const punctualityRate = attendanceRecords.length > 0
+      ? Math.round((onTimeCount / attendanceRecords.length) * 100)
+      : 0;
+
+    // 3. Avg Work Hours: average totalHours logged in range
+    const withHours = await Attendance.find({
+      date: dateFilter,
+      totalHours: { $exists: true, $gt: 0 }
+    }).select('totalHours').lean();
+
+    const avgWorkHours = withHours.length > 0
+      ? parseFloat((withHours.reduce((sum, a) => sum + a.totalHours, 0) / withHours.length).toFixed(1))
+      : 0;
+
+    // 4. Leave Utilization: % of employees who took approved leave in range
+    const distinctOnLeave = await Leave.distinct('employee', {
+      status: 'approved',
+      startDate: dateFilter
+    });
+    const leaveUtilization = totalEmployees > 0
+      ? Math.round((distinctOnLeave.length / totalEmployees) * 100)
+      : 0;
+
     const metrics = [
-      {
-        label: 'System Uptime',
-        value: 99.9,
-        color: 'from-green-500 to-emerald-500'
-      },
-      {
-        label: 'API Response Time',
-        value: 245,
-        color: 'from-blue-500 to-cyan-500'
-      },
-      {
-        label: 'Database Performance',
-        value: 94,
-        color: 'from-purple-500 to-pink-500'
-      },
-      {
-        label: 'Employee Engagement',
-        value: 88,
-        color: 'from-orange-500 to-amber-500'
-      }
+      { label: 'Attendance Rate', value: attendanceRate, color: 'from-green-500 to-emerald-500' },
+      { label: 'Punctuality Rate', value: punctualityRate, color: 'from-blue-500 to-cyan-500' },
+      { label: 'Avg Work Hours', value: avgWorkHours, color: 'from-purple-500 to-pink-500' },
+      { label: 'Leave Utilization', value: leaveUtilization, color: 'from-orange-500 to-amber-500' }
     ];
 
     res.status(200).json({
@@ -525,7 +721,7 @@ exports.getPerformanceMetrics = async (req, res) => {
   }
 };
 
-// Quick Actions
+// Quick Actions (static navigation shortcuts — not data, fine as-is)
 exports.getQuickActions = async (req, res) => {
   try {
     const quickActions = [
@@ -592,6 +788,236 @@ exports.markNotificationRead = async (req, res) => {
   }
 };
 
+// ==================== ATTENDANCE OVERVIEW (new — real, timeRange-aware) ====================
+// Weekly: last 7 days, one bucket per day.
+// Monthly (default): last 4 weeks, one bucket per week (30 daily points would
+// be unreadable in a compact chart).
+// Present = distinct employees with an approved/raw check-in and lateMinutes === 0
+// Late    = distinct employees with an approved/raw check-in and lateMinutes > 0
+// Absent  = active employees who did not check in at all that bucket
+exports.getAttendanceOverview = async (req, res) => {
+  try {
+    const { timeRange = 'weekly' } = req.query;
+    const totalEmployees = await User.countDocuments({ isActive: true, role: { $ne: 'admin' } });
+
+    const now = new Date();
+    let buckets = [];
+
+    if (timeRange === 'weekly') {
+      for (let i = 6; i >= 0; i--) {
+        const day = new Date(now);
+        day.setDate(now.getDate() - i);
+        const start = new Date(day); start.setHours(0, 0, 0, 0);
+        const end = new Date(day); end.setHours(23, 59, 59, 999);
+        buckets.push({
+          label: start.toLocaleDateString('default', { weekday: 'short' }),
+          start,
+          end
+        });
+      }
+    } else {
+      for (let i = 3; i >= 0; i--) {
+        const end = new Date(now);
+        end.setDate(now.getDate() - (i * 7));
+        end.setHours(23, 59, 59, 999);
+        const start = new Date(end);
+        start.setDate(end.getDate() - 6);
+        start.setHours(0, 0, 0, 0);
+        buckets.push({
+          label: `Week ${4 - i}`,
+          start,
+          end
+        });
+      }
+    }
+
+    const present = [];
+    const absent = [];
+    const late = [];
+
+    for (const bucket of buckets) {
+      const records = await Attendance.find({
+        date: { $gte: bucket.start, $lte: bucket.end },
+        $or: [
+          { approvedCheckIn: { $exists: true, $ne: null } },
+          { checkIn: { $exists: true, $ne: null } }
+        ]
+      }).select('employee lateMinutes').lean();
+
+      const distinctEmployees = new Set(records.map(r => String(r.employee)));
+      const lateEmployees = new Set(records.filter(r => (r.lateMinutes || 0) > 0).map(r => String(r.employee)));
+
+      const lateCount = lateEmployees.size;
+      const presentCount = distinctEmployees.size - lateCount;
+      const absentCount = Math.max(0, totalEmployees - distinctEmployees.size);
+
+      present.push(presentCount);
+      late.push(lateCount);
+      absent.push(absentCount);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        categories: buckets.map(b => b.label),
+        series: [
+          { name: 'Present', data: present },
+          { name: 'Late', data: late },
+          { name: 'Absent', data: absent }
+        ]
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching attendance overview:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch attendance overview'
+    });
+  }
+};
+
+// ==================== LEAVE OVERVIEW (new — real) ====================
+exports.getLeaveOverview = async (req, res) => {
+  try {
+    const [pending, approved, rejected] = await Promise.all([
+      Leave.countDocuments({ status: 'pending' }),
+      Leave.countDocuments({ status: 'approved' }),
+      Leave.countDocuments({ status: 'rejected' })
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: { pending, approved, rejected }
+    });
+  } catch (error) {
+    console.error('Error fetching leave overview:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch leave overview'
+    });
+  }
+};
+
+// ==================== SYSTEM STATUS (new — real, per-service) ====================
+exports.getSystemStatus = async (req, res) => {
+  const services = [];
+
+  // Database — mongoose's own connection state
+  const dbState = mongoose.connection.readyState; // 1 = connected
+  services.push({ name: 'Database', status: dbState === 1 ? 'Operational' : 'Critical' });
+
+  // API — if this handler is running, the API itself is up
+  services.push({ name: 'API', status: 'Operational' });
+
+  // Attendance service — verify the Attendance collection actually responds
+  try {
+    await Attendance.estimatedDocumentCount();
+    services.push({ name: 'Attendance Service', status: 'Operational' });
+  } catch (err) {
+    services.push({ name: 'Attendance Service', status: 'Critical' });
+  }
+
+  // AI service — real health check against the Python face-recognition service
+  const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:5001';
+  try {
+    await axios.get(`${AI_SERVICE_URL}/health`, { timeout: 3000 });
+    services.push({ name: 'AI Services', status: 'Operational' });
+  } catch (err) {
+    services.push({ name: 'AI Services', status: 'Warning' });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: services
+  });
+};
+
+// ==================== AI INSIGHTS (new — real, derived from attendance data) ====================
+// Every insight here is computed from actual records for this week vs last
+// week. If there isn't enough data yet for a given insight, it's omitted
+// rather than shown with a made-up number.
+exports.getAIInsights = async (req, res) => {
+  try {
+    const insights = [];
+    const now = new Date();
+
+    const thisWeekStart = new Date(now); thisWeekStart.setDate(now.getDate() - 7);
+    const lastWeekStart = new Date(now); lastWeekStart.setDate(now.getDate() - 14);
+    const lastWeekEnd = new Date(thisWeekStart);
+
+    // 1. Late-arrival trend
+    const [thisWeekRecords, lastWeekRecords] = await Promise.all([
+      Attendance.find({ date: { $gte: thisWeekStart, $lte: now } }).select('lateMinutes').lean(),
+      Attendance.find({ date: { $gte: lastWeekStart, $lt: lastWeekEnd } }).select('lateMinutes').lean()
+    ]);
+
+    if (thisWeekRecords.length > 0 && lastWeekRecords.length > 0) {
+      const thisWeekLateRate = thisWeekRecords.filter(r => (r.lateMinutes || 0) > 0).length / thisWeekRecords.length;
+      const lastWeekLateRate = lastWeekRecords.filter(r => (r.lateMinutes || 0) > 0).length / lastWeekRecords.length;
+      const change = lastWeekLateRate > 0
+        ? Math.round(((thisWeekLateRate - lastWeekLateRate) / lastWeekLateRate) * 100)
+        : (thisWeekLateRate > 0 ? 100 : 0);
+
+      insights.push({
+        type: 'attendance',
+        title: 'AI Attendance Insights',
+        insight: change === 0
+          ? 'Late arrivals are steady compared to last week.'
+          : `Late arrivals are ${change > 0 ? 'up' : 'down'} ${Math.abs(change)}% vs last week.`
+      });
+    }
+
+    // 2. Overtime / wellness signal — % of logged days over 10 hours, this week
+    const longDays = await Attendance.find({
+      date: { $gte: thisWeekStart, $lte: now },
+      totalHours: { $exists: true, $gt: 0 }
+    }).select('totalHours').lean();
+
+    if (longDays.length > 0) {
+      const overtimeCount = longDays.filter(a => a.totalHours > 10).length;
+      const overtimeRate = Math.round((overtimeCount / longDays.length) * 100);
+      insights.push({
+        type: 'wellness',
+        title: 'AI Employee Wellness',
+        insight: overtimeRate > 0
+          ? `${overtimeRate}% of logged shifts this week ran over 10 hours — worth a wellness check-in.`
+          : 'No excessive-hours shifts logged this week.'
+      });
+    }
+
+    // 3. Face registration coverage — real count from User.hasFaceRegistered
+    const [totalActive, registered] = await Promise.all([
+      User.countDocuments({ isActive: true, role: { $ne: 'admin' } }),
+      User.countDocuments({ isActive: true, role: { $ne: 'admin' }, hasFaceRegistered: true })
+    ]);
+    if (totalActive > 0) {
+      insights.push({
+        type: 'resume',
+        title: 'AI Face Recognition Coverage',
+        insight: `${registered}/${totalActive} active employees have a registered face for AI check-in.`
+      });
+    }
+
+    // 4. HR Assistant — informational, not data-driven, always shown
+    insights.push({
+      type: 'assistant',
+      title: 'AI HR Assistant',
+      insight: 'Ask about leave balances, payroll status, or attendance policy any time.'
+    });
+
+    res.status(200).json({
+      success: true,
+      data: insights
+    });
+  } catch (error) {
+    console.error('Error fetching AI insights:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch AI insights'
+    });
+  }
+};
+
 // Helper functions
 async function getDepartmentStats() {
   try {
@@ -603,7 +1029,7 @@ async function getDepartmentStats() {
     ]);
 
     const colors = ['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EF4444', '#6366F1'];
-    
+
     return departmentStats.map((dept, index) => ({
       ...dept,
       color: colors[index % colors.length]
@@ -642,10 +1068,14 @@ function calculateUptime() {
   }
 }
 
+// Real database size via MongoDB's own stats
 async function getDatabaseSize() {
   try {
-    return '24.5 MB';
+    const stats = await mongoose.connection.db.stats();
+    const sizeMB = (stats.dataSize / (1024 * 1024)).toFixed(2);
+    return `${sizeMB} MB`;
   } catch (error) {
+    console.error('Error getting database size:', error);
     return 'Unknown';
   }
 }
@@ -655,18 +1085,18 @@ async function calculateUserChange() {
     const today = new Date();
     const oneWeekAgo = new Date(today);
     oneWeekAgo.setDate(today.getDate() - 7);
-    
+
     const usersThisWeek = await User.countDocuments({
       createdAt: { $gte: oneWeekAgo }
     });
-    
+
     const usersLastWeek = await User.countDocuments({
-      createdAt: { 
+      createdAt: {
         $gte: new Date(oneWeekAgo.getTime() - 7 * 24 * 60 * 60 * 1000),
         $lt: oneWeekAgo
       }
     });
-    
+
     if (usersLastWeek === 0) return '+100%';
     const change = ((usersThisWeek - usersLastWeek) / usersLastWeek) * 100;
     return change >= 0 ? `+${change.toFixed(1)}%` : `${change.toFixed(1)}%`;
@@ -679,13 +1109,13 @@ function formatTimeAgo(date) {
   if (!date) return 'Just now';
   const dateObj = new Date(date);
   if (isNaN(dateObj.getTime())) return 'Just now';
-  
+
   const seconds = Math.floor((new Date() - dateObj) / 1000);
   const intervals = {
     year: 31536000, month: 2592000, week: 604800,
     day: 86400, hour: 3600, minute: 60
   };
-  
+
   for (const [unit, secondsInUnit] of Object.entries(intervals)) {
     const interval = Math.floor(seconds / secondsInUnit);
     if (interval >= 1) {
@@ -699,7 +1129,7 @@ function parseTimeValue(timeStr) {
   if (timeStr === 'Just now') return Date.now();
   const match = timeStr.match(/(\d+) (second|minute|hour|day|week|month|year)s? ago/);
   if (!match) return 0;
-  
+
   const value = parseInt(match[1]);
   const unit = match[2];
   const now = Date.now();
@@ -725,5 +1155,9 @@ module.exports = {
   getNotifications: exports.getNotifications,
   getPerformanceMetrics: exports.getPerformanceMetrics,
   getQuickActions: exports.getQuickActions,
-  markNotificationRead: exports.markNotificationRead
+  markNotificationRead: exports.markNotificationRead,
+  getAttendanceOverview: exports.getAttendanceOverview,
+  getLeaveOverview: exports.getLeaveOverview,
+  getSystemStatus: exports.getSystemStatus,
+  getAIInsights: exports.getAIInsights
 };

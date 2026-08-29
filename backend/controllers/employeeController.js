@@ -3,19 +3,58 @@ const fs = require('fs');
 const path = require('path');
 const NotificationService = require('../services/notificationService');
 
-// ===== GENERATE ID-CARD-BASED PASSWORD (first 6 digits of CNIC, dashes removed) =====
-function generateIdCardPassword(idCardNumber) {
-  if (!idCardNumber) {
-    throw new Error('ID card number is required to generate a password');
+// ===== CONFIG: adjust these to match your bank's actual formats =====
+const IBAN_MAX_LENGTH = 24;            // fixed digit length for IBAN
+const ACCOUNT_NUMBER_MAX_LENGTH = 24;  // fixed digit length for bank account number
+
+// Basic RFC-5322-ish email check — good enough to catch "anything" being typed in
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidEmail(email) {
+  return typeof email === 'string' && EMAIL_REGEX.test(email.trim());
+}
+
+// Strips everything but digits and truncates to maxLength.
+// Used for IBAN and bank account number so users can't paste unlimited digits.
+function sanitizeDigits(value, maxLength) {
+  if (value === undefined || value === null) return value;
+  const digitsOnly = String(value).replace(/[^0-9]/g, '');
+  return digitsOnly.slice(0, maxLength);
+}
+
+// ===== GENERATE RANDOM PASSWORD (letters + numbers + symbols, 6-8 chars) =====
+function generateRandomPassword(length) {
+  // length can be 6, 7, or 8 — defaults to 8 if not given / invalid
+  const len = [6, 7, 8].includes(length) ? length : 8;
+
+  const lower = 'abcdefghijkmnpqrstuvwxyz';       // no l/o to avoid confusion
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';       // no I/O to avoid confusion
+  const digits = '123456789';                      // no 0 to avoid confusion with O
+  const symbols = '@&#$!%*';
+
+  const allChars = lower + upper + digits + symbols;
+
+  const pick = (charset) => charset[Math.floor(Math.random() * charset.length)];
+
+  // guarantee at least one of each type
+  let passwordChars = [
+    pick(lower),
+    pick(upper),
+    pick(digits),
+    pick(symbols)
+  ];
+
+  while (passwordChars.length < len) {
+    passwordChars.push(pick(allChars));
   }
 
-  const digitsOnly = idCardNumber.replace(/[^0-9]/g, ''); // strips dashes and any non-digit chars
-
-  if (digitsOnly.length < 6) {
-    throw new Error('ID card number must contain at least 6 digits');
+  // shuffle so the guaranteed chars aren't always in the same position
+  for (let i = passwordChars.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [passwordChars[i], passwordChars[j]] = [passwordChars[j], passwordChars[i]];
   }
 
-  return digitsOnly.substring(0, 6);
+  return passwordChars.join('');
 }
 
 exports.getMyProfile = async (req, res) => {
@@ -50,6 +89,14 @@ exports.updateMyProfile = async (req, res) => {
     const userId = req.user.id;
     const updateData = req.body;
 
+    // ✅ Validate email if it's being changed
+    if (updateData.email !== undefined && !isValidEmail(updateData.email)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Please provide a valid email address'
+      });
+    }
+
     // Get old user data before update
     const oldUser = await User.findById(userId).select('name department position phone email');
 
@@ -73,10 +120,11 @@ exports.updateMyProfile = async (req, res) => {
       postalCode: updateData.postalCode,
       emergencyContacts: updateData.emergencyContacts || [],
       bankName: updateData.bankName,
-      bankAccountNumber: updateData.bankAccountNumber,
+      // ✅ IBAN / account number are sanitized to digits-only, fixed length
+      bankAccountNumber: sanitizeDigits(updateData.bankAccountNumber, ACCOUNT_NUMBER_MAX_LENGTH),
       bankAccountTitle: updateData.bankAccountTitle,
-      bankBranchCode: updateData.bankBranchCode,
-      ibanNumber: updateData.ibanNumber,
+      // ❌ bankBranchCode removed per request
+      ibanNumber: sanitizeDigits(updateData.ibanNumber, IBAN_MAX_LENGTH),
       qualifications: updateData.qualifications,
       experiences: updateData.experiences || [],
       skills: updateData.skills || [],
@@ -93,8 +141,8 @@ exports.updateMyProfile = async (req, res) => {
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       allowedFields,
-      { 
-        new: true, 
+      {
+        new: true,
         runValidators: true,
         context: 'query'
       }
@@ -103,9 +151,9 @@ exports.updateMyProfile = async (req, res) => {
     // ✅ SEND NOTIFICATION to HR/Admin about profile update
     const io = req.app.get('io');
     const notificationService = new NotificationService(io);
-    
+
     const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } });
-    
+
     // Check what changed
     let changeDescription = '';
     if (oldUser.phone !== updateData.phone) {
@@ -115,7 +163,7 @@ exports.updateMyProfile = async (req, res) => {
     } else {
       changeDescription = 'Profile information updated';
     }
-    
+
     for (const hr of hrUsers) {
       await notificationService.createNotification({
         recipient: {
@@ -143,7 +191,7 @@ exports.updateMyProfile = async (req, res) => {
     });
   } catch (error) {
     console.error('Error updating profile:', error);
-    
+
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({
@@ -249,7 +297,7 @@ exports.getAllEmployees = async (req, res) => {
   try {
     const { page = 1, limit = 10, department, role } = req.query;
     const query = { role: { $ne: 'admin' } };
-    
+
     if (department) query.department = department;
     if (role && role !== 'all') query.role = role;
 
@@ -283,9 +331,9 @@ exports.getEmployeeById = async (req, res) => {
       .lean();
 
     if (!employee) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Employee not found' 
+      return res.status(404).json({
+        success: false,
+        error: 'Employee not found'
       });
     }
 
@@ -301,6 +349,14 @@ exports.getEmployeeById = async (req, res) => {
 
 exports.createEmployee = async (req, res) => {
   try {
+    // ✅ Validate email
+    if (req.body.email !== undefined && !isValidEmail(req.body.email)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Please provide a valid email address'
+      });
+    }
+
     // ✅ Generate role-based employee ID (EMP/HR/ADM) since this route
     // creates a User directly without going through createEmployeeWithAccount
     const roleForId = req.body.role || 'employee';
@@ -309,15 +365,20 @@ exports.createEmployee = async (req, res) => {
     const newEmployee = new User({
       ...req.body,
       employeeId,
-      role: req.body.role || 'employee'
+      role: req.body.role || 'employee',
+      bankAccountNumber: sanitizeDigits(req.body.bankAccountNumber, ACCOUNT_NUMBER_MAX_LENGTH),
+      ibanNumber: sanitizeDigits(req.body.ibanNumber, IBAN_MAX_LENGTH)
     });
 
+    // ❌ bankBranchCode removed per request
+    delete newEmployee.bankBranchCode;
+
     await newEmployee.save();
-    
+
     // ✅ SEND NOTIFICATION to HR/Admin about new employee (without account creation)
     const io = req.app.get('io');
     const notificationService = new NotificationService(io);
-    
+
     const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } });
     for (const hr of hrUsers) {
       await notificationService.createNotification({
@@ -338,7 +399,7 @@ exports.createEmployee = async (req, res) => {
         priority: 'high'
       });
     }
-    
+
     res.status(201).json({
       success: true,
       message: 'Employee created successfully with notification',
@@ -359,29 +420,47 @@ exports.createEmployee = async (req, res) => {
 
 exports.updateEmployee = async (req, res) => {
   try {
+    // ✅ Validate email if being changed
+    if (req.body.email !== undefined && !isValidEmail(req.body.email)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Please provide a valid email address'
+      });
+    }
+
     const oldEmployee = await User.findById(req.params.id).select('name department position');
-    
+
+    const updateBody = { ...req.body };
+    if (updateBody.bankAccountNumber !== undefined) {
+      updateBody.bankAccountNumber = sanitizeDigits(updateBody.bankAccountNumber, ACCOUNT_NUMBER_MAX_LENGTH);
+    }
+    if (updateBody.ibanNumber !== undefined) {
+      updateBody.ibanNumber = sanitizeDigits(updateBody.ibanNumber, IBAN_MAX_LENGTH);
+    }
+    // ❌ bankBranchCode removed per request
+    delete updateBody.bankBranchCode;
+
     const updatedEmployee = await User.findByIdAndUpdate(
       req.params.id,
-      req.body,
-      { 
-        new: true, 
+      updateBody,
+      {
+        new: true,
         runValidators: true,
         context: 'query'
       }
     ).select('-password -passwordHistory');
 
     if (!updatedEmployee) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Employee not found' 
+      return res.status(404).json({
+        success: false,
+        error: 'Employee not found'
       });
     }
 
     // ✅ SEND NOTIFICATION to HR/Admin about employee update
     const io = req.app.get('io');
     const notificationService = new NotificationService(io);
-    
+
     const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } });
     for (const hr of hrUsers) {
       await notificationService.createNotification({
@@ -423,20 +502,20 @@ exports.updateEmployee = async (req, res) => {
 exports.deleteEmployee = async (req, res) => {
   try {
     const employee = await User.findById(req.params.id);
-    
+
     if (!employee) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Employee not found' 
+      return res.status(404).json({
+        success: false,
+        error: 'Employee not found'
       });
     }
 
     await User.findByIdAndDelete(req.params.id);
-    
+
     // ✅ SEND NOTIFICATION to HR/Admin about employee deletion
     const io = req.app.get('io');
     const notificationService = new NotificationService(io);
-    
+
     const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } });
     for (const hr of hrUsers) {
       await notificationService.createNotification({
@@ -457,10 +536,10 @@ exports.deleteEmployee = async (req, res) => {
         priority: 'high'
       });
     }
-    
-    res.status(200).json({ 
-      success: true, 
-      message: 'Employee deleted successfully with notification' 
+
+    res.status(200).json({
+      success: true,
+      message: 'Employee deleted successfully with notification'
     });
   } catch (error) {
     console.error('Error deleting employee:', error);
@@ -474,9 +553,9 @@ exports.createEmployeeWithAccount = async (req, res) => {
     console.log('🚀 createEmployeeWithAccount called');
     console.log('Request body:', req.body);
 
-    const { 
-      userAccount, 
-      employeeProfile 
+    const {
+      userAccount,
+      employeeProfile
     } = req.body;
 
     if (!userAccount || !employeeProfile) {
@@ -495,27 +574,20 @@ exports.createEmployeeWithAccount = async (req, res) => {
       });
     }
 
-    if (!employeeProfile.idCardNumber) {
+    // ✅ Reject malformed emails instead of silently accepting anything
+    if (!isValidEmail(email)) {
       return res.status(400).json({
         success: false,
-        error: 'ID card number (CNIC) is required to generate the initial password'
+        error: 'Please provide a valid email address'
       });
     }
 
-    // ✅ Auto-generate password from first 6 digits of CNIC (dashes removed)
-    let password;
-    try {
-      password = generateIdCardPassword(employeeProfile.idCardNumber);
-    } catch (pwError) {
-      return res.status(400).json({
-        success: false,
-        error: pwError.message
-      });
-    }
-    console.log(`🔑 Auto-generated password for ${email} from CNIC (first 6 digits)`);
+    // ✅ Auto-generate a random password (6-8 chars: letters, numbers, symbols)
+    const password = generateRandomPassword(8);
+    console.log(`🔑 Auto-generated random password for ${email}`);
 
-    const existingUser = await User.findOne({ 
-      $or: [{ email }, { username: username || email.split('@')[0] }] 
+    const existingUser = await User.findOne({
+      $or: [{ email }, { username: username || email.split('@')[0] }]
     });
 
     if (existingUser) {
@@ -541,7 +613,7 @@ exports.createEmployeeWithAccount = async (req, res) => {
       email: email.toLowerCase(),
       password: password,
       role: role || 'employee',
-      
+
       fatherName: employeeProfile.fatherName,
       phone: employeeProfile.phone,
       alternatePhone: employeeProfile.alternatePhone,
@@ -552,16 +624,16 @@ exports.createEmployeeWithAccount = async (req, res) => {
       gender: employeeProfile.gender,
       bloodGroup: employeeProfile.bloodGroup,
       maritalStatus: employeeProfile.maritalStatus,
-      
-      employeeType:   ['permanent', 'contract', 'intern', 'probation', 'consultant', 'visitor', 'part-time', 'freelance', 'other']
-    .includes(employeeProfile.employeeType)
-      ? employeeProfile.employeeType
-      : 'other',
+
+      employeeType: ['permanent', 'contract', 'intern', 'probation', 'consultant', 'visitor', 'part-time', 'freelance', 'other']
+        .includes(employeeProfile.employeeType)
+        ? employeeProfile.employeeType
+        : 'other',
       customEmployeeType:
-  !['permanent', 'contract', 'intern', 'probation', 'consultant', 'visitor', 'part-time', 'freelance', 'other']
-    .includes(employeeProfile.employeeType)
-      ? employeeProfile.employeeType
-      : '',
+        !['permanent', 'contract', 'intern', 'probation', 'consultant', 'visitor', 'part-time', 'freelance', 'other']
+          .includes(employeeProfile.employeeType)
+          ? employeeProfile.employeeType
+          : '',
       department: employeeProfile.department,
       position: employeeProfile.position,
       joiningDate: employeeProfile.joiningDate,
@@ -570,16 +642,16 @@ exports.createEmployeeWithAccount = async (req, res) => {
       systemRole: employeeProfile.role || employeeProfile.systemRole,
       isActive: employeeProfile.isActive !== false,
       hasSystemAccess: employeeProfile.hasSystemAccess !== false,
-      
+
       presentAddress: employeeProfile.presentAddress,
       permanentAddress: employeeProfile.permanentAddress,
       city: employeeProfile.city,
       state: employeeProfile.state,
       country: employeeProfile.country,
       postalCode: employeeProfile.postalCode,
-      
+
       emergencyContacts: employeeProfile.emergencyContacts || [],
-      
+
       salary: employeeProfile.salary || 0,
       fuelAllowance: employeeProfile.fuelAllowance || 0,
       medicalAllowance: employeeProfile.medicalAllowance || 0,
@@ -587,20 +659,21 @@ exports.createEmployeeWithAccount = async (req, res) => {
       otherAllowance: employeeProfile.otherAllowance || 0,
       currency: employeeProfile.currency || 'PKR',
       salaryFrequency: employeeProfile.salaryFrequency || 'monthly',
-      
+
       bankName: employeeProfile.bankName,
-      bankAccountNumber: employeeProfile.bankAccountNumber,
+      // ✅ IBAN / account number sanitized to digits-only, fixed length
+      bankAccountNumber: sanitizeDigits(employeeProfile.bankAccountNumber, ACCOUNT_NUMBER_MAX_LENGTH),
       bankAccountTitle: employeeProfile.bankAccountTitle,
-      bankBranchCode: employeeProfile.bankBranchCode,
-      ibanNumber: employeeProfile.ibanNumber,
-      
+      // ❌ bankBranchCode removed per request
+      ibanNumber: sanitizeDigits(employeeProfile.ibanNumber, IBAN_MAX_LENGTH),
+
       qualifications: employeeProfile.qualifications,
       previousExperience: employeeProfile.previousExperience || 0,
       experiences: employeeProfile.experiences || [],
       skills: employeeProfile.skills || [],
-      
+
       profilePicture: employeeProfile.profilePicture,
-      
+
       temporaryPassword: true,
       passwordChanged: false
     });
@@ -610,7 +683,7 @@ exports.createEmployeeWithAccount = async (req, res) => {
     // ✅ SEND NOTIFICATION to HR/Admin about new employee onboarded
     const io = req.app.get('io');
     const notificationService = new NotificationService(io);
-    
+
     const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } });
     for (const hr of hrUsers) {
       await notificationService.createNotification({
@@ -638,7 +711,7 @@ exports.createEmployeeWithAccount = async (req, res) => {
     let emailSent = false;
     try {
       const authController = require('./authController');
-      
+
       emailSent = await new Promise((resolve) => {
         const mockRes = {
           status: () => ({
@@ -648,7 +721,7 @@ exports.createEmployeeWithAccount = async (req, res) => {
             }
           })
         };
-        
+
         const mockReq = {
           body: {
             email: user.email,
@@ -657,10 +730,10 @@ exports.createEmployeeWithAccount = async (req, res) => {
             temporaryPassword: password
           }
         };
-        
+
         authController.sendWelcomeEmail(mockReq, mockRes);
       });
-      
+
     } catch (emailError) {
       console.warn('⚠️ Email sending error:', emailError.message);
     }
@@ -674,7 +747,7 @@ exports.createEmployeeWithAccount = async (req, res) => {
       message: 'Employee created successfully with notifications sent',
       employeeId: user.employeeId,
       emailSent: emailSent,
-      temporaryPassword: password, // ✅ the real CNIC-based password, so the frontend can display it accurately
+      temporaryPassword: password, // ✅ the random generated password, so the frontend can display it accurately
       data: {
         employeeId: user.employeeId,
         name: user.name,
@@ -686,7 +759,7 @@ exports.createEmployeeWithAccount = async (req, res) => {
 
   } catch (error) {
     console.error('❌ createEmployeeWithAccount error:', error);
-    
+
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({
@@ -695,7 +768,7 @@ exports.createEmployeeWithAccount = async (req, res) => {
         details: errors
       });
     }
-    
+
     if (error.code === 11000) {
       const field = Object.keys(error.keyValue)[0];
       return res.status(400).json({
@@ -704,7 +777,7 @@ exports.createEmployeeWithAccount = async (req, res) => {
         field: field
       });
     }
-    
+
     res.status(500).json({
       success: false,
       error: 'Server error creating employee',
@@ -760,7 +833,7 @@ exports.uploadProfilePicture = async (req, res) => {
     }
 
     const profilePictureUrl = `/uploads/profile-pictures/${req.file.filename}`;
-    
+
     const user = await User.findByIdAndUpdate(
       req.user.id,
       { profilePicture: profilePictureUrl },
@@ -777,7 +850,7 @@ exports.uploadProfilePicture = async (req, res) => {
     // ✅ SEND NOTIFICATION to HR/Admin about profile picture update
     const io = req.app.get('io');
     const notificationService = new NotificationService(io);
-    
+
     const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } });
     for (const hr of hrUsers) {
       await notificationService.createNotification({
@@ -818,7 +891,7 @@ exports.uploadProfilePicture = async (req, res) => {
 exports.deleteProfilePicture = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -860,6 +933,6 @@ module.exports = {
   updateEmployee: exports.updateEmployee,
   deleteEmployee: exports.deleteEmployee,
   createEmployeeWithAccount: exports.createEmployeeWithAccount,
-  uploadProfilePicture: exports.uploadProfilePicture, 
-  deleteProfilePicture: exports.deleteProfilePicture 
+  uploadProfilePicture: exports.uploadProfilePicture,
+  deleteProfilePicture: exports.deleteProfilePicture
 };

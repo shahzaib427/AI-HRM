@@ -4,7 +4,7 @@ import {
   FaUsers, FaCheckCircle, FaTimesCircle, FaClock, FaFilter, 
   FaSearch, FaDownload, FaSync, FaPlus, FaCalendarAlt, 
   FaUser, FaBriefcase, FaExclamationTriangle, FaChevronDown, 
-  FaChevronUp, FaSpinner, FaEnvelope
+  FaChevronUp, FaSpinner, FaEnvelope, FaEye
 } from 'react-icons/fa';
 
 // API Configuration
@@ -72,6 +72,21 @@ const Badge = ({ children, variant = 'default' }) => {
   );
 };
 
+// ─── Role Badge ──────────────────────────────────────────────────────────────
+const getRoleBadge = (role) => {
+  const roleColors = {
+    'admin': 'bg-purple-100 text-purple-700',
+    'hr': 'bg-blue-100 text-blue-700',
+    'manager': 'bg-amber-100 text-amber-700',
+    'employee': 'bg-gray-100 text-gray-700'
+  };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${roleColors[role] || roleColors.employee}`}>
+      {role ? role.toUpperCase() : 'N/A'}
+    </span>
+  );
+};
+
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 const KpiCard = ({ icon: Icon, label, value, sub, iconBg }) => (
   <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow">
@@ -87,6 +102,145 @@ const KpiCard = ({ icon: Icon, label, value, sub, iconBg }) => (
     </div>
   </div>
 );
+
+// ─── Leave Details Modal ──────────────────────────────────────────────────────
+const LeaveDetailsModal = ({ isOpen, onClose, leave }) => {
+  if (!isOpen || !leave) return null;
+
+  const getStatusBadge = (status) => {
+    const m = { approved: 'success', pending: 'warning', rejected: 'danger', cancelled: 'default' };
+    return <Badge variant={m[status] || 'default'}>{STATUS_CONFIG[status]?.label || status}</Badge>;
+  };
+
+  const getTypeBadge = (type) => (
+    <Badge variant={type === 'monthly' ? 'primary' : 'danger'}>
+      {type === 'monthly' ? 'Monthly Leave' : 'Emergency Leave'}
+    </Badge>
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <FaEye className="text-indigo-500" />
+            Leave Request Details
+          </h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
+        </div>
+
+        <div className="p-6">
+          {/* Employee Info */}
+          <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-100">
+            <div className="h-14 w-14 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
+              {leave.employee?.name?.charAt(0) || 'E'}
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-gray-800">
+                {leave.employee?.name || 'Employee'}
+              </h3>
+              <p className="text-sm text-gray-500">
+                {leave.employee?.employeeId || 'N/A'} • {leave.employee?.department || 'N/A'}
+              </p>
+              <div className="mt-2">
+                {getStatusBadge(leave.status)}
+              </div>
+            </div>
+          </div>
+
+          {/* Leave Details */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">Leave Information</h4>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Leave Type:</span>
+                  <span>{getTypeBadge(leave.type)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Duration:</span>
+                  <span className="text-sm font-medium text-gray-700">{leave.days} day(s)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Start Date:</span>
+                  <span className="text-sm text-gray-700">{formatDate(leave.startDate)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">End Date:</span>
+                  <span className="text-sm text-gray-700">{formatDate(leave.endDate)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Applied On:</span>
+                  <span className="text-sm text-gray-700">{formatDate(leave.appliedAt || leave.createdAt)}</span>
+                </div>
+                {leave.approvedBy && (
+                  <div className="flex justify-between items-start">
+                    <span className="text-sm text-gray-500">Approved By:</span>
+                    <div className="text-right">
+                      <span className="text-sm font-medium text-gray-700">
+                        {leave.approvedBy?.name || 'N/A'}
+                      </span>
+                      <div className="flex items-center gap-2 mt-0.5 justify-end">
+                        {getRoleBadge(leave.approvedBy?.role)}
+                        <span className="text-xs text-gray-400">
+                          ID: {leave.approvedBy?.employeeId || leave.approvedBy?._id?.slice(-6) || 'N/A'}
+                        </span>
+                      </div>
+                      {leave.approvedAt && (
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {formatDate(leave.approvedAt)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">Reason</h4>
+              <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
+                <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                  {leave.reason || 'No reason provided'}
+                </p>
+              </div>
+
+              {leave.contactNumber && (
+                <div className="mt-4">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2">Contact Number</h4>
+                  <p className="text-sm text-indigo-600">
+                    {leave.contactNumber}
+                  </p>
+                </div>
+              )}
+
+              {leave.rejectionReason && (
+                <div className="mt-4">
+                  <h4 className="text-sm font-semibold text-red-600 mb-2">Rejection Reason</h4>
+                  <div className="p-3 bg-red-50 rounded-lg border border-red-100">
+                    <p className="text-sm text-red-600">
+                      {leave.rejectionReason}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Close Button */}
+          <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // ─── Leave Form Modal ─────────────────────────────────────────────────────────
 const LeaveFormModal = ({ isOpen, onClose, onSubmit, monthlyBalance }) => {
@@ -348,12 +502,15 @@ const HRLeave = () => {
   const [exporting, setExporting] = useState(false);
   const [showAllRequests, setShowAllRequests] = useState(false);
   const [showAllMyLeaves, setShowAllMyLeaves] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [selectedLeave, setSelectedLeave] = useState(null);
 
   // ── Data fetching ──────────────────────────────────────────────────────────
   const fetchLeaveRequests = useCallback(async () => {
     try {
       setLoading(prev => ({ ...prev, requests: true }));
       const res = await api.get('/all');
+      console.log('Fetched leave data:', res.data.data);
       if (res.data?.success) {
         const hrUserId = getUserId();
         setLeaveRequests((res.data.data || []).filter(l => l.employee?._id !== hrUserId));
@@ -466,6 +623,11 @@ const HRLeave = () => {
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to cancel leave');
     }
+  };
+
+  const handleViewDetails = (leave) => {
+    setSelectedLeave(leave);
+    setShowDetails(true);
   };
 
   const handleExportCSV = async () => {
@@ -704,24 +866,36 @@ const HRLeave = () => {
                             </td>
                             <td className="px-4 py-3">{getStatusBadge(req.status)}</td>
                             <td className="px-4 py-3">
-                              {req.status === 'pending' ? (
-                                canHRReview(req) ? (
-                                  <div className="flex gap-2">
-                                    <button onClick={() => handleApprove(req._id)}
-                                      className="px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors">
-                                      Approve
-                                    </button>
-                                    <button onClick={() => handleReject(req._id)}
-                                      className="px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-colors">
-                                      Reject
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <span className="text-xs text-gray-400 italic">Admin approval required</span>
-                                )
-                              ) : (
-                                <span className="text-xs text-gray-500 capitalize">{req.status}</span>
-                              )}
+                              <div className="flex gap-1">
+                                {/* Eye Icon - View Details */}
+                                <button
+                                  onClick={() => handleViewDetails(req)}
+                                  className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                  title="View Details"
+                                >
+                                  <FaEye className="text-sm" />
+                                </button>
+
+                                {req.status === 'pending' && (
+                                  canHRReview(req) ? (
+                                    <>
+                                      <button onClick={() => handleApprove(req._id)}
+                                        className="px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors">
+                                        Approve
+                                      </button>
+                                      <button onClick={() => handleReject(req._id)}
+                                        className="px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-colors">
+                                        Reject
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <span className="text-xs text-gray-400 italic">Admin approval required</span>
+                                  )
+                                )}
+                                {req.status !== 'pending' && (
+                                  <span className="text-xs text-gray-500 capitalize">{req.status}</span>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -896,6 +1070,11 @@ const HRLeave = () => {
       </div>
 
       {/* Modals */}
+      <LeaveDetailsModal
+        isOpen={showDetails}
+        onClose={() => setShowDetails(false)}
+        leave={selectedLeave}
+      />
       <LeaveFormModal
         isOpen={showLeaveForm}
         onClose={() => setShowLeaveForm(false)}

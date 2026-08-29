@@ -141,20 +141,31 @@ export default function AboutPage() {
             Start a company trial and explore AI-assisted recruitment, subscription billing, payroll, attendance, and analytics.
           </p>
           <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Link to="/company-registration" style={{
-              padding: '13px 28px', background: '#6366f1', color: '#fff',
-              borderRadius: 10, fontWeight: 600, fontSize: '0.95rem', textDecoration: 'none',
+            <Link to="/billing" style={{
+              padding: '13px 28px', 
+              background: '#6366f1', 
+              color: '#fff',
+              borderRadius: 10, 
+              fontWeight: 600, 
+              fontSize: '0.95rem', 
+              textDecoration: 'none',
               transition: 'background 0.2s',
             }}
               onMouseEnter={e => e.currentTarget.style.background = '#4f46e5'}
               onMouseLeave={e => e.currentTarget.style.background = '#6366f1'}
             >
-              Start Free Trial
+              Start 7-Day Free Trial
             </Link>
             <Link to="/" style={{
-              padding: '13px 28px', background: 'transparent', color: 'rgba(255,255,255,0.8)',
-              border: '1.5px solid rgba(255,255,255,0.25)', borderRadius: 10, fontWeight: 600,
-              fontSize: '0.95rem', textDecoration: 'none', transition: 'border-color 0.2s',
+              padding: '13px 28px', 
+              background: 'transparent', 
+              color: 'rgba(255,255,255,0.8)',
+              border: '1.5px solid rgba(255,255,255,0.25)', 
+              borderRadius: 10, 
+              fontWeight: 600,
+              fontSize: '0.95rem', 
+              textDecoration: 'none', 
+              transition: 'border-color 0.2s',
             }}>
               Back Home
             </Link>

@@ -19,3 +19,13 @@ flask_session/
 # Frontend
 dist/
 .vite/
+
+# Local database
+*.db
+
+# User uploaded files
+backend/uploads/
+
+# Environment files
+.env.*
+!.env.example

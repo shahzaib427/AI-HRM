@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axiosInstance from '../../utils/axiosInstance';
+import { useAuth } from '../../contexts/AuthContext';
 import { 
   FaUser, FaEnvelope, FaPhone, FaIdCard, FaCalendarAlt, FaVenusMars, 
   FaTint, FaHeart, FaBriefcase, FaBuilding, FaMapMarkerAlt, FaCity, 
@@ -43,7 +44,7 @@ const Badge = ({ children, variant = 'default' }) => {
 };
 
 // Profile Picture Modal Component for HR
-const HRProfilePictureModal = ({ isOpen, onClose, currentPhoto, onSave }) => {
+const HRProfilePictureModal = ({ isOpen, onClose, currentPhoto, onSave, onRefresh }) => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -105,6 +106,7 @@ const HRProfilePictureModal = ({ isOpen, onClose, currentPhoto, onSave }) => {
       if (response.data.success) {
         const photoUrl = response.data.data.profilePicture;
         onSave(photoUrl);
+        if (onRefresh) await onRefresh();
         onClose();
       } else {
         setError(response.data.message || 'Upload failed');
@@ -125,6 +127,7 @@ const HRProfilePictureModal = ({ isOpen, onClose, currentPhoto, onSave }) => {
       const response = await axiosInstance.delete('/hr/profile-picture');
       if (response.data.success) {
         onSave(null);
+        if (onRefresh) await onRefresh();
         onClose();
       } else {
         setError(response.data.message || 'Failed to remove profile picture');
@@ -220,6 +223,7 @@ const HRProfilePictureModal = ({ isOpen, onClose, currentPhoto, onSave }) => {
 
 const HRProfile = () => {
   const navigate = useNavigate();
+  const { currentUser, updateUser, refreshUserData } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -396,6 +400,11 @@ const HRProfile = () => {
             employeeOnboarding: true, contractExpiry: true
           }
         });
+
+        const picture = profileData.profilePicture || profileData.avatar || '';
+        if (picture && picture !== currentUser?.profilePicture) {
+          updateUser({ profilePicture: picture });
+        }
       }
     } catch (error) {
       console.error('Error fetching HR profile:', error);
@@ -458,6 +467,8 @@ const HRProfile = () => {
 
   const handleProfilePictureUpdate = (newPhotoUrl) => {
     setProfile(prev => ({ ...prev, profilePicture: newPhotoUrl }));
+    updateUser({ profilePicture: newPhotoUrl });
+    setTimeout(() => refreshUserData(), 500);
   };
 
   const addEmergencyContact = () => {
@@ -569,6 +580,7 @@ const HRProfile = () => {
       try {
         const res = await axiosInstance.put('/hr/profile', dataToSave);
         if (res.data.success) {
+          await refreshUserData();
           alert('✅ HR profile updated successfully!');
           fetchHRProfile();
         } else {
@@ -577,6 +589,7 @@ const HRProfile = () => {
       } catch (updateError) {
         const res = await axiosInstance.put('/employees/profile/me', dataToSave);
         if (res.data.success) {
+          await refreshUserData();
           alert('✅ Profile updated via alternative endpoint!');
           fetchHRProfile();
         } else {
@@ -664,7 +677,6 @@ const HRProfile = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Page Header */}
       <div className="bg-white border-b border-gray-100 px-6 py-5">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between gap-4">
@@ -685,7 +697,6 @@ const HRProfile = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-        {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard icon={FaUsers} label="Total Employees" value={hrStats?.totalEmployees || 0} sub="Active staff" iconBg="bg-indigo-500" />
           <KpiCard icon={FaUserGraduate} label="Active Recruitments" value={hrStats?.activeRecruitments || 0} sub="Open positions" iconBg="bg-emerald-500" />
@@ -693,7 +704,6 @@ const HRProfile = () => {
           <KpiCard icon={FaFileAlt} label="Contracts Expiring" value={hrStats?.contractsExpiring || 0} sub="Within 30 days" iconBg="bg-red-500" />
         </div>
 
-        {/* Profile Header with Picture Upload - NOW AT THE TOP like Employee Profile */}
         <div className="bg-white shadow-lg rounded-2xl p-8">
           <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
             <div className="relative group">
@@ -744,7 +754,6 @@ const HRProfile = () => {
           </div>
         </div>
 
-        {/* Section Navigation */}
         <div className="bg-white rounded-lg border border-gray-100 p-4">
           <div className="flex flex-wrap gap-2">
             <SectionNav id="overview" label="Overview" icon={<FaUsers className="w-4 h-4" />} active={activeSection === 'overview'} />
@@ -754,10 +763,8 @@ const HRProfile = () => {
           </div>
         </div>
 
-        {/* Overview Section */}
         <Section id="overview" title="HR Dashboard Overview">
           <div className="space-y-6">
-            {/* Quick Actions */}
             <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-6">
               <h3 className="text-sm font-semibold text-indigo-900 mb-4">Quick Actions</h3>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -782,7 +789,6 @@ const HRProfile = () => {
           </div>
         </Section>
 
-        {/* Personal Information Section */}
         <Section id="personal" title="Personal Information">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             <Input label="Full Name" name="name" value={profile.name} onChange={handleChange} required placeholder="John Doe" />
@@ -829,7 +835,6 @@ const HRProfile = () => {
           </div>
         </Section>
 
-        {/* HR Settings Section */}
         <Section id="hr-settings" title="HR Settings & Permissions">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-gray-50 rounded-lg p-5">
@@ -867,7 +872,6 @@ const HRProfile = () => {
           </div>
         </Section>
 
-        {/* Documents & Skills Section */}
         <Section id="documents" title="Documents & Skills">
           <div className="space-y-6">
             <div>
@@ -934,12 +938,12 @@ const HRProfile = () => {
         </Section>
       </div>
 
-      {/* Profile Picture Modal */}
       <HRProfilePictureModal
         isOpen={showPictureModal}
         onClose={() => setShowPictureModal(false)}
         currentPhoto={profile.profilePicture}
         onSave={handleProfilePictureUpdate}
+        onRefresh={refreshUserData}
       />
     </div>
   );

@@ -20,6 +20,7 @@ const {
   createAttendance,
   updateAttendance,
   deleteAttendance,
+  bulkDeleteAttendance,
 
   // ── CSV & Email ────────────────────────────────────────────────────────────
   exportAttendanceCSV,
@@ -91,6 +92,9 @@ router.post('/send-biweekly-reports',     protect, authorize('admin', 'hr'), sen
 // ============================================================================
 // FULL CRUD
 // ============================================================================
+
+// Bulk delete - MUST come before /:id so it isn't shadowed
+router.delete('/bulk/delete', protect, authorize('admin', 'hr'), bulkDeleteAttendance);
 
 router.post('/',    protect, authorize('admin', 'hr'), createAttendance);
 router.put('/:id',  protect, authorize('admin', 'hr'), updateAttendance);

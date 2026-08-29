@@ -183,11 +183,7 @@ const HRReports = () => {
       Payroll: 'bg-blue-100 text-blue-700',
       Attendance: 'bg-green-100 text-green-700',
       Leaves: 'bg-yellow-100 text-yellow-700',
-      Recruitment: 'bg-purple-100 text-purple-700',
-      Performance: 'bg-indigo-100 text-indigo-700',
-      Training: 'bg-cyan-100 text-cyan-700',
-      Finance: 'bg-pink-100 text-pink-700',
-      System: 'bg-gray-100 text-gray-700'
+      Recruitment: 'bg-purple-100 text-purple-700'
     };
     return colors[type] || 'bg-gray-100 text-gray-700';
   };
@@ -286,7 +282,6 @@ const HRReports = () => {
                 <option value="Attendance">Attendance</option>
                 <option value="Leaves">Leaves</option>
                 <option value="Recruitment">Recruitment</option>
-                <option value="Performance">Performance</option>
               </select>
             </div>
             <div className="flex items-end">
@@ -512,7 +507,6 @@ const HRReports = () => {
                   <option value="Attendance">Attendance Report</option>
                   <option value="Leaves">Leave Report</option>
                   <option value="Recruitment">Recruitment Report</option>
-                  <option value="Performance">Performance Report</option>
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -543,7 +537,6 @@ const HRReports = () => {
                   onChange={(e) => setNewReport({...newReport, format: e.target.value})}
                 >
                   <option value="PDF">PDF</option>
-                  <option value="Excel">Excel</option>
                   <option value="CSV">CSV</option>
                 </select>
               </div>

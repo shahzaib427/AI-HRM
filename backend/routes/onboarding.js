@@ -8,11 +8,11 @@ router.get('/', protect, authorize(['hr', 'admin']), async (req, res) => {
   try {
     const { status, search, page = 1, limit = 10 } = req.query;
     let query = {};
-    
+
     if (status && status !== 'all') {
       query.status = status;
     }
-    
+
     if (search) {
       query.$or = [
         { candidateName: { $regex: search, $options: 'i' } },
@@ -20,23 +20,23 @@ router.get('/', protect, authorize(['hr', 'admin']), async (req, res) => {
         { position: { $regex: search, $options: 'i' } }
       ];
     }
-    
+
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const candidates = await Onboarding.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
-    
+
     const total = await Onboarding.countDocuments(query);
-    
+
     res.json({
       success: true,
       data: candidates,
-      pagination: { 
-        page: parseInt(page), 
-        limit: parseInt(limit), 
-        total, 
-        pages: Math.ceil(total / parseInt(limit)) 
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
       }
     });
   } catch (error) {
@@ -52,7 +52,7 @@ router.get('/stats', protect, authorize(['hr', 'admin']), async (req, res) => {
     const pending = await Onboarding.countDocuments({ status: 'pending' });
     const inProgress = await Onboarding.countDocuments({ status: 'in-progress' });
     const completed = await Onboarding.countDocuments({ status: 'completed' });
-    
+
     res.json({
       total,
       pending,
@@ -62,6 +62,70 @@ router.get('/stats', protect, authorize(['hr', 'admin']), async (req, res) => {
   } catch (error) {
     console.error('Error fetching stats:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get the logged-in employee's own onboarding record
+// NOTE: must stay ABOVE '/:id' below — Express matches routes top-down and
+// '/:id' would otherwise swallow 'my-onboarding' as if it were an _id value.
+//
+// ASSUMPTION: an employee's onboarding record is matched by email
+// (candidate.email === logged-in user's email). If a candidate's onboarding
+// email can differ from their later employee account email, this match
+// needs to change to a stored reference (e.g. Onboarding.userId) instead.
+router.get('/my-onboarding', protect, authorize(['employee', 'manager', 'team-lead', 'hr', 'admin']), async (req, res) => {
+  try {
+    const candidate = await Onboarding.findOne({ email: req.user.email }).sort({ createdAt: -1 });
+
+    if (!candidate) {
+      return res.json({ success: true, data: null });
+    }
+
+    res.json({ success: true, data: candidate });
+  } catch (error) {
+    console.error('Error fetching my onboarding record:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Employee: toggle completion on their own onboarding task
+// Ownership is enforced by re-checking candidate.email === req.user.email
+// before allowing the update — an employee can only ever touch their own
+// record, never another candidate's, even if they guess an _id.
+router.patch('/my-onboarding/tasks/:taskId', protect, authorize(['employee', 'manager', 'team-lead', 'hr', 'admin']), async (req, res) => {
+  try {
+    const candidate = await Onboarding.findOne({ email: req.user.email });
+
+    if (!candidate) {
+      return res.status(404).json({ success: false, error: 'Onboarding record not found' });
+    }
+
+    const task = candidate.tasks.id(req.params.taskId);
+    if (!task) {
+      return res.status(404).json({ success: false, error: 'Task not found' });
+    }
+
+    task.completed = req.body.completed;
+    if (req.body.completed) {
+      task.completedAt = new Date();
+    }
+    candidate.updatedAt = Date.now();
+
+    const completedTasks = candidate.tasks.filter(t => t.completed).length;
+    candidate.progress = candidate.tasks.length
+      ? (completedTasks / candidate.tasks.length) * 100
+      : 0;
+
+    if (candidate.progress === 100 && candidate.status !== 'completed') {
+      candidate.status = 'completed';
+      candidate.completedDate = new Date();
+    }
+
+    await candidate.save();
+    res.json({ success: true, data: candidate });
+  } catch (error) {
+    console.error('Error updating my onboarding task:', error);
+    res.status(400).json({ success: false, error: error.message });
   }
 });
 
@@ -124,18 +188,18 @@ router.post('/:id/tasks', protect, authorize(['hr', 'admin']), async (req, res) 
     if (!candidate) {
       return res.status(404).json({ success: false, error: 'Candidate not found' });
     }
-    
+
     candidate.tasks.push({
       ...req.body,
       completed: false,
       createdAt: new Date()
     });
     candidate.updatedAt = Date.now();
-    
+
     // Update progress based on completed tasks
     const completedTasks = candidate.tasks.filter(t => t.completed).length;
     candidate.progress = (completedTasks / candidate.tasks.length) * 100;
-    
+
     await candidate.save();
     res.json({ success: true, data: candidate });
   } catch (error) {
@@ -144,35 +208,35 @@ router.post('/:id/tasks', protect, authorize(['hr', 'admin']), async (req, res) 
   }
 });
 
-// Update task status
+// Update task status (HR/admin, any candidate)
 router.patch('/:id/tasks/:taskId', protect, authorize(['hr', 'admin']), async (req, res) => {
   try {
     const candidate = await Onboarding.findById(req.params.id);
     if (!candidate) {
       return res.status(404).json({ success: false, error: 'Candidate not found' });
     }
-    
+
     const task = candidate.tasks.id(req.params.taskId);
     if (!task) {
       return res.status(404).json({ success: false, error: 'Task not found' });
     }
-    
+
     task.completed = req.body.completed;
     if (req.body.completed) {
       task.completedAt = new Date();
     }
     candidate.updatedAt = Date.now();
-    
+
     // Update progress
     const completedTasks = candidate.tasks.filter(t => t.completed).length;
     candidate.progress = (completedTasks / candidate.tasks.length) * 100;
-    
+
     // Check if all tasks completed
     if (candidate.progress === 100 && candidate.status !== 'completed') {
       candidate.status = 'completed';
       candidate.completedDate = new Date();
     }
-    
+
     await candidate.save();
     res.json({ success: true, data: candidate });
   } catch (error) {
@@ -188,11 +252,11 @@ router.post('/:id/send-offer', protect, authorize(['hr', 'admin']), async (req, 
     if (!candidate) {
       return res.status(404).json({ success: false, error: 'Candidate not found' });
     }
-    
+
     candidate.offerLetterSent = true;
     candidate.status = 'in-progress';
     await candidate.save();
-    
+
     // Here you would integrate email sending service
     // For now, just return success
     res.json({ success: true, message: 'Offer letter sent successfully' });
