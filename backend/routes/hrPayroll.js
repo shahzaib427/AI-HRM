@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const { protect, authorize } = require('../utils/authMiddleware');
-const hrPayroll = require('../controllers/hrPayrollController');
+const hrPayroll = require('../controllers/Hrpayrollcontroller');
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, 'uploads/'),
