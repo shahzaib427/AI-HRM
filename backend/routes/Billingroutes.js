@@ -1,7 +1,7 @@
 // routes/billingRoutes.js
 const express = require('express');
 const router = express.Router();
-const billingController = require('../controllers/billingController');
+const billingController = require('../controllers/Billingcontroller');
 const { protect } = require('../utils/authMiddleware');
 
 // PUBLIC — pricing list only, no subscription lookup.
