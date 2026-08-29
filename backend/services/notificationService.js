@@ -1,5 +1,5 @@
 // backend/services/notificationService.js
-const Notification = require('../models/Notification');
+const Notification = require('../models/notification');
 
 class NotificationService {
   constructor(io) {
