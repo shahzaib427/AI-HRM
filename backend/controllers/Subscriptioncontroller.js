@@ -6,9 +6,9 @@
 
 const crypto = require('crypto');
 const User = require('../models/User');
-const paymentService = require('../services/paymentService');
+const paymentService = require('../services/Paymentservice');
 const { isStripeConfigured } = require('../config/stripe');
-const { PLANS } = require('./billingController'); // single source of truth for plans
+const { PLANS } = require('./Billingcontroller'); // single source of truth for plans
 
 const hashToken = (rawToken) =>
   crypto.createHash('sha256').update(rawToken).digest('hex');
