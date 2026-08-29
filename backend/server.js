@@ -26,7 +26,7 @@ const adminProfileRoutes    = require('./routes/adminProfileRoutes');
 const hrProfileRoutes       = require('./routes/hrProfileRoutes');
 const employeeProfileRoutes = require('./routes/employeeProfileRoutes');
 
-const billingRoutes = require('./routes/billingRoutes');
+const billingRoutes = require('./routes/Billingroutes');
 // ⚠️ FIX: this was never imported or mounted, so /api/subscription/*
 // (used by the guest checkout page) 404'd on every request.
 const subscriptionRoutes = require('./routes/subscriptionRoutes');
