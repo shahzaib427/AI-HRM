@@ -250,56 +250,44 @@ def health_check():
 def stream_updates(user_id: str):
 
     def generate():
-
         stream = get_stream(user_id)
 
-        yield (
-            f"data: {json.dumps({"
-            f"'type': 'connected', "
-            f"'user_id': user_id, "
-            f"'timestamp': datetime.now().isoformat()"
-            f"})}\n\n"
-        )
+        connected_data = {
+            "type": "connected",
+            "user_id": user_id,
+            "timestamp": datetime.now().isoformat()
+        }
+
+        yield f"data: {json.dumps(connected_data)}\n\n"
 
         try:
-
             while stream.active:
-
                 try:
-
                     data = stream.queue.get(timeout=25)
 
-                    yield (
-                        f"data: {json.dumps(data)}\n\n"
-                    )
+                    yield f"data: {json.dumps(data)}\n\n"
 
                 except Empty:
-
                     stream.last_ping = datetime.now()
 
-                    yield (
-                        f"data: {json.dumps({"
-                        f"'type': 'heartbeat', "
-                        f"'timestamp': datetime.now().isoformat()"
-                        f"})}\n\n"
-                    )
+                    heartbeat_data = {
+                        "type": "heartbeat",
+                        "timestamp": datetime.now().isoformat()
+                    }
+
+                    yield f"data: {json.dumps(heartbeat_data)}\n\n"
 
         except GeneratorExit:
-
             logger.info(
                 f"User {user_id} disconnected from stream"
             )
 
             stream.close()
-
             remove_stream(user_id)
 
     return Response(
-
         stream_with_context(generate()),
-
         mimetype="text/event-stream",
-
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
@@ -307,7 +295,6 @@ def stream_updates(user_id: str):
             "Content-Type": "text/event-stream"
         }
     )
-
 
 # ================================================================
 # CHAT ENDPOINT
