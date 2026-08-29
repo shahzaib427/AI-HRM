@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const Onboarding = require('../models/Onboarding');
+const Onboarding = require('../models/onboarding');
 const { protect, authorize } = require('../utils/authMiddleware');
 
 // Get all onboarding candidates
