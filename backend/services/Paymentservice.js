@@ -6,9 +6,9 @@
 // zero controller/route changes required.
 
 const { stripeClient, isStripeConfigured } = require('../config/stripe');
-const mockStripeService = require('./mockStripeService');
+const mockStripeService = require('./Mockstripeservice');
 
-/**
+/** 
  * Creates a checkout session — real Stripe Checkout if configured,
  * otherwise a fake session pointing at our own /mock-checkout page.
  */
