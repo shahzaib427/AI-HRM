@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const Contract = require('../models/Contract');
+const Contract = require('../models/contract');
 const { protect, authorize } = require('../utils/authMiddleware');
 
 // Generate contract number
