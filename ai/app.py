@@ -170,7 +170,10 @@ except Exception as e:
 
 # IMPORTANT:
 # Do NOT import boat.boat_module during Render startup.
-# Heavy AI models will load only when the chat endpoint is used.
+# Heavy AI models will load only when the chat endpoint is used,
+# OR via the background warm-up thread started right below —
+# whichever happens first. Both share the same lock, so there's
+# no double-loading.
 
 app.config["BOAT_PREDICT"] = None
 app.config["BOAT_STATS"] = None
@@ -180,7 +183,8 @@ _boat_lock = threading.Lock()
 
 def get_boat_predict():
     """
-    Load HR AI module only when it is actually needed.
+    Load HR AI module only when it is actually needed
+    (or pre-warmed in the background — see _warmup_boat_module below).
     """
 
     if app.config.get("BOAT_PREDICT") is None:
@@ -217,6 +221,38 @@ def get_boat_predict():
 
 
 # ================================================================
+# BACKGROUND WARM-UP
+# ================================================================
+# WHY: Render's proxy has its own request timeout, shorter than
+# gunicorn's --timeout 300. If the FIRST /chat request has to load
+# torch + SentenceTransformer + T5 from scratch (30-60s+), Render's
+# proxy kills the connection with a 502 Bad Gateway before the
+# backend even finishes responding.
+#
+# FIX: warm up the model in a background thread right after the
+# app finishes booting (port is already bound by then, so Render's
+# startup port-scan passes immediately, same as before). By the
+# time a real user sends a chat message, the model is already
+# loaded and get_boat_predict() returns instantly.
+#
+# This thread shares _boat_lock with get_boat_predict(), so if a
+# real request happens to arrive before warm-up finishes, it will
+# just wait on the same lock rather than triggering a second,
+# redundant load.
+
+def _warmup_boat_module():
+    try:
+        logger.info("🔥 Warming up HR AI module in background...")
+        get_boat_predict()
+        logger.info("🔥 HR AI module warm-up complete!")
+    except Exception as e:
+        logger.exception(f"🔥 HR AI module warm-up failed: {e}")
+
+
+threading.Thread(target=_warmup_boat_module, daemon=True).start()
+
+
+# ================================================================
 # HEALTH CHECK
 # IMPORTANT: This should respond immediately
 # ================================================================
@@ -238,7 +274,8 @@ def health_check():
     return jsonify({
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "active_streams": count
+        "active_streams": count,
+        "boat_ready": app.config.get("BOAT_PREDICT") is not None
     })
 
 
@@ -322,7 +359,7 @@ def chat():
             }), 400
 
 
-        # Lazy-load AI only here
+        # Lazy-load AI only here (usually already warm by this point)
         boat_predict = get_boat_predict()
 
 
