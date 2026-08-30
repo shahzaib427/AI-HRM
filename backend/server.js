@@ -37,12 +37,16 @@ const server = http.createServer(app);
 // ── Socket.IO Setup ─────────────────────────────────────────────────────────
 const io = socketIO(server, {
   cors: {
-    origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174'],
+    origin: [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'http://localhost:5174',
+      'https://ai-nine-amber.vercel.app'
+    ],
     methods: ['GET', 'POST'],
     credentials: true
   }
 });
-
 // Socket.IO authentication middleware
 io.use(async (socket, next) => {
   try {
@@ -95,7 +99,12 @@ app.set('io', io);
 
 // ── Middleware ─────────────────────────────────────────────────────────────
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174'],
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://localhost:5174',
+    'https://ai-nine-amber.vercel.app'
+  ],
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
