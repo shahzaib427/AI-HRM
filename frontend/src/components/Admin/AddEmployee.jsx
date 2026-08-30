@@ -439,9 +439,10 @@ const AddEmployee = () => {
         const uploadFormData = new FormData();
         files.forEach(file => uploadFormData.append('files', file));
         const token = localStorage.getItem('authToken');
-        const response = await axios.post(
-          '${API_BASE}/upload/documents/multiple',
-          uploadFormData,
+const response = await axios.post(
+  `${API_BASE}/upload/documents/multiple`,
+  uploadFormData,
+
           { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } },
         );
         if (response.data.success) {
@@ -651,9 +652,9 @@ const AddEmployee = () => {
         },
       };
 
-      const response = await axios.post(
-        '${API_BASE}/employees/create-with-account',
-        employeeData,
+const response = await axios.post(
+  `${API_BASE}/employees/create-with-account`,
+  employeeData,
         { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } },
       );
 
