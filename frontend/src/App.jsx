@@ -39,9 +39,9 @@ import CareerCoach        from './components/employee/CareerCoach';
 import LearningHub        from './components/employee/LearningHub';
 import Wellness           from './components/employee/Wellness';
 // Employee's own contracts view (view + sign)
-import MyContracts        from './components/employee/MyContracts';
+import MyContracts        from './components/employee/Mycontracts';
 // Employee's own onboarding checklist (view + self check-off tasks)
-import MyOnboarding       from './components/employee/MyOnboarding';
+import MyOnboarding       from './components/employee/Myonboarding';
 
 // Admin Pages
 import AdminDashboard  from './components/Admin/AdminDashboard';
@@ -93,13 +93,13 @@ import MessageStats from './components/shared/MessageStats';
 
 // Billing pages
 import BillingPlans from "./pages/billing/BillingPlans";
-import MockCheckoutPage from "./pages/billing/MockCheckoutPage";
+import MockCheckoutPage from "./pages/billing/Mockcheckoutpage";
 // ⚠️ FIX: these three existed as components but were never routed,
 // so /billing/subscribe, /billing/success, /billing/cancel all 404'd.
 import GuestSubscribe from "./pages/subscribe/Guestsubscribe";
 import SubscriptionSuccess from "./pages/subscribe/Subscriptionsuccess";
 import SubscriptionCancel from "./pages/subscribe/Subscriptioncancel";
-import SetPassword from "./pages/SetPassword";
+import SetPassword from "./pages/Setpassword";
 
 // ─── Generic 404 ──────────────────────────────────────────────────────────────
 const Placeholder404 = ({ title = 'Page not found' }) => (
