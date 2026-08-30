@@ -1,24 +1,32 @@
 """
-boat_module.py  ← MODIFIED VERSION (contact info reconciled with hr_docs)
+boat_module.py  ← TF-IDF VERSION (no torch / sentence-transformers)
 Place at: ai/boat/boat_module.py  (REPLACE your existing file)
 
-CHANGES IN THIS VERSION vs your previous file:
-  - Replaced all hardcoded shahzaibnaseem3169@gmail.com references with
-    shahzaibnaseem3169@icloud.com
-  - Replaced placeholder phone +92-XX-XXXXXXX with 03134750548
-  - REMOVED unused T5 generation model (flan-t5-small) and its tokenizer.
-    CONFIG['use_generation'] is False and `model`/`tokenizer` were never
-    referenced anywhere else in this file — they were costing ~300MB+ of
-    RAM for a feature that was never used. This was very likely causing
-    OOM (out-of-memory) kills on Render's free tier (512MB limit), which
-    showed up as silent worker restarts during model warm-up.
-  - No other logic changed
+CHANGES IN THIS VERSION vs the previous file:
+  - REMOVED SentenceTransformer + torch entirely. Replaced the semantic
+    search with scikit-learn's TfidfVectorizer + cosine_similarity.
+    This eliminates ~500MB+ of RAM (torch + sentence-transformers +
+    downloading all-MiniLM-L6-v2 from Hugging Face on every cold start)
+    and removes all network calls to huggingface.co, which is what was
+    causing multi-minute hangs / worker restarts on Render's free tier
+    (512MB RAM limit).
+  - TF-IDF loads instantly (pure numpy/sklearn, no model download, no
+    torch import) and is well-suited for this use case: matching a
+    user's question against a small, fixed set of HR document chunks.
+    Retrieval quality for this kind of short-document keyword/phrase
+    matching is comparable to embeddings for a knowledge base this size.
+  - min_similarity_threshold lowered from 0.35 to 0.12, because TF-IDF
+    cosine similarity scores are typically smaller than sentence-embedding
+    cosine scores. Tune this in CONFIG if answers feel too strict/loose.
+  - T5 generation model still removed (see previous changelog — it was
+    unused dead weight, CONFIG['use_generation'] is False).
+  - Contact info (icloud email / phone) unchanged from previous version.
+  - No other logic changed.
 """
 
 import os
 import sys
-import torch
-from sentence_transformers import SentenceTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import re
 import difflib
@@ -42,7 +50,7 @@ HR_PHONE = "03134750548"
 HR_PORTAL_URL = "https://hr-portal.edu.pk"
 
 CONFIG = {
-    'min_similarity_threshold': 0.35,
+    'min_similarity_threshold': 0.12,   # ← lowered for TF-IDF (was 0.35 for embeddings)
     'max_context_docs': 2,
     'max_generation_tokens': 100,
     'temperature': 0.1,
@@ -53,22 +61,13 @@ CONFIG = {
 
 MERN_BASE_URL = os.getenv("MERN_BASE_URL", "http://localhost:5000/api")
 
-torch.set_num_threads(2)
-
-embed_model = SentenceTransformer("all-MiniLM-L6-v2")
-
-# T5 generation model REMOVED — CONFIG['use_generation'] is False and
-# `model`/`tokenizer` were never referenced anywhere else in this file.
-# flan-t5-small was costing ~300MB+ of RAM for a feature that's off.
-# This alone should meaningfully reduce memory pressure on Render's
-# free tier (512MB limit) and stop the OOM-triggered worker restarts.
-
-print("Models loaded!")
+print("Starting lightweight TF-IDF search engine (no torch, no model downloads)...")
 
 docs_folder = os.path.join(os.path.dirname(__file__), "hr_docs")
 knowledge_base = []
 knowledge_metadata = []
-embeddings = None
+vectorizer = None
+tfidf_matrix = None
 
 if not os.path.exists(docs_folder):
     print(f"ERROR: HR documents folder '{docs_folder}' not found! Knowledge base is empty.")
@@ -138,11 +137,19 @@ else:
     print(f"\n📚 Total: {len(knowledge_base)} knowledge chunks loaded")
 
     if len(knowledge_base) > 0:
-        print("\n🔍 Creating embeddings for search...")
-        embeddings = embed_model.encode(knowledge_base, show_progress_bar=True)
-        print("✅ Embeddings created!")
+        print("\n🔍 Building TF-IDF index for search...")
+        vectorizer = TfidfVectorizer(
+            stop_words='english',
+            max_features=5000,
+            ngram_range=(1, 2)   # unigrams + bigrams — helps match short phrases like "mark attendance"
+        )
+        tfidf_matrix = vectorizer.fit_transform(knowledge_base)
+        print("✅ TF-IDF index built!")
     else:
-        embeddings = None
+        vectorizer = None
+        tfidf_matrix = None
+
+print("Search engine ready!")
 
 # --------------------------
 # NEW: Vocabulary set built from all hr_docs keywords, used to correct
@@ -177,11 +184,11 @@ def correct_typos(query: str) -> str:
     return " ".join(corrected)
 
 def search_docs(query: str, top_k: int = 3) -> List[Dict]:
-    if not knowledge_base or embeddings is None:
+    if not knowledge_base or tfidf_matrix is None or vectorizer is None:
         return []
     query = correct_typos(query)
-    query_emb = embed_model.encode([query])
-    sims = cosine_similarity(query_emb, embeddings)[0]
+    query_vec = vectorizer.transform([query])
+    sims = cosine_similarity(query_vec, tfidf_matrix)[0]
     top_k_actual = min(top_k * 3, len(sims))
     top_indices = sims.argsort()[-top_k_actual:][::-1]
     relevant_docs = []
