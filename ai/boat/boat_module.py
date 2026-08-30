@@ -6,6 +6,12 @@ CHANGES IN THIS VERSION vs your previous file:
   - Replaced all hardcoded shahzaibnaseem3169@gmail.com references with
     shahzaibnaseem3169@icloud.com
   - Replaced placeholder phone +92-XX-XXXXXXX with 03134750548
+  - REMOVED unused T5 generation model (flan-t5-small) and its tokenizer.
+    CONFIG['use_generation'] is False and `model`/`tokenizer` were never
+    referenced anywhere else in this file — they were costing ~300MB+ of
+    RAM for a feature that was never used. This was very likely causing
+    OOM (out-of-memory) kills on Render's free tier (512MB limit), which
+    showed up as silent worker restarts during model warm-up.
   - No other logic changed
 """
 
@@ -13,7 +19,6 @@ import os
 import sys
 import torch
 from sentence_transformers import SentenceTransformer
-from transformers import T5Tokenizer, T5ForConditionalGeneration
 from sklearn.metrics.pairwise import cosine_similarity
 import re
 import difflib
@@ -52,9 +57,11 @@ torch.set_num_threads(2)
 
 embed_model = SentenceTransformer("all-MiniLM-L6-v2")
 
-model_name = "google/flan-t5-small"
-tokenizer = T5Tokenizer.from_pretrained(model_name)
-model = T5ForConditionalGeneration.from_pretrained(model_name)
+# T5 generation model REMOVED — CONFIG['use_generation'] is False and
+# `model`/`tokenizer` were never referenced anywhere else in this file.
+# flan-t5-small was costing ~300MB+ of RAM for a feature that's off.
+# This alone should meaningfully reduce memory pressure on Render's
+# free tier (512MB limit) and stop the OOM-triggered worker restarts.
 
 print("Models loaded!")
 
