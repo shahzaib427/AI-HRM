@@ -67,7 +67,7 @@ const loadDraft = () => {
 const clearDraft = () => {
   try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
 };
-
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 // ─── Component ────────────────────────────────────────────────────────────────
 const AddEmployee = () => {
   const navigate = useNavigate();
@@ -440,7 +440,7 @@ const AddEmployee = () => {
         files.forEach(file => uploadFormData.append('files', file));
         const token = localStorage.getItem('authToken');
         const response = await axios.post(
-          'http://localhost:5000/api/upload/documents/multiple',
+          '${API_BASE}/upload/documents/multiple',
           uploadFormData,
           { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } },
         );
@@ -483,7 +483,7 @@ const AddEmployee = () => {
       const uploadFormData = new FormData();
       uploadFormData.append('file', file);
       const response = await axios.post(
-        `http://localhost:5000/api/upload/${endpoint}`,
+        `${API_BASE}/upload/${endpoint}`,
         uploadFormData,
         { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } },
       );
@@ -652,7 +652,7 @@ const AddEmployee = () => {
       };
 
       const response = await axios.post(
-        'http://localhost:5000/api/employees/create-with-account',
+        '${API_BASE}/employees/create-with-account',
         employeeData,
         { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } },
       );
