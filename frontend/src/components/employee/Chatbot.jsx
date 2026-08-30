@@ -156,8 +156,9 @@ const HRChatbot = ({ isLoggedIn = false, onLoginRedirect }) => {
                        || null;
             // ─────────────────────────────────────────────────────────────────
 
+const CHATBOT_URL = import.meta.env.VITE_CHATBOT_URL || 'http://localhost:5001';
             const response = await axios.post(
-                'http://localhost:5001/api/chat/send',
+                `${CHATBOT_URL}/api/chat/send`,
                 {
                     message: userMessage,
                     user_name: userName,
@@ -175,7 +176,6 @@ const HRChatbot = ({ isLoggedIn = false, onLoginRedirect }) => {
                     // ─────────────────────────────────────────────────────────
                 }
             );
-
             setIsTyping(false);
             const botMessage = {
                 id: Date.now(),
