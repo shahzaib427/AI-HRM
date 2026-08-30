@@ -40,7 +40,7 @@ const Sidebar = ({ isOpen, onMobileClose, isMobile }) => {
   // indigo/purple brand accent for active/selected states.
   const accentBg = 'bg-indigo-600';
 
-  const getProfileImageUrl = () => {
+const getProfileImageUrl = () => {
     if (!currentUser?.profilePicture) return null;
     
     if (currentUser.profilePicture.startsWith('http://') || 
@@ -48,11 +48,13 @@ const Sidebar = ({ isOpen, onMobileClose, isMobile }) => {
       return currentUser.profilePicture;
     }
     
+    const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace('/api', '');
+    
     if (currentUser.profilePicture.startsWith('/')) {
-      return `http://localhost:5000${currentUser.profilePicture}`;
+      return `${BASE_URL}${currentUser.profilePicture}`;
     }
     
-    return `http://localhost:5000/${currentUser.profilePicture}`;
+    return `${BASE_URL}/${currentUser.profilePicture}`;
   };
 
   const getNavItems = () => {
