@@ -1,28 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosInstance';
 
-// API Configuration
-const API_BASE_URL = 'http://localhost:5000/api/leaves';
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Add token to requests
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
+// Use the same axios instance as EmployeeLeave
+const api = axiosInstance;
 
 // Helper functions
 const formatDate = (dateString) => {
@@ -142,10 +122,11 @@ const AdminLeave = () => {
       const role = getUserRole();
       let response;
 
+      // ✅ Updated: Use /leaves prefix and proper endpoints
       if (role === 'admin' || role === 'hr') {
-        response = await api.get('/all');
+        response = await api.get('/leaves/all');
       } else if (role === 'manager') {
-        response = await api.get('/team/leaves');
+        response = await api.get('/leaves/team/leaves');
       } else {
         setError('Access denied. Admin/HR/Manager access required.');
         setLoading(false);
@@ -162,6 +143,10 @@ const AdminLeave = () => {
       console.error('Error fetching leaves:', error);
       if (error.response?.status === 403) {
         setError('Access denied. You do not have permission to view leave requests.');
+      } else if (error.response?.status === 401) {
+        setError('Session expired. Please login again.');
+        localStorage.removeItem('token');
+        window.location.href = '/login';
       } else {
         setError(error.response?.data?.message || 'Failed to load leave data');
       }
@@ -243,7 +228,8 @@ const AdminLeave = () => {
 
     try {
       setProcessingId(id);
-      const response = await api.post(`/${id}/review`, {
+      // ✅ Updated: Use /leaves prefix
+      const response = await api.post(`/leaves/${id}/review`, {
         action: 'approve',
         rejectionReason: ''
       });
@@ -267,7 +253,8 @@ const AdminLeave = () => {
 
     try {
       setProcessingId(id);
-      const response = await api.post(`/${id}/review`, {
+      // ✅ Updated: Use /leaves prefix
+      const response = await api.post(`/leaves/${id}/review`, {
         action: 'reject',
         rejectionReason
       });
@@ -288,7 +275,8 @@ const AdminLeave = () => {
   const handleUpdate = async (id, formData) => {
     try {
       setProcessingId(id);
-      const response = await api.put(`/${id}`, formData);
+      // ✅ Updated: Use /leaves prefix
+      const response = await api.put(`/leaves/${id}`, formData);
 
       if (response.data.success) {
         alert('Leave updated successfully!');
@@ -305,15 +293,12 @@ const AdminLeave = () => {
   };
 
   // Handle delete/cancel leave
-  // Pending leaves go through the cancel endpoint (soft cancel + HR notification).
-  // Any other status (approved/rejected/cancelled) is permanently deleted via the
-  // dedicated admin/hr-only /:id/permanent route, since cancelLeave rejects anything
-  // that isn't pending or approved.
   const handleDelete = async (id, status) => {
     try {
       setProcessingId(id);
 
-      const endpoint = status === 'pending' ? `/${id}` : `/${id}/permanent`;
+      // ✅ Updated: Use /leaves prefix
+      const endpoint = status === 'pending' ? `/leaves/${id}` : `/leaves/${id}/permanent`;
       const response = await api.delete(endpoint);
 
       if (response.data.success) {
@@ -331,15 +316,13 @@ const AdminLeave = () => {
   };
 
   // Handle bulk delete of selected leave requests
-  // Permanently deletes regardless of status (pending/approved included) -
-  // this is a deliberate "select and wipe" admin action, distinct from the
-  // per-row cancel-vs-delete logic in handleDelete above.
   const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return;
 
     try {
       setBulkDeleting(true);
-      const response = await api.delete('/bulk/delete', {
+      // ✅ Updated: Use /leaves prefix
+      const response = await api.delete('/leaves/bulk/delete', {
         data: { leaveIds: selectedIds }
       });
 
