@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosInstance';
 import { 
   FaUsers, FaCheckCircle, FaTimesCircle, FaClock, FaFilter, 
   FaSearch, FaDownload, FaSync, FaPlus, FaCalendarAlt, 
@@ -7,21 +7,8 @@ import {
   FaChevronUp, FaSpinner, FaEnvelope, FaEye
 } from 'react-icons/fa';
 
-// API Configuration
-const API_BASE_URL = 'http://localhost:5000/api/leaves';
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: { 'Content-Type': 'application/json' },
-});
-
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) config.headers.Authorization = `Bearer ${token}`;
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+// Use the shared axios instance
+const api = axiosInstance;
 
 // Helper: decode JWT
 const decodeToken = () => {
@@ -509,7 +496,8 @@ const HRLeave = () => {
   const fetchLeaveRequests = useCallback(async () => {
     try {
       setLoading(prev => ({ ...prev, requests: true }));
-      const res = await api.get('/all');
+      // ✅ Updated: Use /leaves prefix
+      const res = await api.get('/leaves/all');
       console.log('Fetched leave data:', res.data.data);
       if (res.data?.success) {
         const hrUserId = getUserId();
@@ -525,6 +513,10 @@ const HRLeave = () => {
       }
     } catch (err) {
       console.error('Fetch leave requests error:', err);
+      if (err.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
     } finally {
       setLoading(prev => ({ ...prev, requests: false }));
     }
@@ -533,10 +525,15 @@ const HRLeave = () => {
   const fetchMyLeaves = useCallback(async () => {
     try {
       setLoading(prev => ({ ...prev, myLeaves: true }));
-      const res = await api.get('/my-leaves');
+      // ✅ Updated: Use /leaves prefix
+      const res = await api.get('/leaves/my-leaves');
       if (res.data?.success) setMyLeaves(res.data.data || []);
     } catch (err) {
       console.error('Fetch my leaves error:', err);
+      if (err.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
     } finally {
       setLoading(prev => ({ ...prev, myLeaves: false }));
     }
@@ -545,14 +542,19 @@ const HRLeave = () => {
   const fetchMyMonthlyBalance = useCallback(async () => {
     try {
       setLoading(prev => ({ ...prev, balance: true }));
-      const res = await api.get('/balance');
+      // ✅ Updated: Use /leaves prefix
+      const res = await api.get('/leaves/monthly-balance');
       if (res.data?.success) {
         const d = res.data.data;
-        setMyMonthlyBalance(d?.leavesAvailable ?? d?.monthly ?? MONTHLY_LEAVE_CONFIG.TOTAL_LEAVES_PER_MONTH);
+        setMyMonthlyBalance(d?.monthly ?? MONTHLY_LEAVE_CONFIG.TOTAL_LEAVES_PER_MONTH);
       }
     } catch (err) {
       console.error('Fetch balance error:', err);
       setMyMonthlyBalance(MONTHLY_LEAVE_CONFIG.TOTAL_LEAVES_PER_MONTH);
+      if (err.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
     } finally {
       setLoading(prev => ({ ...prev, balance: false }));
     }
@@ -584,7 +586,8 @@ const HRLeave = () => {
   const handleApprove = async (id) => {
     if (!window.confirm('Approve this leave request?')) return;
     try {
-      const res = await api.post(`/${id}/review`, { action: 'approve', rejectionReason: '' });
+      // ✅ Updated: Use /leaves prefix
+      const res = await api.post(`/leaves/${id}/review`, { action: 'approve', rejectionReason: '' });
       if (res.data.success) { setSuccessMessage('Leave approved successfully!'); refreshAllData(); }
       else alert(res.data.message || 'Failed to approve');
     } catch (err) {
@@ -597,7 +600,8 @@ const HRLeave = () => {
     if (!reason?.trim()) return;
     if (!window.confirm('Reject this leave request?')) return;
     try {
-      const res = await api.post(`/${id}/review`, { action: 'reject', rejectionReason: reason });
+      // ✅ Updated: Use /leaves prefix
+      const res = await api.post(`/leaves/${id}/review`, { action: 'reject', rejectionReason: reason });
       if (res.data.success) { setSuccessMessage('Leave rejected successfully!'); refreshAllData(); }
       else alert(res.data.message || 'Failed to reject');
     } catch (err) {
@@ -606,7 +610,8 @@ const HRLeave = () => {
   };
 
   const handleSubmitLeave = async (formData) => {
-    const res = await api.post('/apply', { ...formData, leaveCount: formData.leaveCount || 1 });
+    // ✅ Updated: Use /leaves prefix
+    const res = await api.post('/leaves/apply', { ...formData, leaveCount: formData.leaveCount || 1 });
     if (res.data.success) {
       setSuccessMessage('Leave submitted! An Admin will review and approve it.');
       setShowLeaveForm(false);
@@ -617,7 +622,8 @@ const HRLeave = () => {
   const handleCancelMyLeave = async (leaveId) => {
     if (!window.confirm('Cancel this leave request?')) return;
     try {
-      await api.delete(`/${leaveId}`);
+      // ✅ Updated: Use /leaves prefix
+      await api.delete(`/leaves/${leaveId}`);
       setSuccessMessage('Leave cancelled successfully.');
       refreshAllData();
     } catch (err) {
@@ -634,7 +640,8 @@ const HRLeave = () => {
     try {
       setExporting(true);
       const token = localStorage.getItem('token');
-      const url = `${API_BASE_URL}/export${filter !== 'all' ? `?status=${filter}` : ''}`;
+      const baseURL = import.meta.env.VITE_API_URL || 'https://ai-hrm-backend.onrender.com/api';
+      const url = `${baseURL}/leaves/export${filter !== 'all' ? `?status=${filter}` : ''}`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error('Export failed');
       const blob = await res.blob();
@@ -644,14 +651,18 @@ const HRLeave = () => {
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(a.href);
       setSuccessMessage('CSV exported!');
-    } catch { alert('Export failed. Please try again.'); } finally { setExporting(false); }
+    } catch (err) {
+      console.error('Export error:', err);
+      alert('Export failed. Please try again.');
+    } finally { setExporting(false); }
   };
 
   const handleExportMonthlyReport = async (month, year) => {
     try {
       setExporting(true);
       const token = localStorage.getItem('token');
-      const url = `${API_BASE_URL}/export/monthly-report?month=${month}&year=${year}`;
+      const baseURL = import.meta.env.VITE_API_URL || 'https://ai-hrm-backend.onrender.com/api';
+      const url = `${baseURL}/leaves/export/monthly-report?month=${month}&year=${year}`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error('Export failed');
       const blob = await res.blob();
@@ -661,7 +672,10 @@ const HRLeave = () => {
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(a.href);
       setSuccessMessage('Monthly report exported!');
-    } catch { alert('Export failed.'); } finally { setExporting(false); }
+    } catch (err) {
+      console.error('Export error:', err);
+      alert('Export failed.');
+    } finally { setExporting(false); }
   };
 
   // ── Derived data ───────────────────────────────────────────────────────────

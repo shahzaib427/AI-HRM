@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosInstance';
 import { 
   FaDownload, FaFileExcel, FaCheckCircle, FaClock,
   FaFilter, FaSyncAlt, FaEye, FaPrint,
@@ -7,6 +7,9 @@ import {
   FaUser, FaCalendarAlt, FaBuilding, FaBriefcase, FaUsers,
   FaTimes, FaExclamationTriangle, FaSpinner, FaChevronDown, FaChevronUp
 } from 'react-icons/fa';
+
+// Use the shared axios instance
+const api = axiosInstance;
 
 const Badge = ({ children, variant = 'default' }) => {
   const variants = {
@@ -46,7 +49,7 @@ const KpiCard = ({ title, value, icon, color }) => {
   );
 };
 
-const PayslipModal = ({ isOpen, onClose, payroll, isHR, axiosInstance }) => {
+const PayslipModal = ({ isOpen, onClose, payroll, isHR }) => {
   const [payslipHtml, setPayslipHtml] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -59,10 +62,11 @@ const PayslipModal = ({ isOpen, onClose, payroll, isHR, axiosInstance }) => {
     if (!payroll) return;
     setLoading(true); setError(null);
     try {
+      // ✅ Updated: Use /leaves prefix and correct endpoints
       const endpoint = isHR
-        ? `/hr/payroll/my-payslip/${payroll._id}`
-        : `/hr/payroll/payslip-view/${payroll._id}`;
-      const response = await axiosInstance.get(endpoint, { responseType: 'text' });
+        ? `/payroll/my-payslip/${payroll._id}`
+        : `/payroll/payslip-view/${payroll._id}`;
+      const response = await api.get(endpoint, { responseType: 'text' });
       if (response.data) setPayslipHtml(response.data);
       else setError('No data received');
     } catch (err) {
@@ -75,10 +79,11 @@ const PayslipModal = ({ isOpen, onClose, payroll, isHR, axiosInstance }) => {
   const handleDownload = async () => {
     if (!payroll) return;
     try {
+      // ✅ Updated: Use /leaves prefix and correct endpoints
       const endpoint = isHR
-        ? `/hr/payroll/my-payslip/${payroll._id}/download`
-        : `/hr/payroll/payslip-download/${payroll._id}`;
-      const response = await axiosInstance.get(endpoint, { responseType: 'blob' });
+        ? `/payroll/my-payslip/${payroll._id}/download`
+        : `/payroll/payslip-download/${payroll._id}`;
+      const response = await api.get(endpoint, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data], { type: 'text/html' }));
       const link = document.createElement('a');
       link.href = url;
@@ -139,35 +144,6 @@ const PayslipModal = ({ isOpen, onClose, payroll, isHR, axiosInstance }) => {
   );
 };
 
-const createAxiosInstance = () => {
-  const instance = axios.create({
-    baseURL: 'http://localhost:5000/api',
-    headers: { 'Content-Type': 'application/json' },
-    withCredentials: true
-  });
-  
-  instance.interceptors.request.use((config) => {
-    const token = localStorage.getItem('token');
-    if (token) config.headers.Authorization = `Bearer ${token}`;
-    return config;
-  });
-  
-  instance.interceptors.response.use(
-    (response) => response,
-    (error) => {
-      if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
-      }
-      return Promise.reject(error);
-    }
-  );
-  return instance;
-};
-
-const axiosInstance = createAxiosInstance();
-
 const HRPayrollDashboard = () => {
   const [employeePayrolls, setEmployeePayrolls] = useState([]);
   const [myPayroll, setMyPayroll] = useState(null);
@@ -209,22 +185,27 @@ const HRPayrollDashboard = () => {
       const currentMonth = new Date().toLocaleString('default', { month: 'long' });
       const currentYear = new Date().getFullYear();
 
-      const res = await axiosInstance.get(
-        `/hr/payroll/my-payrolls?year=${currentYear}&month=${currentMonth}`
+      // ✅ Updated: Use /payroll prefix
+      const res = await api.get(
+        `/payroll/my-payrolls?year=${currentYear}&month=${currentMonth}`
       );
       const list = res.data?.data || [];
 
       if (list.length > 0) {
         setMyPayroll(list[0]);
       } else {
-        const fallback = await axiosInstance.get(
-          `/hr/payroll/my-payrolls?year=${currentYear}`
+        const fallback = await api.get(
+          `/payroll/my-payrolls?year=${currentYear}`
         );
         const allList = fallback.data?.data || [];
         setMyPayroll(allList.length > 0 ? allList[0] : null);
       }
     } catch (error) {
       console.error('Error fetching my current payroll:', error);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
       setMyPayroll(null);
     }
   }
@@ -232,11 +213,16 @@ const HRPayrollDashboard = () => {
   const fetchMyPayrollHistory = async () => {
     try {
       const currentYear = new Date().getFullYear();
-      const response = await axiosInstance.get(`/hr/payroll/my-payrolls?year=${currentYear}`);
+      // ✅ Updated: Use /payroll prefix
+      const response = await api.get(`/payroll/my-payrolls?year=${currentYear}`);
       if (response.data?.success && response.data?.data) setMyPayrollHistory(response.data.data);
       else setMyPayrollHistory([]);
     } catch (error) {
       console.error('Error fetching my payroll history:', error);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
       setMyPayrollHistory([]);
     }
   };
@@ -252,7 +238,8 @@ const HRPayrollDashboard = () => {
       params.append('limit', filters.limit.toString());
       params.append('excludeSelf', 'true');
 
-      const response = await axiosInstance.get(`/hr/payroll/employee-payrolls?${params.toString()}`);
+      // ✅ Updated: Use /payroll prefix
+      const response = await api.get(`/payroll/employee-payrolls?${params.toString()}`);
       
       if (response.data?.success) {
         setEmployeePayrolls(response.data.data || []);
@@ -264,6 +251,10 @@ const HRPayrollDashboard = () => {
       }
     } catch (error) {
       console.error('Error fetching employee payrolls:', error);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
       setEmployeePayrolls([]);
     } finally {
       setLoading(false);
@@ -276,7 +267,8 @@ const HRPayrollDashboard = () => {
       if (filters.year && filters.year !== 'all') params.append('year', filters.year);
       if (filters.month && filters.month !== 'all') params.append('month', filters.month);
       
-      const response = await axiosInstance.get(`/hr/payroll/employee-stats?${params.toString()}`);
+      // ✅ Updated: Use /payroll prefix
+      const response = await api.get(`/payroll/employee-stats?${params.toString()}`);
       if (response.data?.success) {
         setEmployeeStats(response.data.data);
       }
@@ -287,7 +279,8 @@ const HRPayrollDashboard = () => {
 
   const fetchMonthsYears = async () => {
     try {
-      const response = await axiosInstance.get('/hr/payroll/months-years');
+      // ✅ Updated: Use /payroll prefix
+      const response = await api.get('/payroll/months-years');
       if (response.data?.success && response.data?.data) {
         setMonthsYears(response.data.data);
       } else {
@@ -314,10 +307,11 @@ const HRPayrollDashboard = () => {
 
   const handleDownloadPayslip = async (payroll, isHR = false) => {
     try {
+      // ✅ Updated: Use /payroll prefix
       const endpoint = isHR
-        ? `/hr/payroll/my-payslip/${payroll._id}/download`
-        : `/hr/payroll/payslip-download/${payroll._id}`;
-      const response = await axiosInstance.get(endpoint, { responseType: 'blob' });
+        ? `/payroll/my-payslip/${payroll._id}/download`
+        : `/payroll/payslip-download/${payroll._id}`;
+      const response = await api.get(endpoint, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data], { type: 'text/html' }));
       const link = document.createElement('a');
       link.href = url;
@@ -335,7 +329,8 @@ const HRPayrollDashboard = () => {
       if (filters.month && filters.month !== 'all') params.append('month', filters.month);
       if (filters.status && filters.status !== 'all') params.append('status', filters.status);
 
-      const response = await axiosInstance.get(`/hr/payroll/employee-payrolls?${params.toString()}&limit=10000&excludeSelf=true`);
+      // ✅ Updated: Use /payroll prefix
+      const response = await api.get(`/payroll/employee-payrolls?${params.toString()}&limit=10000&excludeSelf=true`);
       if (response.data?.success && response.data?.data) {
         const XLSX = await import('xlsx');
         const excelData = response.data.data.map((p, i) => ({
@@ -416,7 +411,6 @@ const HRPayrollDashboard = () => {
         onClose={() => { setModalOpen(false); setSelectedPayroll(null); }}
         payroll={selectedPayroll}
         isHR={isHRPayroll}
-        axiosInstance={axiosInstance}
       />
 
       {/* Page Header */}
