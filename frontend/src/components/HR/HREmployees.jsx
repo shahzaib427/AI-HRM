@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosInstance';
 import { useNavigate } from 'react-router-dom';
 
 const HREmployee = () => {
@@ -10,18 +10,13 @@ const HREmployee = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState('all');
 
-  // ✅ AUTH TOKEN HELPER
-  const getAuthHeader = () => {
-    const token = localStorage.getItem('authToken');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
-  // ✅ FETCH EMPLOYEES WITH AUTH
+  // ✅ FETCH EMPLOYEES WITH AXIOS INSTANCE
   const fetchEmployees = async () => {
     try {
       setLoading(true);
       setError('');
-      const res = await axios.get('http://localhost:5000/api/employees', getAuthHeader());
+      // ✅ Updated: Use axiosInstance with /employees prefix
+      const res = await axiosInstance.get('/employees');
       if (res.data.success) {
         setEmployees(res.data.data);
       } else {
@@ -29,15 +24,22 @@ const HREmployee = () => {
       }
     } catch (err) {
       console.error('Error fetching employees:', err);
+      if (err.response?.status === 401) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
       setError(err.response?.data?.error || 'Failed to fetch employees.');
     } finally {
       setLoading(false);
     }
   };
 
-  // ✅ SIMPLE LOGOUT (NO CONTEXT NEEDED)
+  // ✅ SIMPLE LOGOUT
   const handleLogout = () => {
     localStorage.removeItem('authToken');
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     window.location.href = '/login';
   };
 
@@ -94,7 +96,7 @@ const HREmployee = () => {
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
             Employee Management (HR)
           </h1>
-          <p className="text-gray-600">HR Dashboard</p> {/* ✅ Fixed - No currentUser */}
+          <p className="text-gray-600">HR Dashboard</p>
         </div>
         <button onClick={handleLogout} className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700">
           Logout
