@@ -196,7 +196,7 @@ const EmployeeLeave = () => {
       setLoading(prev => ({ ...prev, balances: true }));
       setError(prev => ({ ...prev, balances: '' }));
       
-      const response = await api.get('/balance');
+      const response = await api.get('/monthly-balance');
       
       if (response.data?.success) {
         const data = response.data.data;
