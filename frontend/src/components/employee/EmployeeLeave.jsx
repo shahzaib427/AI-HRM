@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import axiosInstance from '../../utils/axiosInstance';
 
@@ -38,8 +37,6 @@ const decodeToken = () => {
     return null;
   }
 };
-
-
 
 // Enhanced error handler
 const handleApiError = (error, defaultMessage = 'Something went wrong') => {
@@ -196,7 +193,8 @@ const EmployeeLeave = () => {
       setLoading(prev => ({ ...prev, balances: true }));
       setError(prev => ({ ...prev, balances: '' }));
       
-      const response = await api.get('/monthly-balance');
+      // ✅ Updated: Added /leaves prefix
+      const response = await api.get('/leaves/monthly-balance');
       
       if (response.data?.success) {
         const data = response.data.data;
@@ -229,7 +227,8 @@ const EmployeeLeave = () => {
       setLoading(prev => ({ ...prev, requests: true }));
       setError(prev => ({ ...prev, requests: '' }));
       
-      const response = await api.get('/my-leaves');
+      // ✅ Updated: Added /leaves prefix
+      const response = await api.get('/leaves/my-leaves');
       
       if (response.data?.success) {
         setLeaveRequests(response.data.data || []);
@@ -286,7 +285,8 @@ const EmployeeLeave = () => {
   const handleSubmitLeave = useCallback(async (formData) => {
     try {
       if (editingLeave) {
-        const response = await api.put(`/${editingLeave}`, formData);
+        // ✅ Updated: Added /leaves prefix
+        const response = await api.put(`/leaves/${editingLeave}`, formData);
         if (response.data.success) {
           setSuccessMessage('Leave request updated successfully!');
           fetchAllData();
@@ -294,7 +294,8 @@ const EmployeeLeave = () => {
           setShowLeaveForm(false);
         }
       } else {
-        const response = await api.post('/apply', formData);
+        // ✅ Updated: Added /leaves prefix
+        const response = await api.post('/leaves/apply', formData);
         if (response.data.success) {
           setSuccessMessage('Leave application submitted successfully!');
           fetchAllData();
@@ -320,7 +321,8 @@ const EmployeeLeave = () => {
     }
 
     try {
-      await api.delete(`/${leaveId}`);
+      // ✅ Updated: Added /leaves prefix
+      await api.delete(`/leaves/${leaveId}`);
       setSuccessMessage('Leave request cancelled successfully!');
       fetchAllData();
     } catch (error) {
@@ -987,7 +989,8 @@ const LeaveDetailsModal = ({ isOpen, leaveId, onClose, onSuccess, onDelete }) =>
     setLoading(true);
     setError('');
     try {
-      const response = await api.get(`/${leaveId}`);
+      // ✅ Updated: Added /leaves prefix
+      const response = await api.get(`/leaves/${leaveId}`);
       if (response.data.success) {
         setLeave(response.data.data);
       } else {
@@ -1043,7 +1046,8 @@ const LeaveDetailsModal = ({ isOpen, leaveId, onClose, onSuccess, onDelete }) =>
     
     setDeleting(true);
     try {
-      await api.delete(`/${leaveId}`);
+      // ✅ Updated: Added /leaves prefix
+      await api.delete(`/leaves/${leaveId}`);
       onClose();
       if (onDelete) onDelete();
       if (onSuccess) onSuccess();
@@ -1173,6 +1177,5 @@ const LeaveDetailsModal = ({ isOpen, leaveId, onClose, onSuccess, onDelete }) =>
     </div>
   );
 };
-
 
 export default EmployeeLeave;
