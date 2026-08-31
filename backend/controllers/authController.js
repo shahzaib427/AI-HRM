@@ -9,6 +9,64 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
 
 console.log('✅✅✅ authController.js LOADED ✅✅✅');
 
+// ===== SHARED: role-based employee ID generator (EMP001 / HR001 / ADM001) =====
+// Used by register() and by userController's createEmployeeWithAccount.
+const PREFIX_MAP = { hr: 'HR', admin: 'ADM', employee: 'EMP' };
+
+async function generateEmployeeId(role) {
+  const normalizedRole = (role || '').toString().toLowerCase();
+  const prefix = PREFIX_MAP[normalizedRole] || 'EMP';
+
+  try {
+    const employees = await User.find({
+      employeeId: { $regex: new RegExp(`^${prefix}\\d+$`) }
+    }).select('employeeId').lean();
+
+    let maxNumber = 0;
+    employees.forEach(emp => {
+      const match = emp.employeeId.match(new RegExp(`^${prefix}(\\d+)$`));
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNumber) maxNumber = num;
+      }
+    });
+
+    return `${prefix}${(maxNumber + 1).toString().padStart(3, '0')}`;
+  } catch (error) {
+    console.error('Error generating employee ID:', error);
+    // even the fallback keeps the prefix — never returns a bare long number
+    return `${prefix}${Date.now().toString().slice(-6)}`;
+  }
+}
+
+// ===== SHARED: strong random password (letters + digits + symbols) =====
+// Used by register (indirectly via signup elsewhere), forgotPassword, and
+// userController's createEmployeeWithAccount — ONE generator everywhere,
+// so "reset password" emails are never weaker than "new account" emails.
+function generateRandomPassword(length) {
+  const len = [6, 7, 8].includes(length) ? length : 8;
+
+  const lower = 'abcdefghijkmnpqrstuvwxyz';       // no l/o to avoid confusion
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';       // no I/O to avoid confusion
+  const digits = '123456789';                      // no 0 to avoid confusion with O
+  const symbols = '@&#$!%*';
+
+  const allChars = lower + upper + digits + symbols;
+  const pick = (charset) => charset[Math.floor(Math.random() * charset.length)];
+
+  let passwordChars = [pick(lower), pick(upper), pick(digits), pick(symbols)];
+  while (passwordChars.length < len) {
+    passwordChars.push(pick(allChars));
+  }
+
+  for (let i = passwordChars.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [passwordChars[i], passwordChars[j]] = [passwordChars[j], passwordChars[i]];
+  }
+
+  return passwordChars.join('');
+}
+
 // Email transporter
 const getEmailTransporter = () => {
   try {
@@ -19,15 +77,18 @@ const getEmailTransporter = () => {
 
     return nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: process.env.SMTP_PORT || 587,
-      secure: false,
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: Number(process.env.SMTP_PORT) === 465, // true only for port 465
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS
       },
       tls: {
         rejectUnauthorized: false
-      }
+      },
+      pool: true, // reuse connection instead of reconnecting every send — faster
+      connectionTimeout: 10000,
+      greetingTimeout: 10000
     });
   } catch (error) {
     console.error('❌ Email transporter creation failed:', error.message);
@@ -55,8 +116,12 @@ exports.register = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Email or username already exists' });
     }
 
+    // ✅ FIXED: was `employeeId: uuidv4()` — that produced a long UUID
+    // (e.g. "550e8400-e29b-...") instead of EMP001/HR001/ADM001.
+    const employeeId = await generateEmployeeId(role);
+
     const user = await User.create({
-      employeeId: uuidv4(),
+      employeeId,
       name,
       username,
       email,
@@ -79,7 +144,6 @@ exports.register = async (req, res) => {
 };
 
 // ===== LOGIN =====
-// ===== LOGIN ===== (REPLACE your entire login function)
 exports.login = async (req, res) => {
   try {
     let { email, password } = req.body;
@@ -92,7 +156,6 @@ exports.login = async (req, res) => {
     if (!user) return res.status(401).json({ success: false, error: 'Invalid email or password' });
     if (!user.isActive) return res.status(403).json({ success: false, error: 'Account is deactivated' });
 
-    // ✅ FIXED: Direct bcrypt.compare instead of user.matchPassword
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ success: false, error: 'Invalid email or password' });
 
@@ -101,16 +164,15 @@ exports.login = async (req, res) => {
 
     const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
 
-    // ✅ Save to localStorage on frontend
     res.json({
       success: true,
       token,
-      user: { 
-        id: user._id, 
+      user: {
+        id: user._id,
         employeeId: user.employeeId,
-        name: user.name, 
-        username: user.username, 
-        email: user.email, 
+        name: user.name,
+        username: user.username,
+        email: user.email,
         role: user.role
       }
     });
@@ -120,24 +182,19 @@ exports.login = async (req, res) => {
   }
 };
 
-
 // ===== FORGOT PASSWORD (Generate new temporary password) =====
 exports.forgotPassword = async (req, res) => {
   console.log('🔐 FORGOT PASSWORD ENDPOINT CALLED');
-  
+
   try {
     const { email } = req.body;
-    
+
     if (!email) {
-      return res.status(400).json({
-        success: false,
-        error: 'Email is required'
-      });
+      return res.status(400).json({ success: false, error: 'Email is required' });
     }
 
-    // Find user by email
     const user = await User.findOne({ email: email.toLowerCase() });
-    
+
     if (!user) {
       // For security, don't reveal if user exists or not
       return res.status(200).json({
@@ -147,53 +204,43 @@ exports.forgotPassword = async (req, res) => {
     }
 
     if (!user.isActive) {
-      return res.status(403).json({
-        success: false,
-        error: 'Account is deactivated'
-      });
+      return res.status(403).json({ success: false, error: 'Account is deactivated' });
     }
 
-    // Generate a new temporary password (name-based + numbers)
-    const temporaryPassword = generateNameBasedPassword(user.name, user.email);
-    
-    console.log(`🔑 Generated temp password for ${user.email}: ${temporaryPassword}`);
-    
-    // Save the new password (will be hashed by pre-save middleware)
+    // ✅ FIXED: was `generateNameBasedPassword(user.name, user.email)` which produced
+    // weak passwords like "john123" — no symbols, guessable from the person's name/email.
+    // Now uses the same strong generator as new-account creation (letters + digits + @#$ etc).
+    const temporaryPassword = generateRandomPassword(8);
+
+    console.log(`🔑 Generated temp password for ${user.email}`);
+
     user.password = temporaryPassword;
     user.temporaryPassword = true;
     user.passwordChanged = false;
     user.lastPasswordChange = new Date();
-    
-    // Reset password expiry to 7 days from now
+
     const expiry = new Date();
     expiry.setDate(expiry.getDate() + 7);
     user.passwordExpiryDate = expiry;
-    
-    // Reset login attempts
+
     user.loginAttempts = 0;
     user.lockUntil = null;
-    
+
     await user.save();
-    
-    // Send email with the new temporary password
-    const emailSent = await sendTemporaryPasswordEmail(
-      user.email,
-      user.name,
-      temporaryPassword
-    );
-    
-    if (!emailSent) {
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to send email. Please try again later.'
-      });
-    }
-    
+
+    // ✅ FIXED: respond to the user immediately instead of waiting on the SMTP
+    // round trip. If email delivery fails, it's logged — it no longer blocks
+    // or fails the whole request.
     res.status(200).json({
       success: true,
       message: 'A temporary password has been sent to your email'
     });
-    
+
+    sendTemporaryPasswordEmail(user.email, user.name, temporaryPassword)
+      .then((sent) => {
+        if (!sent) console.error(`⚠️ Failed to deliver temp password email to ${user.email}`);
+      });
+
   } catch (err) {
     console.error('❌ Forgot password error:', err);
     res.status(500).json({
@@ -203,24 +250,11 @@ exports.forgotPassword = async (req, res) => {
   }
 };
 
-// ===== GENERATE NAME-BASED PASSWORD =====
-function generateNameBasedPassword(name, email) {
-  // Extract first name from email (before @, stop at first dot/underscore/digit)
-  const emailPrefix = email.split('@')[0].toLowerCase();
-  const firstName = emailPrefix.split(/[._\d]/)[0];
-
-  // Fallback to the name field if email prefix is too short
-  const namePart = firstName.length >= 2 ? firstName : name.split(' ')[0].toLowerCase();
-
-  const password = `${namePart}123`;
-  return password;
-}
-
 // ===== SEND TEMPORARY PASSWORD EMAIL =====
 const sendTemporaryPasswordEmail = async (email, name, temporaryPassword) => {
   try {
     const transporter = getEmailTransporter();
-    
+
     if (!transporter) {
       console.error('❌ Email transporter not available');
       return false;
@@ -228,7 +262,7 @@ const sendTemporaryPasswordEmail = async (email, name, temporaryPassword) => {
 
     await transporter.verify();
     console.log('✅ Email server connection verified');
-    
+
     const mailOptions = {
       from: `"HR System Support" <${process.env.SMTP_USER}>`,
       to: email,
@@ -256,17 +290,13 @@ const sendTemporaryPasswordEmail = async (email, name, temporaryPassword) => {
             </div>
             <div class="content">
               <p>Hello <strong>${name}</strong>,</p>
-              
               <p>We received a request to reset your password for the HR System account.</p>
-              
               <p>Here is your new temporary password:</p>
-              
               <div class="password-box">
                 <p><strong>Temporary Password:</strong></p>
                 <div class="password">${temporaryPassword}</div>
                 <p><small>This password will expire in 7 days</small></p>
               </div>
-              
               <div class="instructions">
                 <p><strong>📝 How to use this password:</strong></p>
                 <ol>
@@ -276,7 +306,6 @@ const sendTemporaryPasswordEmail = async (email, name, temporaryPassword) => {
                   <li>After login, you'll be prompted to change your password</li>
                 </ol>
               </div>
-              
               <div class="warning">
                 <p><strong>⚠️ Important Security Information:</strong></p>
                 <ul>
@@ -286,11 +315,8 @@ const sendTemporaryPasswordEmail = async (email, name, temporaryPassword) => {
                   <li>If you didn't request this, please contact HR immediately</li>
                 </ul>
               </div>
-              
               <p><strong>Login URL:</strong> ${process.env.FRONTEND_URL || 'http://localhost:3000'}/login</p>
-              
-              <p>Best regards,<br>
-              <strong>HR System Support Team</strong></p>
+              <p>Best regards,<br><strong>HR System Support Team</strong></p>
             </div>
             <div class="footer">
               <p>This is an automated email. Please do not reply.</p>
@@ -305,7 +331,7 @@ const sendTemporaryPasswordEmail = async (email, name, temporaryPassword) => {
     const info = await transporter.sendMail(mailOptions);
     console.log(`✅ Temporary password email sent to ${email}, Message ID: ${info.messageId}`);
     return true;
-    
+
   } catch (error) {
     console.error('❌ Email sending error:', error.message);
     return false;
@@ -315,67 +341,52 @@ const sendTemporaryPasswordEmail = async (email, name, temporaryPassword) => {
 // ===== CHANGE PASSWORD (After login) =====
 exports.changePassword = async (req, res) => {
   console.log('🔐 CHANGE PASSWORD ENDPOINT CALLED');
-  
+
   try {
     const { currentPassword, newPassword } = req.body;
     const userId = req.user.id;
-    
+
     if (!currentPassword || !newPassword) {
-      return res.status(400).json({
-        success: false,
-        error: 'Current password and new password are required'
-      });
+      return res.status(400).json({ success: false, error: 'Current password and new password are required' });
     }
-    
+
     if (newPassword.length < 6) {
-      return res.status(400).json({
-        success: false,
-        error: 'New password must be at least 6 characters'
-      });
+      return res.status(400).json({ success: false, error: 'New password must be at least 6 characters' });
     }
-    
+
     const user = await User.findById(userId).select('+password');
-    
+
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        error: 'User not found'
-      });
+      return res.status(404).json({ success: false, error: 'User not found' });
     }
-    
-    // Verify current password
+
     const isMatch = await user.matchPassword(currentPassword);
     if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        error: 'Current password is incorrect'
-      });
+      return res.status(401).json({ success: false, error: 'Current password is incorrect' });
     }
-    
-    // Check if new password was previously used
+
     const wasPreviouslyUsed = await user.wasPasswordPreviouslyUsed(newPassword);
     if (wasPreviouslyUsed) {
-      return res.status(400).json({
-        success: false,
-        error: 'You cannot use a previously used password'
-      });
+      return res.status(400).json({ success: false, error: 'You cannot use a previously used password' });
     }
-    
-    // Update password
+
     user.password = newPassword;
     user.temporaryPassword = false;
     user.passwordChanged = true;
-    
+
     await user.save();
-    
-    // Send password change confirmation email
-    await sendPasswordChangeConfirmationEmail(user.email, user.name);
-    
+
+    // ✅ FIXED: respond immediately, don't make the user wait on the confirmation email
     res.status(200).json({
       success: true,
       message: 'Password changed successfully'
     });
-    
+
+    sendPasswordChangeConfirmationEmail(user.email, user.name)
+      .then((sent) => {
+        if (!sent) console.error(`⚠️ Failed to deliver password-change confirmation to ${user.email}`);
+      });
+
   } catch (err) {
     console.error('❌ Change password error:', err);
     res.status(500).json({
@@ -389,7 +400,7 @@ exports.changePassword = async (req, res) => {
 const sendPasswordChangeConfirmationEmail = async (email, name) => {
   try {
     const transporter = getEmailTransporter();
-    
+
     if (!transporter) {
       console.error('❌ Email transporter not available');
       return false;
@@ -419,15 +430,12 @@ const sendPasswordChangeConfirmationEmail = async (email, name) => {
             </div>
             <div class="content">
               <p>Hello <strong>${name}</strong>,</p>
-              
               <p>Your password has been successfully changed for your HR System account.</p>
-              
               <p><strong>Account Details:</strong></p>
               <ul>
                 <li>Email: ${email}</li>
                 <li>Password Changed: ${new Date().toLocaleString()}</li>
               </ul>
-              
               <div class="warning">
                 <p><strong>⚠️ Security Alert:</strong></p>
                 <ul>
@@ -436,14 +444,11 @@ const sendPasswordChangeConfirmationEmail = async (email, name) => {
                   <li>Use a strong, unique password that you don't use elsewhere</li>
                 </ul>
               </div>
-              
               <p>You can now login with your new password at:</p>
               <p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login">
                 ${process.env.FRONTEND_URL || 'http://localhost:3000'}/login
               </a></p>
-              
-              <p>Best regards,<br>
-              <strong>HR System Support Team</strong></p>
+              <p>Best regards,<br><strong>HR System Support Team</strong></p>
             </div>
             <div class="footer">
               <p>This is an automated email. Please do not reply.</p>
@@ -457,7 +462,7 @@ const sendPasswordChangeConfirmationEmail = async (email, name) => {
     const info = await transporter.sendMail(mailOptions);
     console.log(`✅ Password change confirmation sent to ${email}, Message ID: ${info.messageId}`);
     return true;
-    
+
   } catch (error) {
     console.error('❌ Confirmation email error:', error.message);
     return false;
@@ -467,20 +472,17 @@ const sendPasswordChangeConfirmationEmail = async (email, name) => {
 // ===== CHECK IF PASSWORD NEEDS TO BE CHANGED =====
 exports.checkPasswordStatus = async (req, res) => {
   console.log('🔐 CHECK PASSWORD STATUS ENDPOINT CALLED');
-  
+
   try {
     const userId = req.user.id;
     const user = await User.findById(userId);
-    
+
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        error: 'User not found'
-      });
+      return res.status(404).json({ success: false, error: 'User not found' });
     }
-    
+
     const needsPasswordChange = user.temporaryPassword || user.isPasswordExpired;
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -490,7 +492,7 @@ exports.checkPasswordStatus = async (req, res) => {
         passwordExpiryDate: user.passwordExpiryDate
       }
     });
-    
+
   } catch (err) {
     console.error('❌ Check password status error:', err);
     res.status(500).json({
@@ -501,31 +503,23 @@ exports.checkPasswordStatus = async (req, res) => {
 };
 
 // ===== SEND WELCOME EMAIL (For new employees) =====
-exports.sendWelcomeEmail = async (req, res) => {
-  console.log('📧 SEND WELCOME EMAIL ENDPOINT CALLED');
-  
+// ✅ FIXED: this is now the ONLY email-sending logic. It's split into a plain
+// internal function (sendWelcomeEmailInternal) that other controllers can
+// call directly — no more fake req/res "mock" objects — plus a thin route
+// handler wrapper for direct HTTP calls to this endpoint if needed.
+
+const sendWelcomeEmailInternal = async (email, name, employeeId, temporaryPassword) => {
   try {
-    const { email, name, employeeId, temporaryPassword } = req.body;
-    
-    if (!email || !name || !temporaryPassword) {
-      return res.status(400).json({
-        success: false,
-        error: 'Email, name, and temporary password are required'
-      });
-    }
-    
     const transporter = getEmailTransporter();
-    
+
     if (!transporter) {
-      return res.status(500).json({
-        success: false,
-        error: 'Email service not configured'
-      });
+      console.error('❌ Email transporter not available');
+      return false;
     }
-    
+
     await transporter.verify();
     console.log('✅ Email server connection verified for welcome email');
-    
+
     const mailOptions = {
       from: `"HR System" <${process.env.SMTP_USER}>`,
       to: email,
@@ -559,9 +553,7 @@ exports.sendWelcomeEmail = async (req, res) => {
             </div>
             <div class="content">
               <p>Dear <strong>${name}</strong>,</p>
-              
               <p>Welcome to the HR System! Your account has been created by the HR department.</p>
-              
               <div class="credentials-box">
                 <h3>Your Login Credentials:</h3>
                 <div class="credential-item">
@@ -578,7 +570,6 @@ exports.sendWelcomeEmail = async (req, res) => {
                 <div class="password">${temporaryPassword}</div>
                 <p><small><em>This is a temporary password. You must change it on first login.</em></small></p>
               </div>
-              
               <div class="instructions">
                 <h3>📝 How to Get Started:</h3>
                 <ol>
@@ -594,7 +585,6 @@ exports.sendWelcomeEmail = async (req, res) => {
                   </a>
                 </center>
               </div>
-              
               <div class="warning">
                 <h3>⚠️ Important Security Notes:</h3>
                 <ul>
@@ -605,11 +595,8 @@ exports.sendWelcomeEmail = async (req, res) => {
                   <li>If you didn't request this account, please contact HR immediately</li>
                 </ul>
               </div>
-              
               <p><strong>Login URL:</strong> <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login">${process.env.FRONTEND_URL || 'http://localhost:3000'}/login</a></p>
-              
-              <p>Best regards,<br>
-              <strong>HR Department</strong></p>
+              <p>Best regards,<br><strong>HR Department</strong></p>
             </div>
             <div class="footer">
               <p>This is an automated email. Please do not reply.</p>
@@ -623,18 +610,42 @@ exports.sendWelcomeEmail = async (req, res) => {
 
     const info = await transporter.sendMail(mailOptions);
     console.log(`✅ Welcome email sent to ${email}, Message ID: ${info.messageId}`);
-    
-    res.status(200).json({
-      success: true,
-      message: 'Welcome email sent successfully',
-      emailId: info.messageId
-    });
-    
-  } catch (err) {
-    console.error('❌ Send welcome email error:', err);
-    res.status(500).json({
-      success: false,
-      error: err.message || 'Failed to send welcome email'
-    });
+    return true;
+
+  } catch (error) {
+    console.error('❌ Welcome email error:', error.message);
+    return false;
   }
 };
+
+// Thin HTTP wrapper around the internal function — kept for any direct
+// route calls, but userController now calls sendWelcomeEmailInternal directly
+// instead of faking req/res objects.
+exports.sendWelcomeEmail = async (req, res) => {
+  console.log('📧 SEND WELCOME EMAIL ENDPOINT CALLED');
+
+  const { email, name, employeeId, temporaryPassword } = req.body;
+
+  if (!email || !name || !temporaryPassword) {
+    return res.status(400).json({
+      success: false,
+      error: 'Email, name, and temporary password are required'
+    });
+  }
+
+  const sent = await sendWelcomeEmailInternal(email, name, employeeId, temporaryPassword);
+
+  if (sent) {
+    res.status(200).json({ success: true, message: 'Welcome email sent successfully' });
+  } else {
+    res.status(500).json({ success: false, error: 'Failed to send welcome email' });
+  }
+};
+
+// ✅ Exported for internal use by userController — no HTTP mocking needed
+exports.sendWelcomeEmailInternal = sendWelcomeEmailInternal;
+
+// ✅ Exported so userController can use the SAME id/password generators
+// instead of keeping duplicate copies that could drift out of sync
+exports.generateEmployeeId = generateEmployeeId;
+exports.generateRandomPassword = generateRandomPassword;

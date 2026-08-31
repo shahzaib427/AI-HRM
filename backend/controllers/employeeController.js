@@ -1,7 +1,9 @@
+
 const User = require('../models/User');
 const fs = require('fs');
 const path = require('path');
 const NotificationService = require('../services/notificationService');
+const { generateEmployeeId, generateRandomPassword, sendWelcomeEmailInternal } = require('./authController');
 
 // ===== CONFIG: adjust these to match your bank's actual formats =====
 const IBAN_MAX_LENGTH = 24;            // fixed digit length for IBAN
@@ -22,40 +24,12 @@ function sanitizeDigits(value, maxLength) {
   return digitsOnly.slice(0, maxLength);
 }
 
-// ===== GENERATE RANDOM PASSWORD (letters + numbers + symbols, 6-8 chars) =====
-function generateRandomPassword(length) {
-  // length can be 6, 7, or 8 — defaults to 8 if not given / invalid
-  const len = [6, 7, 8].includes(length) ? length : 8;
-
-  const lower = 'abcdefghijkmnpqrstuvwxyz';       // no l/o to avoid confusion
-  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';       // no I/O to avoid confusion
-  const digits = '123456789';                      // no 0 to avoid confusion with O
-  const symbols = '@&#$!%*';
-
-  const allChars = lower + upper + digits + symbols;
-
-  const pick = (charset) => charset[Math.floor(Math.random() * charset.length)];
-
-  // guarantee at least one of each type
-  let passwordChars = [
-    pick(lower),
-    pick(upper),
-    pick(digits),
-    pick(symbols)
-  ];
-
-  while (passwordChars.length < len) {
-    passwordChars.push(pick(allChars));
-  }
-
-  // shuffle so the guaranteed chars aren't always in the same position
-  for (let i = passwordChars.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [passwordChars[i], passwordChars[j]] = [passwordChars[j], passwordChars[i]];
-  }
-
-  return passwordChars.join('');
-}
+// ❌ REMOVED: local generateRandomPassword() and generateEmployeeId() functions.
+// Both are now imported from authController.js at the top of this file so
+// there's a single source of truth — this is what fixed the "long ID" bug
+// (register() in authController was using uuidv4() while this file used a
+// proper EMP001-style generator; now everything shares the same one) and
+// keeps password strength consistent everywhere.
 
 exports.getMyProfile = async (req, res) => {
   try {
@@ -547,7 +521,7 @@ exports.deleteEmployee = async (req, res) => {
   }
 };
 
-// CREATE EMPLOYEE WITH ACCOUNT - WITH NOTIFICATION
+// ===== CREATE EMPLOYEE WITH ACCOUNT — FIXED (fast response + real email) =====
 exports.createEmployeeWithAccount = async (req, res) => {
   try {
     console.log('🚀 createEmployeeWithAccount called');
@@ -583,6 +557,7 @@ exports.createEmployeeWithAccount = async (req, res) => {
     }
 
     // ✅ Auto-generate a random password (6-8 chars: letters, numbers, symbols)
+    // — imported from authController.js, same generator used everywhere
     const password = generateRandomPassword(8);
     console.log(`🔑 Auto-generated random password for ${email}`);
 
@@ -603,6 +578,9 @@ exports.createEmployeeWithAccount = async (req, res) => {
     const resolvedRoleForId =
       role || employeeProfile.systemRole || employeeProfile.role || 'employee';
 
+    // ✅ Uses the shared, fixed generator from authController.js — always
+    // returns a proper EMP001/HR001/ADM001-style ID, scanning ALL existing
+    // IDs for the true max instead of relying on createdAt ordering.
     const employeeId = await generateEmployeeId(resolvedRoleForId);
     console.log('✅ Generated employee ID:', employeeId);
 
@@ -707,47 +685,23 @@ exports.createEmployeeWithAccount = async (req, res) => {
       });
     }
 
-    // Send welcome email
-    let emailSent = false;
-    try {
-      const authController = require('./authController');
-
-      emailSent = await new Promise((resolve) => {
-        const mockRes = {
-          status: () => ({
-            json: (data) => {
-              console.log('Email sending response:', data);
-              resolve(data.success === true);
-            }
-          })
-        };
-
-        const mockReq = {
-          body: {
-            email: user.email,
-            name: user.name,
-            employeeId: user.employeeId,
-            temporaryPassword: password
-          }
-        };
-
-        authController.sendWelcomeEmail(mockReq, mockRes);
-      });
-
-    } catch (emailError) {
-      console.warn('⚠️ Email sending error:', emailError.message);
-    }
-
     const userResponse = user.toObject();
     delete userResponse.password;
     delete userResponse.passwordHistory;
 
+    // ✅ FIXED — MAIN SPEED FIX:
+    // Respond to the frontend immediately. Previously the code did
+    // `emailSent = await new Promise(...)` around a mocked req/res call to
+    // sendWelcomeEmail, which forced the whole HTTP response to wait on the
+    // SMTP round trip (often several seconds, sometimes more). The frontend
+    // no longer needs to wait for email delivery to know the employee was
+    // created successfully.
     res.status(201).json({
       success: true,
       message: 'Employee created successfully with notifications sent',
       employeeId: user.employeeId,
-      emailSent: emailSent,
-      temporaryPassword: password, // ✅ the random generated password, so the frontend can display it accurately
+      emailSent: null, // sending in background — frontend shouldn't treat this as final status
+      temporaryPassword: password, // the real generated password, so the frontend can display it accurately
       data: {
         employeeId: user.employeeId,
         name: user.name,
@@ -756,6 +710,21 @@ exports.createEmployeeWithAccount = async (req, res) => {
         position: user.position
       }
     });
+
+    // ✅ Fire-and-forget: runs AFTER the response has already been sent.
+    // Calls the real function directly — no more fake req/res mock objects,
+    // which were also silently hiding the actual error reason before.
+    sendWelcomeEmailInternal(user.email, user.name, user.employeeId, password)
+      .then((sent) => {
+        if (sent) {
+          console.log(`✅ Welcome email delivered to ${user.email}`);
+        } else {
+          console.error(`⚠️ Welcome email FAILED for ${user.email} — check SMTP env vars on Render (SMTP_HOST/PORT/USER/PASS)`);
+        }
+      })
+      .catch((err) => {
+        console.error(`⚠️ Welcome email threw an error for ${user.email}:`, err.message);
+      });
 
   } catch (error) {
     console.error('❌ createEmployeeWithAccount error:', error);
@@ -786,41 +755,11 @@ exports.createEmployeeWithAccount = async (req, res) => {
   }
 };
 
-// ===== Helper function to generate a role-based employee ID =====
-// hr -> HR001, HR002, ...
-// admin -> ADM001, ADM002, ...
-// employee / anything else -> EMP001, EMP002, ...
-// Each prefix has its OWN independent counter (an HR hire never "sees" EMP numbers).
-async function generateEmployeeId(role) {
-  const prefixMap = {
-    hr: 'HR',
-    admin: 'ADM',
-    employee: 'EMP',
-  };
-
-  const normalizedRole = (role || '').toString().toLowerCase();
-  const prefix = prefixMap[normalizedRole] || 'EMP';
-
-  try {
-    const latestEmployee = await User.findOne({
-      employeeId: { $regex: new RegExp(`^${prefix}\\d+$`) }
-    }).sort({ createdAt: -1 });
-
-    let nextNumber = 1;
-
-    if (latestEmployee && latestEmployee.employeeId) {
-      const match = latestEmployee.employeeId.match(new RegExp(`${prefix}(\\d+)`));
-      if (match) {
-        nextNumber = parseInt(match[1]) + 1;
-      }
-    }
-
-    return `${prefix}${nextNumber.toString().padStart(3, '0')}`;
-  } catch (error) {
-    console.error('Error generating employee ID:', error);
-    return `${prefix}${Date.now().toString().slice(-6)}`;
-  }
-}
+// ❌ REMOVED: the local generateEmployeeId() function that used to live here.
+// It's now imported from authController.js at the top of this file, so
+// register(), createEmployee(), and createEmployeeWithAccount() all share
+// the exact same ID logic instead of three separate implementations that
+// could drift apart (which is what caused the "long number ID" bug).
 
 // UPLOAD PROFILE PICTURE - WITH NOTIFICATION
 exports.uploadProfilePicture = async (req, res) => {
