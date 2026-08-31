@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosInstance';
 import { 
   FaFileContract, FaPlus, FaEdit, FaTrash, FaEye, 
   FaDownload, FaSignature, FaSync, FaSearch,
@@ -96,15 +96,12 @@ const HRContracts = () => {
     specialConditions: ''
   });
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-
   // Fetch contracts
   const fetchContracts = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_URL}/contracts`, {
-        headers: { Authorization: `Bearer ${token}` },
+      // ✅ Updated: Use /contracts prefix with axiosInstance
+      const response = await axiosInstance.get('/contracts', {
         params: { 
           search: searchTerm, 
           status: statusFilter !== 'all' ? statusFilter : undefined,
@@ -117,6 +114,7 @@ const HRContracts = () => {
     } catch (error) {
       console.error('Error fetching contracts:', error);
       if (error.response?.status === 401) {
+        localStorage.removeItem('token');
         window.location.href = '/login';
       }
     } finally {
@@ -127,27 +125,32 @@ const HRContracts = () => {
   // Fetch employees for dropdown
   const fetchEmployees = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_URL}/employees`, {
-        headers: { Authorization: `Bearer ${token}` },
+      // ✅ Updated: Use /employees endpoint with axiosInstance
+      const response = await axiosInstance.get('/employees', {
         params: { limit: 100, isActive: true }
       });
       setEmployees(response.data.data);
     } catch (error) {
       console.error('Error fetching employees:', error);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
     }
   };
 
   // Fetch stats
   const fetchStats = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_URL}/contracts/stats`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // ✅ Updated: Use /contracts/stats with axiosInstance
+      const response = await axiosInstance.get('/contracts/stats');
       setStats(response.data);
     } catch (error) {
       console.error('Error fetching stats:', error);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
     }
   };
 
@@ -164,8 +167,6 @@ const HRContracts = () => {
       setFormData({
         ...formData,
         employeeId,
-        // Human-readable code (e.g. EMP123456789) so contracts stay
-        // disambiguated even when two employees share the same name.
         employeeCode: employee.employeeId || '',
         employeeName: employee.name,
         position: employee.position,
@@ -179,21 +180,17 @@ const HRContracts = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
       const contractData = {
         ...formData,
         salary: parseFloat(formData.salary)
       };
       
       if (editingId) {
-        await axios.put(`${API_URL}/contracts/${editingId}`, contractData, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        // ✅ Updated: Use /contracts prefix with axiosInstance
+        await axiosInstance.put(`/contracts/${editingId}`, contractData);
         alert('Contract updated successfully');
       } else {
-        await axios.post(`${API_URL}/contracts`, contractData, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        await axiosInstance.post('/contracts', contractData);
         alert('Contract created successfully');
       }
       setShowModal(false);
@@ -203,6 +200,10 @@ const HRContracts = () => {
     } catch (error) {
       console.error('Error saving contract:', error);
       alert(error.response?.data?.error || 'Failed to save contract');
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
     } finally {
       setLoading(false);
     }
@@ -212,16 +213,18 @@ const HRContracts = () => {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this contract?')) return;
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`${API_URL}/contracts/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // ✅ Updated: Use /contracts prefix with axiosInstance
+      await axiosInstance.delete(`/contracts/${id}`);
       alert('Contract deleted successfully');
       fetchContracts();
       fetchStats();
     } catch (error) {
       console.error('Error deleting contract:', error);
       alert('Failed to delete contract');
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
     }
   };
 
@@ -232,14 +235,13 @@ const HRContracts = () => {
       return;
     }
     try {
-      const token = localStorage.getItem('token');
-      await axios.patch(`${API_URL}/contracts/${selectedContract._id}/sign`, 
+      // ✅ Updated: Use /contracts prefix with axiosInstance
+      await axiosInstance.patch(`/contracts/${selectedContract._id}/sign`, 
         { 
           role: signatureData.role,
           signature: signatureData.name,
           signedDate: signatureData.date || new Date().toISOString()
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
+        }
       );
       alert('Contract signed successfully');
       setShowSignatureModal(false);
@@ -248,6 +250,10 @@ const HRContracts = () => {
     } catch (error) {
       console.error('Error signing contract:', error);
       alert('Failed to sign contract');
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
     }
   };
 
@@ -258,10 +264,8 @@ const HRContracts = () => {
       return;
     }
     try {
-      const token = localStorage.getItem('token');
-      await axios.patch(`${API_URL}/contracts/${selectedContract._id}/terminate`, terminateData, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // ✅ Updated: Use /contracts prefix with axiosInstance
+      await axiosInstance.patch(`/contracts/${selectedContract._id}/terminate`, terminateData);
       alert('Contract terminated successfully');
       setShowTerminateModal(false);
       fetchContracts();
@@ -269,6 +273,10 @@ const HRContracts = () => {
     } catch (error) {
       console.error('Error terminating contract:', error);
       alert('Failed to terminate contract');
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
     }
   };
 
@@ -279,10 +287,8 @@ const HRContracts = () => {
       return;
     }
     try {
-      const token = localStorage.getItem('token');
-      await axios.post(`${API_URL}/contracts/${selectedContract._id}/renew`, renewData, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // ✅ Updated: Use /contracts prefix with axiosInstance
+      await axiosInstance.post(`/contracts/${selectedContract._id}/renew`, renewData);
       alert('Contract renewed successfully');
       setShowRenewModal(false);
       fetchContracts();
@@ -290,6 +296,10 @@ const HRContracts = () => {
     } catch (error) {
       console.error('Error renewing contract:', error);
       alert('Failed to renew contract');
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
     }
   };
 
