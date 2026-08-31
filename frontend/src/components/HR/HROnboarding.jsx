@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosInstance';
 import { 
   FaUserPlus, FaCheckCircle, FaClock, FaTimesCircle, 
   FaEnvelope, FaPhone, FaCalendarAlt, FaSearch,
@@ -76,8 +76,6 @@ const HROnboarding = () => {
     joiningDate: ''
   });
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-
   const departments = [
     'General', 'IT', 'Human Resources', 'Finance', 'Marketing', 'Sales',
     'Operations', 'Customer Service', 'Research & Development', 'Administration'
@@ -87,9 +85,8 @@ const HROnboarding = () => {
   const fetchCandidates = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_URL}/onboarding`, {
-        headers: { Authorization: `Bearer ${token}` },
+      // ✅ Updated: Use axiosInstance with /onboarding prefix
+      const response = await axiosInstance.get('/onboarding', {
         params: { 
           search: searchTerm, 
           status: statusFilter !== 'all' ? statusFilter : undefined,
@@ -102,6 +99,8 @@ const HROnboarding = () => {
     } catch (error) {
       console.error('Error fetching candidates:', error);
       if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
         window.location.href = '/login';
       }
     } finally {
@@ -112,13 +111,16 @@ const HROnboarding = () => {
   // Fetch stats
   const fetchStats = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_URL}/onboarding/stats`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // ✅ Updated: Use axiosInstance with /onboarding prefix
+      const response = await axiosInstance.get('/onboarding/stats');
       setStats(response.data);
     } catch (error) {
       console.error('Error fetching stats:', error);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
     }
   };
 
@@ -132,16 +134,12 @@ const HROnboarding = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
       if (editingId) {
-        await axios.put(`${API_URL}/onboarding/${editingId}`, formData, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        // ✅ Updated: Use axiosInstance with /onboarding prefix
+        await axiosInstance.put(`/onboarding/${editingId}`, formData);
         alert('Candidate updated successfully');
       } else {
-        await axios.post(`${API_URL}/onboarding`, formData, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        await axiosInstance.post('/onboarding', formData);
         alert('Candidate added successfully');
       }
       setShowModal(false);
@@ -151,6 +149,11 @@ const HROnboarding = () => {
     } catch (error) {
       console.error('Error saving candidate:', error);
       alert(error.response?.data?.error || 'Failed to save candidate');
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
     } finally {
       setLoading(false);
     }
@@ -160,31 +163,37 @@ const HROnboarding = () => {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this candidate?')) return;
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`${API_URL}/onboarding/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // ✅ Updated: Use axiosInstance with /onboarding prefix
+      await axiosInstance.delete(`/onboarding/${id}`);
       alert('Candidate deleted successfully');
       fetchCandidates();
       fetchStats();
     } catch (error) {
       console.error('Error deleting candidate:', error);
       alert('Failed to delete candidate');
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
     }
   };
 
   // Send offer letter
   const sendOfferLetter = async (id) => {
     try {
-      const token = localStorage.getItem('token');
-      await axios.post(`${API_URL}/onboarding/${id}/send-offer`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // ✅ Updated: Use axiosInstance with /onboarding prefix
+      await axiosInstance.post(`/onboarding/${id}/send-offer`, {});
       alert('Offer letter sent successfully');
       fetchCandidates();
     } catch (error) {
       console.error('Error sending offer:', error);
       alert('Failed to send offer letter');
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
     }
   };
 
@@ -195,10 +204,8 @@ const HROnboarding = () => {
       return;
     }
     try {
-      const token = localStorage.getItem('token');
-      await axios.post(`${API_URL}/onboarding/${selectedCandidate._id}/tasks`, taskForm, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // ✅ Updated: Use axiosInstance with /onboarding prefix
+      await axiosInstance.post(`/onboarding/${selectedCandidate._id}/tasks`, taskForm);
       alert('Task added successfully');
       setShowTaskModal(false);
       setTaskForm({ name: '', dueDate: '', description: '' });
@@ -206,21 +213,30 @@ const HROnboarding = () => {
     } catch (error) {
       console.error('Error adding task:', error);
       alert('Failed to add task');
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
     }
   };
 
   // Toggle task completion
   const toggleTaskCompletion = async (candidateId, taskId, completed) => {
     try {
-      const token = localStorage.getItem('token');
-      await axios.patch(`${API_URL}/onboarding/${candidateId}/tasks/${taskId}`, 
-        { completed: !completed },
-        { headers: { Authorization: `Bearer ${token}` } }
+      // ✅ Updated: Use axiosInstance with /onboarding prefix
+      await axiosInstance.patch(`/onboarding/${candidateId}/tasks/${taskId}`, 
+        { completed: !completed }
       );
       fetchCandidates();
     } catch (error) {
       console.error('Error updating task:', error);
       alert('Failed to update task');
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
     }
   };
 
