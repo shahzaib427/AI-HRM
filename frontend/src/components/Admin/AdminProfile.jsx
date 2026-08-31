@@ -557,11 +557,11 @@ const AdminProfile = () => {
         <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
           <div className="relative group">
             <img
-              src={profile.profilePicture 
-                ? (profile.profilePicture.startsWith('http') 
-                    ? profile.profilePicture 
-                    : `http://localhost:5000${profile.profilePicture}`)
-                : `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name)}&background=4f46e5&color=fff&size=200`}
+             src={profile.profilePicture 
+  ? (profile.profilePicture.startsWith('http') 
+      ? profile.profilePicture 
+      : `${import.meta.env.VITE_NODE_API_URL}${profile.profilePicture}`)
+  : `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name)}&background=4f46e5&color=fff&size=200`}
               alt="Profile"
               className="w-32 h-32 rounded-full object-cover border-4 border-indigo-100 shadow-lg"
               onError={(e) => {

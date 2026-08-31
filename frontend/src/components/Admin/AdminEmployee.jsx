@@ -107,13 +107,13 @@ const AdminEmployee = () => {
   const [showFilters, setShowFilters] = useState(false);
 
   // Helper function to get image URL
-  const getImageUrl = (path) => {
-    if (!path) return null;
-    if (path.startsWith('http://') || path.startsWith('https://')) {
-      return path;
-    }
-    return `http://localhost:5000${path}`;
-  };
+const getImageUrl = (path) => {
+  if (!path) return null;
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+  return `${import.meta.env.VITE_NODE_API_URL}${path}`;
+};
 
   // Check if user is authenticated
   const checkAuth = () => {
