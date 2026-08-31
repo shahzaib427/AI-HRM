@@ -1,6 +1,6 @@
 // Wellness.jsx — AI Wellness Coach with day drill-down and rich recommendations
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosInstance';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
   Heart, Activity, Moon, Zap, Target, Brain, 
@@ -11,7 +11,6 @@ import {
   Shield, Users, Eye, Download, FileText, Home
 } from 'lucide-react';
 
-const API_BASE_URL = 'http://localhost:5001/api';
 const MOODS = ['😢', '😔', '😐', '🙂', '😊', '🤩'];
 const MOOD_LABELS = ['Very Sad', 'Sad', 'Neutral', 'Good', 'Happy', 'Excellent'];
 
@@ -338,36 +337,36 @@ const Wellness = () => {
   const chatEndRef                        = useRef(null);
   const recommendationsRef                 = useRef(null);
 
-  const api = useRef(null);
-  if (!api.current) {
-    api.current = axios.create({ baseURL: API_BASE_URL, withCredentials: true, timeout: 15000 });
-  }
-
-  useEffect(() => {
-    const id = api.current.interceptors.request.use(config => {
-      const token  = getToken();
-      const userId = localStorage.getItem('user_id');
-      if (token)  config.headers['Authorization'] = `Bearer ${token}`;
-      if (userId) config.headers['X-User-Id']     = userId;
-      return config;
-    });
-    return () => api.current.interceptors.request.eject(id);
-  }, [getToken]);
+  // Use shared axiosInstance instead of creating a new one
+  const api = axiosInstance;
 
   const getUserId = useCallback(() =>
     currentUser?._id || currentUser?.id || localStorage.getItem('user_id'), [currentUser]);
 
   const fetchCheckinStatus  = useCallback(async (uid) => {
-    try { const r = await api.current.get(`/checkin/status?user_id=${uid}`); setCheckinStatus(r.data); } catch {}
-  }, []);
+    try {
+      // ✅ Updated: Use /checkin/status with proper prefix
+      const r = await api.get(`/checkin/status?user_id=${uid}`);
+      setCheckinStatus(r.data);
+    } catch (error) {
+      console.error('Error fetching checkin status:', error);
+    }
+  }, [api]);
 
   const fetchWeeklyWellness = useCallback(async (uid) => {
-    try { const r = await api.current.get(`/weekly-wellness?days=7&user_id=${uid}`); setWeeklyWellness(r.data); } catch {}
-  }, []);
+    try {
+      // ✅ Updated: Use /weekly-wellness with proper prefix
+      const r = await api.get(`/weekly-wellness?days=7&user_id=${uid}`);
+      setWeeklyWellness(r.data);
+    } catch (error) {
+      console.error('Error fetching weekly wellness:', error);
+    }
+  }, [api]);
 
   const fetchHistory = useCallback(async (uid) => {
     try {
-      const r = await api.current.get(`/history?user_id=${uid}`);
+      // ✅ Updated: Use /history with proper prefix
+      const r = await api.get(`/history?user_id=${uid}`);
       if (r.data.checkins?.length > 0) {
         setStressPatterns(r.data.checkins.slice(0, 7).map(c => ({
           day:            new Date(c.created_at).toLocaleDateString('en-US', { weekday: 'short' }),
@@ -382,7 +381,8 @@ const Wellness = () => {
           setDetailedRecs(latest.detailed_recommendations);
         } else if (latest?.wellness_score) {
           try {
-            const regenRes = await api.current.post('/checkin/recommendations', {
+            // ✅ Updated: Use /checkin/recommendations with proper prefix
+            const regenRes = await api.post('/checkin/recommendations', {
               user_id:      uid,
               mood:         latest.mood,
               stress:       latest.stress,
@@ -399,12 +399,20 @@ const Wellness = () => {
           }
         }
       }
-    } catch {}
-  }, []);
+    } catch (error) {
+      console.error('Error fetching history:', error);
+    }
+  }, [api]);
 
   const fetchStats = useCallback(async (uid) => {
-    try { const r = await api.current.get(`/stats?user_id=${uid}`); setStats(r.data); } catch {}
-  }, []);
+    try {
+      // ✅ Updated: Use /stats with proper prefix
+      const r = await api.get(`/stats?user_id=${uid}`);
+      setStats(r.data);
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  }, [api]);
 
   const loadAllData = useCallback(async (uid) => {
     if (!uid) return;
@@ -446,7 +454,8 @@ const Wellness = () => {
         productivity: dailyCheckIn.productivity,
         message:      dailyCheckIn.message.trim() || `Check-in #${checkinStatus.checkin_number}`
       };
-      const res  = await api.current.post('/checkin', payload);
+      // ✅ Updated: Use /checkin with proper prefix
+      const res  = await api.post('/checkin', payload);
       const data = res.data;
 
       setWellnessScore({
@@ -476,6 +485,10 @@ const Wellness = () => {
     } catch (e) {
       console.error('checkin error:', e);
       setError(e.response?.data?.error || 'Check-in failed. Please try again.');
+      if (e.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
     } finally {
       setSubmitting(false);
     }
