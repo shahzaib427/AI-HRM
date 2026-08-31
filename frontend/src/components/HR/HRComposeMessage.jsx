@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import {
   Send as SendIcon, AttachFile as AttachFileIcon, Delete as DeleteIcon,
@@ -7,14 +6,13 @@ import {
   Drafts as DraftsIcon, SmartToy as SmartToyIcon, AutoFixHigh as AutoFixHighIcon,
   Psychology as PsychologyIcon, FileCopy as FileCopyIcon,
   DriveFileRenameOutline as TemplateIcon,
-  // ✅ FIX 2B: WarningIcon was used in JSX but never imported — added here
   Warning as WarningIcon,
 } from '@mui/icons-material';
 import { CircularProgress } from '@mui/material';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { FaUsers, FaCheckCircle, FaBuilding } from 'react-icons/fa';
-// ✅ FIX 2A: import axiosInstance for authenticated API calls
+// ✅ Use shared axios instance
 import axiosInstance from '../../utils/axiosInstance';
 
 // ─── UI Primitives ────────────────────────────────────────────────────────────
@@ -111,8 +109,6 @@ const RECIPIENT_TYPES = [
 ];
 
 const STEPS = ['Recipient', 'Details', 'Message', 'Review'];
-// API_URL kept only for fetchCurrentUser endpoint-discovery loop
-const API_URL = 'http://localhost:5000';
 
 // ─── Success Dialog ───────────────────────────────────────────────────────────
 
@@ -197,12 +193,24 @@ const HRComposeMessage = () => {
 
       const token = localStorage.getItem('token');
       if (token && (!userData || !userData._id)) {
-        const endpoints = [`${API_URL}/api/auth/me`, `${API_URL}/api/users/me`, `${API_URL}/api/employee/profile`, `${API_URL}/api/profile`];
-        for (const endpoint of endpoints) {
+        // ✅ Updated: Use /auth/me endpoint with axiosInstance
+        try {
+          const response = await axiosInstance.get('/auth/me');
+          if (response.data) {
+            userData = response.data.user || response.data.data || response.data;
+            localStorage.setItem('currentUser', JSON.stringify(userData));
+          }
+        } catch {
+          // Try alternative endpoint
           try {
-            const response = await axios.get(endpoint, { headers: { Authorization: `Bearer ${token}` }, timeout: 2000 });
-            if (response.data) { userData = response.data.user || response.data.data || response.data; localStorage.setItem('currentUser', JSON.stringify(userData)); break; }
-          } catch { /* try next */ }
+            const response = await axiosInstance.get('/users/me');
+            if (response.data) {
+              userData = response.data.user || response.data.data || response.data;
+              localStorage.setItem('currentUser', JSON.stringify(userData));
+            }
+          } catch {
+            // Use stored user data if available
+          }
         }
       }
 
@@ -233,7 +241,7 @@ const HRComposeMessage = () => {
     } finally { setUserLoading(false); }
   }, []);
 
-  // ✅ FIX 2D: use axiosInstance instead of bare axios
+  // ✅ Updated: Use axiosInstance with /messages prefix
   const fetchAllUsers = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -251,7 +259,7 @@ const HRComposeMessage = () => {
         setStats(prev => ({ ...prev, departmentsCount: deptSet.size }));
         return;
       }
-      // ✅ FIX: axiosInstance handles auth automatically
+      // ✅ Updated: Use /messages prefix
       const response = await axiosInstance.get('/messages/employee/users/list');
       if (response.data.success && response.data.data) {
         setAllUsers(response.data.data);
@@ -262,6 +270,10 @@ const HRComposeMessage = () => {
       } else { setAllUsers([]); }
     } catch (error) {
       console.error('Error fetching users:', error);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
       setAllUsers([]);
     }
   };
@@ -394,7 +406,7 @@ const HRComposeMessage = () => {
     }
   };
 
-  // ✅ FIX 2C: use axiosInstance instead of bare axios
+  // ✅ Updated: Use axiosInstance with /messages prefix
   const handleSubmit = async (e) => {
     e.preventDefault();
     const err = validateForm();
@@ -416,7 +428,7 @@ const HRComposeMessage = () => {
       else if (formData.recipientType === 'department') messageData.department = selectedDepartment;
       // 'all' needs no extra field
 
-      // ✅ FIX: axiosInstance handles auth headers automatically
+      // ✅ Updated: Use /messages prefix
       const response = await axiosInstance.post('/messages/send', messageData);
 
       toast.success('Message sent!');
@@ -436,6 +448,10 @@ const HRComposeMessage = () => {
     } catch (err) {
       const msg = err.response?.data?.message || err.response?.data?.error || 'Failed to send message';
       setError(msg); toast.error(msg);
+      if (err.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
     } finally { setLoading(false); }
   };
 
@@ -615,7 +631,6 @@ const HRComposeMessage = () => {
                     {formData.recipientType === 'all' && (
                       <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
                         <div className="flex items-start gap-3">
-                          {/* ✅ FIX 2B: WarningIcon now imported so this renders correctly */}
                           <WarningIcon className="text-amber-500 flex-shrink-0 mt-0.5" style={{ fontSize: 18 }} />
                           <div>
                             <p className="text-sm font-medium text-amber-800">Send to All Employees</p>
