@@ -1,13 +1,29 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import axios from 'axios';
-import { 
-  FaCalendarAlt, FaFileAlt, FaExclamationTriangle, FaSync, 
-  FaPlus, FaEye, FaEdit, FaTrash, FaCheckCircle, FaClock,
-  FaChartPie, FaLeaf, FaHourglassHalf, FaPlane, FaUserCheck
+import axiosInstance from '../../utils/axiosInstance';
+
+import {
+  FaCalendarAlt,
+  FaFileAlt,
+  FaExclamationTriangle,
+  FaSync,
+  FaPlus,
+  FaEye,
+  FaEdit,
+  FaTrash,
+  FaCheckCircle,
+  FaClock,
+  FaChartPie,
+  FaLeaf,
+  FaHourglassHalf,
+  FaPlane,
+  FaUserCheck,
+  FaTimes
 } from 'react-icons/fa';
 
+const api = axiosInstance;
+
 // API Configuration
-const API_BASE_URL = 'http://localhost:5000/api/leaves';
 
 // Helper function to decode JWT token
 const decodeToken = () => {
@@ -23,25 +39,7 @@ const decodeToken = () => {
   }
 };
 
-// Create axios instance with auth token
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
 
-// Add token to all requests
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
 
 // Enhanced error handler
 const handleApiError = (error, defaultMessage = 'Something went wrong') => {
@@ -1176,7 +1174,5 @@ const LeaveDetailsModal = ({ isOpen, leaveId, onClose, onSuccess, onDelete }) =>
   );
 };
 
-// Add FaTimes import at the top
-import { FaTimes } from 'react-icons/fa';
 
 export default EmployeeLeave;
