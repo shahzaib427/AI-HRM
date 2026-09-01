@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosInstance';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   FaBriefcase,
@@ -40,9 +40,9 @@ const Apply = () => {
       try {
         setLoading(true);
         
-        // TRY 1: Public endpoint first
+        // ✅ TRY 1: Public endpoint first (no auth required)
         try {
-          const response = await axios.get(`http://localhost:5000/api/public/jobs/${jobId}`);
+          const response = await axiosInstance.get(`/public/jobs/${jobId}`);
           if (response.data.success) {
             setJob(response.data.data);
             setLoading(false);
@@ -52,15 +52,11 @@ const Apply = () => {
           console.log('Public endpoint failed, trying authenticated...');
         }
         
-        // TRY 2: Authenticated endpoint (if user is logged in)
+        // ✅ TRY 2: Authenticated endpoint (if user is logged in)
         const token = localStorage.getItem('authToken') || localStorage.getItem('token');
         if (token) {
           try {
-            const response = await axios.get(`http://localhost:5000/api/recruitment/jobs/${jobId}`, {
-              headers: {
-                Authorization: `Bearer ${token}`
-              }
-            });
+            const response = await axiosInstance.get(`/recruitment/jobs/${jobId}`);
             if (response.data.success) {
               setJob(response.data.data);
               setLoading(false);
@@ -71,7 +67,7 @@ const Apply = () => {
           }
         }
         
-        // If both fail
+        // If both fail, set fallback
         setJob({
           _id: jobId,
           title: 'Job Position',
@@ -117,55 +113,61 @@ const Apply = () => {
     return `$${Number(min).toLocaleString()} - $${Number(max).toLocaleString()}`;
   };
 
- // In handleSubmit function:
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  setSubmitting(true);
+  // ✅ Updated: Use axiosInstance with FormData for file upload
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
 
-  try {
-    // ✅ Use FormData so file gets sent as multipart
-    const data = new FormData();
-    data.append('jobId', jobId);
-    data.append('firstName', formData.firstName);
-    data.append('lastName', formData.lastName);
-    data.append('email', formData.email);
-    data.append('phone', formData.phone);
-    data.append('currentCompany', formData.currentCompany || '');
-    data.append('currentPosition', formData.currentPosition || '');
-    data.append('totalExperience', formData.totalExperience || '');
-    data.append('currentSalary', formData.currentSalary || '');
-    data.append('expectedSalary', formData.expectedSalary || '');
-    data.append('noticePeriod', formData.noticePeriod || '0');
-    data.append('coverLetter', formData.coverLetter || '');
-    data.append('skills', formData.skills || '');
+    try {
+      // Use FormData so file gets sent as multipart
+      const data = new FormData();
+      data.append('jobId', jobId);
+      data.append('firstName', formData.firstName);
+      data.append('lastName', formData.lastName);
+      data.append('email', formData.email);
+      data.append('phone', formData.phone);
+      data.append('currentCompany', formData.currentCompany || '');
+      data.append('currentPosition', formData.currentPosition || '');
+      data.append('totalExperience', formData.totalExperience || '');
+      data.append('currentSalary', formData.currentSalary || '');
+      data.append('expectedSalary', formData.expectedSalary || '');
+      data.append('noticePeriod', formData.noticePeriod || '0');
+      data.append('coverLetter', formData.coverLetter || '');
+      data.append('skills', formData.skills || '');
 
-    // ✅ Attach resume file
-    if (formData.resume) {
-      data.append('resume', formData.resume);
-      console.log('📎 Attaching resume:', formData.resume.name);
-    } else {
-      console.log('⚠️ No resume selected');
+      // Attach resume file
+      if (formData.resume) {
+        data.append('resume', formData.resume);
+        console.log('📎 Attaching resume:', formData.resume.name);
+      } else {
+        console.log('⚠️ No resume selected');
+      }
+
+      // ✅ Updated: Use axiosInstance with /public/apply endpoint
+      const response = await axiosInstance.post('/public/apply', data, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      if (response.data.success) {
+        alert('Application submitted successfully!');
+        navigate('/careers');
+      } else {
+        alert(response.data.error || 'Failed to submit application');
+      }
+    } catch (error) {
+      console.error('Submission error:', error);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
+      alert(`Failed: ${error.response?.data?.error || error.message}`);
+    } finally {
+      setSubmitting(false);
     }
-
-    // ✅ No headers — let axios set multipart boundary automatically
-    const response = await axios.post(
-      'http://localhost:5000/api/public/apply',
-      data
-    );
-
-    if (response.data.success) {
-      alert('Application submitted successfully!');
-      navigate('/careers');
-    } else {
-      alert(response.data.error || 'Failed to submit application');
-    }
-  } catch (error) {
-    console.error('Submission error:', error);
-    alert(`Failed: ${error.response?.data?.error || error.message}`);
-  } finally {
-    setSubmitting(false);
-  }
-};
+  };
 
   if (loading) {
     return (
