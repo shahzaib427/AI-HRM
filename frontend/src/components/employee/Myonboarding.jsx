@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosInstance';
 import {
   FaUserPlus, FaCheckCircle, FaClock, FaTimesCircle,
   FaEnvelope, FaPhone, FaCalendarAlt, FaBriefcase,
@@ -55,21 +55,19 @@ const MyOnboarding = () => {
   const [togglingTaskId, setTogglingTaskId] = useState(null);
   const [error, setError] = useState('');
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-
   const fetchMyOnboarding = async () => {
     setLoading(true);
     setError('');
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_URL}/onboarding/my-onboarding`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // ✅ Updated: Use axiosInstance with /onboarding prefix
+      const response = await axiosInstance.get('/onboarding/my-onboarding');
       setCandidate(response.data.data);
     } catch (error) {
       console.error('Error fetching my onboarding record:', error);
       setError(error.response?.data?.error || 'Failed to load onboarding data');
       if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
         window.location.href = '/login';
       }
     } finally {
@@ -85,15 +83,19 @@ const MyOnboarding = () => {
     setTogglingTaskId(taskId);
     setError('');
     try {
-      const token = localStorage.getItem('token');
-      await axios.patch(`${API_URL}/onboarding/my-onboarding/tasks/${taskId}`,
-        { completed: !completed },
-        { headers: { Authorization: `Bearer ${token}` } }
+      // ✅ Updated: Use axiosInstance with /onboarding prefix
+      await axiosInstance.patch(`/onboarding/my-onboarding/tasks/${taskId}`,
+        { completed: !completed }
       );
       fetchMyOnboarding();
     } catch (error) {
       console.error('Error updating task:', error);
       setError(error.response?.data?.error || 'Failed to update task');
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
     } finally {
       setTogglingTaskId(null);
     }
