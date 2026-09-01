@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosInstance';
 import {
   FaFileContract, FaEye, FaSignature, FaSearch,
   FaCalendarAlt, FaMoneyBill, FaUserTie, FaCheckCircle,
@@ -62,21 +62,19 @@ const MyContracts = () => {
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-
   const fetchMyContracts = async () => {
     setLoading(true);
     setError('');
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_URL}/contracts/my-contracts`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // ✅ Updated: Use axiosInstance with /contracts prefix
+      const response = await axiosInstance.get('/contracts/my-contracts');
       setContracts(response.data.data || []);
     } catch (error) {
       console.error('Error fetching my contracts:', error);
       setError(error.response?.data?.error || 'Failed to load contracts');
       if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
         window.location.href = '/login';
       }
     } finally {
@@ -96,14 +94,13 @@ const MyContracts = () => {
     setSigning(true);
     setError('');
     try {
-      const token = localStorage.getItem('token');
-      await axios.patch(`${API_URL}/contracts/${selectedContract._id}/sign`,
+      // ✅ Updated: Use axiosInstance with /contracts prefix
+      await axiosInstance.patch(`/contracts/${selectedContract._id}/sign`,
         {
           role: 'employee',
           signature: signatureData.name,
           signedDate: signatureData.date || new Date().toISOString()
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
+        }
       );
       setShowSignatureModal(false);
       setSignatureData({ name: '', date: '' });
@@ -111,6 +108,11 @@ const MyContracts = () => {
     } catch (error) {
       console.error('Error signing contract:', error);
       setError(error.response?.data?.error || 'Failed to sign contract');
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
     } finally {
       setSigning(false);
     }
@@ -135,9 +137,7 @@ const MyContracts = () => {
 
   const getFilteredContracts = () => {
     return contracts.filter(c => {
-      // Status filter
       if (statusFilter !== 'all' && c.status !== statusFilter) return false;
-      // Search filter
       if (!searchTerm) return true;
       const term = searchTerm.toLowerCase();
       return (
@@ -150,12 +150,10 @@ const MyContracts = () => {
 
   const filteredContracts = getFilteredContracts();
 
-  // Summary calculations
   const totalContracts = contracts.length;
   const activeContracts = contracts.filter(c => c.status === 'active').length;
   const pendingSignatures = contracts.filter(c => needsMySignature(c)).length;
   const signedByEmployee = contracts.filter(c => c.signedByEmployee).length;
-
   const hasPendingAction = contracts.some(c => needsMySignature(c));
 
   if (loading) {
