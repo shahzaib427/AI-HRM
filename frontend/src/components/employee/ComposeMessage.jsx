@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosInstance';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -93,7 +93,6 @@ const PRIORITIES = [
 ];
 
 const STEPS = ['Recipient', 'Details', 'Message', 'Review'];
-const API_URL = 'http://localhost:5000';
 
 // ─── Success Dialog ───────────────────────────────────────────────────────────
 
@@ -168,10 +167,10 @@ const ComposeMessage = () => {
   });
   const [fetchingUsers, setFetchingUsers] = useState(false);
 
-  // Get token from localStorage
+  // ✅ Get token from localStorage
   const getToken = () => localStorage.getItem('token');
 
-  // Fetch current user from API
+  // ✅ Fetch current user from API using axiosInstance
   const fetchCurrentUser = useCallback(async () => {
     setUserLoading(true);
     try {
@@ -181,9 +180,8 @@ const ComposeMessage = () => {
         return;
       }
 
-      const response = await axios.get(`${API_URL}/api/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // ✅ Updated: Use axiosInstance with /auth/me
+      const response = await axiosInstance.get('/auth/me');
 
       if (response.data) {
         const userData = response.data.user || response.data.data || response.data;
@@ -202,12 +200,17 @@ const ComposeMessage = () => {
     } catch (error) {
       console.error('Error fetching user:', error);
       toast.error('Failed to load user profile');
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
     } finally {
       setUserLoading(false);
     }
   }, []);
 
-  // Fetch HR users from API
+  // ✅ Fetch HR users from API using axiosInstance
   const fetchHrUsers = async () => {
     setFetchingUsers(true);
     try {
@@ -218,9 +221,8 @@ const ComposeMessage = () => {
         return;
       }
 
-      const response = await axios.get(`${API_URL}/api/messages/employee/users/list`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // ✅ Updated: Use axiosInstance with /messages prefix
+      const response = await axiosInstance.get('/messages/employee/users/list');
 
       if (response.data.success && response.data.data) {
         setHrUsers(response.data.data);
@@ -233,6 +235,11 @@ const ComposeMessage = () => {
       console.error('Error fetching HR users:', error);
       toast.error('Failed to load HR contacts');
       setHrUsers([]);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
     } finally {
       setFetchingUsers(false);
     }
@@ -367,6 +374,7 @@ const ComposeMessage = () => {
     return Object.keys(errs).length === 0;
   };
 
+  // ✅ Handle submit - Updated to use axiosInstance
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) {
@@ -393,9 +401,8 @@ const ComposeMessage = () => {
         priority: formData.priority || 'normal' 
       };
       
-      const response = await axios.post(`${API_URL}/api/messages/employee/send`, messageData, {
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      });
+      // ✅ Updated: Use axiosInstance with /messages prefix
+      const response = await axiosInstance.post('/messages/employee/send', messageData);
       
       if (response.data.success) {
         toast.success('Message sent successfully!');
@@ -416,6 +423,11 @@ const ComposeMessage = () => {
       const msg = err.response?.data?.message || err.response?.data?.error || err.message || 'Failed to send message';
       setError(msg);
       toast.error(msg);
+      if (err.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
     } finally { 
       setLoading(false); 
     }
