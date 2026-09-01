@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosInstance';
 import {
   BriefcaseIcon,
   LocationMarkerIcon,
@@ -67,12 +67,13 @@ const JobPortal = () => {
     setCurrentUser(user);
   }, []);
 
-  // Fetch jobs
+  // Fetch jobs - ✅ Updated to use axiosInstance
   useEffect(() => {
     const fetchJobs = async () => {
       try {
         setLoading(true);
-        const response = await axios.get('http://localhost:5000/api/public/jobs');
+        // ✅ Updated: Use axiosInstance with /public prefix
+        const response = await axiosInstance.get('/public/jobs');
         
         if (response.data.success) {
           const openJobs = response.data.data.filter(job => job.status === 'Open');
@@ -81,6 +82,11 @@ const JobPortal = () => {
         }
       } catch (error) {
         console.error('Error fetching jobs:', error);
+        if (error.response?.status === 401) {
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('token');
+          window.location.href = '/login';
+        }
         setError('Failed to load job openings');
       } finally {
         setLoading(false);
@@ -90,7 +96,7 @@ const JobPortal = () => {
     fetchJobs();
   }, []);
 
-  // Delete job function
+  // Delete job function - ✅ Updated to use axiosInstance
   const handleDeleteJob = async () => {
     if (!jobToDelete) return;
     
@@ -102,11 +108,8 @@ const JobPortal = () => {
         return;
       }
 
-      await axios.delete(`http://localhost:5000/api/recruitment/jobs/${jobToDelete._id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
+      // ✅ Updated: Use axiosInstance with /recruitment prefix
+      await axiosInstance.delete(`/recruitment/jobs/${jobToDelete._id}`);
       
       // Remove job from state
       const updatedJobs = jobs.filter(job => job._id !== jobToDelete._id);
@@ -121,6 +124,9 @@ const JobPortal = () => {
     } catch (error) {
       console.error('Error deleting job:', error);
       if (error.response?.status === 401) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('token');
+        window.location.href = '/login';
         alert('Unauthorized. Please login as HR or Admin to delete jobs.');
       } else if (error.response?.status === 403) {
         alert('Access denied. Only HR and Admin can delete jobs.');
@@ -193,7 +199,7 @@ const JobPortal = () => {
     });
   };
 
-  // Handle form submission with proper FormData
+  // Handle form submission with proper FormData - ✅ Updated to use axiosInstance
   const handleSubmitApplication = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -221,10 +227,12 @@ const JobPortal = () => {
         console.log('⚠️ No resume selected');
       }
 
-      const response = await axios.post(
-        'http://localhost:5000/api/public/apply',
-        formData
-      );
+      // ✅ Updated: Use axiosInstance with /public prefix
+      const response = await axiosInstance.post('/public/apply', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
 
       if (response.data.success) {
         alert('Application submitted successfully!');
@@ -238,6 +246,11 @@ const JobPortal = () => {
       }
     } catch (error) {
       console.error('Submission error:', error);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
       alert('Failed: ' + (error.response?.data?.error || error.message));
     } finally {
       setSubmitting(false);
