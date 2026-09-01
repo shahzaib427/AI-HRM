@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosInstance';
 import { io } from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -8,7 +8,6 @@ import {
   FaUserClock, FaEnvelope, FaExclamationTriangle
 } from 'react-icons/fa';
 
-const API_URL    = import.meta.env.VITE_API_URL    || 'http://localhost:5000/api';
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
 
 const TYPE_META = {
@@ -94,16 +93,16 @@ export default function EmployeeNotifications() {
     return () => socket.disconnect();
   }, [user._id]);
 
-  // Fetch notifications
+  // Fetch notifications - ✅ Updated to use axiosInstance
   const fetchAll = useCallback(async (reset = false) => {
     const token = localStorage.getItem('token');
     if (!token) return;
     reset ? setLoading(true) : setLoadingMore(true);
     try {
       const p = reset ? 1 : page;
-      const { data } = await axios.get(`${API_URL}/notifications`, {
-        params:  { page: p, limit: 20 },
-        headers: { Authorization: `Bearer ${token}` },
+      // ✅ Updated: Use axiosInstance with /notifications prefix
+      const { data } = await axiosInstance.get('/notifications', {
+        params: { page: p, limit: 20 }
       });
       if (data.success) {
         setNotifications(prev => reset ? data.data : [...prev, ...data.data]);
@@ -111,41 +110,44 @@ export default function EmployeeNotifications() {
         setHasMore((data.pagination?.pages ?? 1) > p);
         if (!reset) setPage(p + 1);
       }
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+      console.error(e);
+      if (e.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
+    }
     finally { setLoading(false); setLoadingMore(false); }
   }, [page]);
 
   useEffect(() => { fetchAll(true); }, []);
 
-  // Mark as read
+  // Mark as read - ✅ Updated to use axiosInstance
   const markRead = async id => {
     try {
-      const token = localStorage.getItem('token');
-      await axios.put(`${API_URL}/notifications/${id}/read`, {}, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      // ✅ Updated: Use axiosInstance with /notifications prefix
+      await axiosInstance.put(`/notifications/${id}/read`, {});
       setNotifications(prev => prev.map(n => n._id === id ? { ...n, isRead: true } : n));
       setUnreadCount(c => Math.max(0, c - 1));
     } catch (e) { console.error(e); }
   };
 
+  // Mark all read - ✅ Updated to use axiosInstance
   const markAllRead = async () => {
     try {
-      const token = localStorage.getItem('token');
-      await axios.put(`${API_URL}/notifications/mark-all-read`, {}, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      // ✅ Updated: Use axiosInstance with /notifications prefix
+      await axiosInstance.put('/notifications/mark-all-read', {});
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
       setUnreadCount(0);
     } catch (e) { console.error(e); }
   };
 
+  // Delete one - ✅ Updated to use axiosInstance
   const deleteOne = async id => {
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`${API_URL}/notifications/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      // ✅ Updated: Use axiosInstance with /notifications prefix
+      await axiosInstance.delete(`/notifications/${id}`);
     } catch (e) { console.error(e); }
     setNotifications(prev => prev.filter(n => n._id !== id));
   };
