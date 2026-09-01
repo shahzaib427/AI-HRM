@@ -1,36 +1,46 @@
-const nodemailer = require('nodemailer');
+const axios = require('axios');
 
+/**
+ * Sends an email via Brevo's Transactional Email HTTP API (port 443).
+ * This avoids outbound SMTP ports (25/587/2525) that some hosts (e.g. Render)
+ * block at the platform level, which is what was causing "Connection timeout".
+ *
+ * Required env vars:
+ *   BREVO_API_KEY   -> Brevo dashboard -> Settings -> SMTP & API -> "API keys & MCP" tab
+ *                      (NOT the SMTP tab / NOT the SMTP key you generated before)
+ *   FROM_NAME        -> e.g. "HRM System"
+ *   FROM_EMAIL       -> must be a verified sender in Brevo
+ */
 const sendEmail = async (options) => {
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT),
-    secure: false, // 587 = STARTTLS
-    requireTLS: true,
+  try {
+    const response = await axios.post(
+      'https://api.brevo.com/v3/smtp/email',
+      {
+        sender: {
+          name: process.env.FROM_NAME,
+          email: process.env.FROM_EMAIL,
+        },
+        to: [{ email: options.to }],
+        subject: options.subject,
+        htmlContent: options.html,
+      },
+      {
+        headers: {
+          'api-key': process.env.BREVO_API_KEY,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        timeout: 15000, // HTTPS call, so this should resolve in ~1-2s normally
+      }
+    );
 
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-
-    connectionTimeout: 30000,
-    greetingTimeout: 30000,
-    socketTimeout: 30000,
-  });
-
-  // Check SMTP connection
-  await transporter.verify();
-  console.log('✅ SMTP connection successful');
-
-  const mailOptions = {
-    from: `${process.env.FROM_NAME} <${process.env.FROM_EMAIL}>`,
-    to: options.to,
-    subject: options.subject,
-    html: options.html,
-  };
-
-  await transporter.sendMail(mailOptions);
-
-  console.log(`✅ Email sent to ${options.to}`);
+    console.log(`✅ Email sent to ${options.to} (messageId: ${response.data?.messageId})`);
+    return response.data;
+  } catch (error) {
+    const details = error.response?.data || error.message;
+    console.error('❌ Brevo API email error:', details);
+    throw new Error(`Failed to send email: ${JSON.stringify(details)}`);
+  }
 };
 
 module.exports = sendEmail;
