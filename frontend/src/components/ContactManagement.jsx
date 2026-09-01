@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosInstance';
 import { 
   FaEnvelope, FaPhone, FaBuilding, FaUser, FaClock, 
   FaEye, FaEdit, FaTrash, FaCheckCircle, FaTimesCircle,
@@ -113,15 +113,12 @@ const ContactManagement = () => {
     setUserRole(getUserRole());
   }, []);
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-
-  // Fetch contact submissions
+  // Fetch contact submissions - ✅ Updated to use axiosInstance
   const fetchSubmissions = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_URL}/contact`, {
-        headers: { Authorization: `Bearer ${token}` },
+      // ✅ Updated: Use axiosInstance with /contact prefix
+      const response = await axiosInstance.get('/contact', {
         params: { 
           search: searchTerm, 
           status: statusFilter !== 'all' ? statusFilter : undefined,
@@ -134,6 +131,8 @@ const ContactManagement = () => {
     } catch (error) {
       console.error('Error fetching submissions:', error);
       if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
         window.location.href = '/login';
       }
     } finally {
@@ -141,16 +140,19 @@ const ContactManagement = () => {
     }
   };
 
-  // Fetch stats
+  // Fetch stats - ✅ Updated to use axiosInstance
   const fetchStats = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_URL}/contact/stats/summary`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // ✅ Updated: Use axiosInstance with /contact prefix
+      const response = await axiosInstance.get('/contact/stats/summary');
       setStats(response.data.data);
     } catch (error) {
       console.error('Error fetching stats:', error);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
     }
   };
 
@@ -182,14 +184,13 @@ const ContactManagement = () => {
     );
   };
 
-  // Update submission status
+  // Update submission status - ✅ Updated to use axiosInstance
   const handleStatusUpdate = async () => {
     if (!statusUpdate) return;
     try {
-      const token = localStorage.getItem('token');
-      await axios.put(`${API_URL}/contact/${selectedSubmission._id}/status`, 
-        { status: statusUpdate },
-        { headers: { Authorization: `Bearer ${token}` } }
+      // ✅ Updated: Use axiosInstance with /contact prefix
+      await axiosInstance.put(`/contact/${selectedSubmission._id}/status`, 
+        { status: statusUpdate }
       );
       alert('Status updated successfully');
       setShowDetailsModal(false);
@@ -198,17 +199,21 @@ const ContactManagement = () => {
     } catch (error) {
       console.error('Error updating status:', error);
       alert('Failed to update status');
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
     }
   };
 
-  // Add note to submission
+  // Add note to submission - ✅ Updated to use axiosInstance
   const handleAddNote = async () => {
     if (!noteText.trim()) return;
     try {
-      const token = localStorage.getItem('token');
-      await axios.post(`${API_URL}/contact/${selectedSubmission._id}/notes`,
-        { text: noteText },
-        { headers: { Authorization: `Bearer ${token}` } }
+      // ✅ Updated: Use axiosInstance with /contact prefix
+      await axiosInstance.post(`/contact/${selectedSubmission._id}/notes`,
+        { text: noteText }
       );
       alert('Note added successfully');
       setShowNoteModal(false);
@@ -217,10 +222,15 @@ const ContactManagement = () => {
     } catch (error) {
       console.error('Error adding note:', error);
       alert('Failed to add note');
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
     }
   };
 
-  // Delete submission (Admin only)
+  // Delete submission (Admin only) - ✅ Updated to use axiosInstance
   const handleDelete = async (id) => {
     if (!isAdmin) {
       alert('Only admins can delete submissions');
@@ -228,20 +238,23 @@ const ContactManagement = () => {
     }
     if (!window.confirm('Are you sure you want to delete this submission?')) return;
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`${API_URL}/contact/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // ✅ Updated: Use axiosInstance with /contact prefix
+      await axiosInstance.delete(`/contact/${id}`);
       alert('Submission deleted successfully');
       fetchSubmissions();
       fetchStats();
     } catch (error) {
       console.error('Error deleting submission:', error);
       alert('Failed to delete submission');
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
     }
   };
 
-  // Bulk delete submissions (Admin only)
+  // Bulk delete submissions (Admin only) - ✅ Updated to use axiosInstance
   const handleBulkDelete = async () => {
     if (!isAdmin) {
       alert('Only admins can delete submissions');
@@ -251,9 +264,8 @@ const ContactManagement = () => {
 
     try {
       setBulkDeleting(true);
-      const token = localStorage.getItem('token');
-      const response = await axios.delete(`${API_URL}/contact/bulk/delete`, {
-        headers: { Authorization: `Bearer ${token}` },
+      // ✅ Updated: Use axiosInstance with /contact prefix
+      const response = await axiosInstance.delete('/contact/bulk/delete', {
         data: { ids: selectedIds }
       });
       alert(`Deleted ${response.data.data.deletedCount} submission(s) successfully`);
@@ -264,6 +276,11 @@ const ContactManagement = () => {
     } catch (error) {
       console.error('Error bulk deleting submissions:', error);
       alert(error.response?.data?.error || 'Failed to bulk delete submissions');
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
     } finally {
       setBulkDeleting(false);
     }
@@ -276,7 +293,7 @@ const ContactManagement = () => {
     setShowReplyModal(true);
   };
 
-  // Send email reply via backend (uses your existing nodemailer sendEmail utility)
+  // Send email reply via backend - ✅ Updated to use axiosInstance
   const handleSendReply = async () => {
     if (!replySubject.trim() || !replyMessage.trim()) {
       alert('Please fill in both subject and message');
@@ -284,11 +301,10 @@ const ContactManagement = () => {
     }
     try {
       setSendingReply(true);
-      const token = localStorage.getItem('token');
-      await axios.post(
-        `${API_URL}/contact/${selectedSubmission._id}/reply`,
-        { subject: replySubject.trim(), message: replyMessage.trim() },
-        { headers: { Authorization: `Bearer ${token}` } }
+      // ✅ Updated: Use axiosInstance with /contact prefix
+      await axiosInstance.post(
+        `/contact/${selectedSubmission._id}/reply`,
+        { subject: replySubject.trim(), message: replyMessage.trim() }
       );
       alert('Reply sent successfully!');
       setShowReplyModal(false);
@@ -298,23 +314,32 @@ const ContactManagement = () => {
     } catch (error) {
       console.error('Error sending reply:', error);
       alert(error.response?.data?.error || 'Failed to send reply email');
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
     } finally {
       setSendingReply(false);
     }
   };
 
-  // Mark as contacted
+  // Mark as contacted - ✅ Updated to use axiosInstance
   const handleMarkContacted = async (id) => {
     try {
-      const token = localStorage.getItem('token');
-      await axios.put(`${API_URL}/contact/${id}/status`,
-        { status: 'contacted' },
-        { headers: { Authorization: `Bearer ${token}` } }
+      // ✅ Updated: Use axiosInstance with /contact prefix
+      await axiosInstance.put(`/contact/${id}/status`,
+        { status: 'contacted' }
       );
       fetchSubmissions();
       fetchStats();
     } catch (error) {
       console.error('Error marking as contacted:', error);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
     }
   };
 
