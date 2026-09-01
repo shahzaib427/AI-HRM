@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosInstance';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -234,16 +234,13 @@ const EditEmployee = () => {
     systemRole: 'showSystemRoleCustom',
   };
 
-  // Fetch employee data
+  // Fetch employee data - ✅ Updated to use axiosInstance
   useEffect(() => {
     const fetchEmployee = async () => {
       try {
         setLoading(true);
-        const token = localStorage.getItem('authToken');
-        
-        const response = await axios.get(`http://localhost:5000/api/employees/${id}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        // ✅ Updated: Use axiosInstance with /employees prefix
+        const response = await axiosInstance.get(`/employees/${id}`);
         
         if (response.data.success) {
           const employee = response.data.data;
@@ -319,12 +316,21 @@ const EditEmployee = () => {
           });
           
           if (employee.profilePicture) {
-            setCurrentProfileImage(`http://localhost:5000${employee.profilePicture}`);
-            setProfilePreview(`http://localhost:5000${employee.profilePicture}`);
+            const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+            const imageUrl = employee.profilePicture.startsWith('http') 
+              ? employee.profilePicture 
+              : `${baseURL.replace('/api', '')}${employee.profilePicture}`;
+            setCurrentProfileImage(imageUrl);
+            setProfilePreview(imageUrl);
           }
         }
       } catch (error) {
         console.error('Error fetching employee:', error);
+        if (error.response?.status === 401) {
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('token');
+          window.location.href = '/login';
+        }
         setServerError('Failed to load employee data');
       } finally {
         setLoading(false);
@@ -449,16 +455,16 @@ const EditEmployee = () => {
   }));
 
   const uploadProfilePicture = async () => {
-    if (!profilePicture) return currentProfileImage.replace('http://localhost:5000', '') || null;
+    if (!profilePicture) return currentProfileImage.replace(/^.*?\/uploads/, '/uploads') || null;
     
     try {
       setUploading(true);
-      const token = localStorage.getItem('authToken');
       const uploadFormData = new FormData();
       uploadFormData.append('profilePicture', profilePicture);
       
-      const response = await axios.post('http://localhost:5000/api/upload/profile', uploadFormData, {
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
+      // ✅ Updated: Use axiosInstance with /upload prefix
+      const response = await axiosInstance.post('/upload/profile', uploadFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
       
       if (response.data.success) return response.data.filePath;
@@ -511,7 +517,6 @@ const EditEmployee = () => {
     setSuccessMessage('');
     
     try {
-      const token = localStorage.getItem('authToken');
       const profilePictureUrl = await uploadProfilePicture();
       
       const resolvedSystemRole = formData.customSystemRole || formData.systemRole;
@@ -567,9 +572,8 @@ const EditEmployee = () => {
         ...(profilePictureUrl && { profilePicture: profilePictureUrl })
       };
       
-      const response = await axios.put(`http://localhost:5000/api/employees/${id}`, employeeData, {
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
-      });
+      // ✅ Updated: Use axiosInstance with /employees prefix
+      const response = await axiosInstance.put(`/employees/${id}`, employeeData);
       
       if (response.data.success) {
         setSuccessMessage('✅ Employee updated successfully!');
@@ -577,6 +581,11 @@ const EditEmployee = () => {
       }
     } catch (error) {
       console.error('Update employee error:', error);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
       if (error.response) {
         setServerError(error.response.data?.error || 'Failed to update employee');
       } else if (error.request) {

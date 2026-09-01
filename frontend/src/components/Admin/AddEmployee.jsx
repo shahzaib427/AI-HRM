@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosInstance';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -44,7 +44,6 @@ const DRAFT_KEY = 'hrm_add_employee_draft';
 // ─── Draft helpers ────────────────────────────────────────────────────────────
 const saveDraft = (data, docs) => {
   try {
-    // We can't serialise File objects; only store the names for display
     const docsSnapshot = {
       profilePictureName: docs.profilePicture?.name ?? null,
       cvName: docs.cv?.name ?? null,
@@ -67,7 +66,7 @@ const loadDraft = () => {
 const clearDraft = () => {
   try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
 };
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
 // ─── Component ────────────────────────────────────────────────────────────────
 const AddEmployee = () => {
   const navigate = useNavigate();
@@ -108,7 +107,7 @@ const AddEmployee = () => {
     customSystemRole: '',
     presentAddress: '',
     permanentAddress: '',
-    sameAddress: false,        // tracks checkbox state
+    sameAddress: false,
     city: '',
     state: '',
     country: 'Pakistan',
@@ -123,11 +122,10 @@ const AddEmployee = () => {
     currency: 'PKR',
     salaryFrequency: 'monthly',
     bankName: '',
-    bankNameCustom: '',        // manual entry when "Other" chosen
+    bankNameCustom: '',
     showBankNameCustom: false,
     bankAccountNumber: '',
     bankAccountTitle: '',
-    // ❌ bankBranchCode removed — branch field no longer collected
     ibanNumber: '',
     qualifications: '',
     experiences: [{ company: '', position: '', duration: '', description: '' }],
@@ -160,7 +158,7 @@ const AddEmployee = () => {
   const [generatedEmployeeId, setGeneratedEmployeeId] = useState('');
 
   // ── Draft banner state ──
-  const [draftBanner, setDraftBanner] = useState(null); // null | { savedAt }
+  const [draftBanner, setDraftBanner] = useState(null);
   const [draftRestored, setDraftRestored] = useState(false);
   const autoSaveTimer = useRef(null);
 
@@ -322,7 +320,6 @@ const AddEmployee = () => {
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
 
-    // ── Address sync ──
     if (name === 'sameAddress') {
       setFormData(prev => ({
         ...prev,
@@ -341,7 +338,6 @@ const AddEmployee = () => {
       return;
     }
 
-    // ── Salary calc ──
     if (name.includes('Allowance') || name === 'salary') {
       setFormData(prev => {
         const updated = { ...prev, [name]: type === 'checkbox' ? checked : value };
@@ -360,9 +356,6 @@ const AddEmployee = () => {
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
   };
 
-  // ✅ NEW: digits-only, length-capped handler for bank account number & IBAN.
-  // Mirrors the backend's sanitizeDigits() so what the user sees while typing
-  // matches what will actually get saved.
   const handleBankDigitsChange = (e) => {
     const { name, value } = e.target;
     const maxLength = name === 'ibanNumber' ? IBAN_MAX_LENGTH : ACCOUNT_NUMBER_MAX_LENGTH;
@@ -374,7 +367,6 @@ const AddEmployee = () => {
   const handleDropdownChange = (e) => {
     const { name, value } = e.target;
 
-    // ── Bank name dropdown ──
     if (name === 'bankName') {
       setFormData(prev => ({
         ...prev,
@@ -438,19 +430,21 @@ const AddEmployee = () => {
       } else {
         const uploadFormData = new FormData();
         files.forEach(file => uploadFormData.append('files', file));
-        const token = localStorage.getItem('authToken');
-const response = await axios.post(
-  `${API_BASE}/upload/documents/multiple`,
-  uploadFormData,
-
-          { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } },
-        );
+        // ✅ Updated: Use axiosInstance with /upload prefix
+        const response = await axiosInstance.post('/upload/documents/multiple', uploadFormData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
         if (response.data.success) {
           setDocuments(prev => ({ ...prev, [docType]: [...prev[docType], ...response.data.filePaths] }));
         }
       }
     } catch (error) {
       console.error('Upload documents error:', error);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
       alert('Failed to upload documents. Please try again.');
     } finally {
       setUploading(false);
@@ -480,17 +474,20 @@ const response = await axios.post(
   const uploadFile = async (file, endpoint) => {
     if (!file) return null;
     try {
-      const token = localStorage.getItem('authToken');
       const uploadFormData = new FormData();
       uploadFormData.append('file', file);
-      const response = await axios.post(
-        `${API_BASE}/upload/${endpoint}`,
-        uploadFormData,
-        { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } },
-      );
+      // ✅ Updated: Use axiosInstance with /upload prefix
+      const response = await axiosInstance.post(`/upload/${endpoint}`, uploadFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
       return response.data.success ? response.data.filePath : null;
     } catch (error) {
       console.error(`Upload ${endpoint} error:`, error.response?.data || error.message);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
       return null;
     }
   };
@@ -515,8 +512,6 @@ const response = await axios.post(
       if (!formData[field] || formData[field].toString().trim() === '')
         newErrors[field] = requiredFields[field];
     });
-    // ✅ Real email validation — blocks garbage input with a visible error
-    // instead of silently letting it through.
     if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
       newErrors.email = 'Please enter a valid email address (e.g. name@company.com)';
     }
@@ -537,7 +532,6 @@ const response = await axios.post(
       newErrors.idCardIssueDate = 'Issue date cannot be after expiry date';
     if (formData.idCardExpiryDate && new Date(formData.idCardExpiryDate) < new Date())
       newErrors.idCardExpiryDate = 'CNIC has expired';
-    // ✅ IBAN / account number: length-capped, digits only (mirrors backend)
     if (formData.ibanNumber && formData.ibanNumber.length > IBAN_MAX_LENGTH)
       newErrors.ibanNumber = `IBAN can be at most ${IBAN_MAX_LENGTH} digits`;
     if (formData.bankAccountNumber && formData.bankAccountNumber.length > ACCOUNT_NUMBER_MAX_LENGTH)
@@ -552,7 +546,6 @@ const response = await axios.post(
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // ── Block submit if offline; save draft instead ──
     if (!navigator.onLine) {
       saveDraft(formData, documents);
       setServerError('⚠️ You are offline. Your form has been saved as a draft and will be here when you reconnect.');
@@ -570,20 +563,14 @@ const response = await axios.post(
     setServerError('');
     setSuccessMessage('');
     try {
-      const token = localStorage.getItem('authToken');
       let profilePictureUrl = null;
       if (documents.profilePicture) {
         try { profilePictureUrl = await uploadFile(documents.profilePicture, 'profile'); }
         catch (err) { console.warn('Profile picture upload failed:', err.message); }
       }
 
-      // ✅ NOTE: The login password is generated on the BACKEND as a random
-      // 8-character password (letters, numbers, symbols) — see employeeController.js.
-      // We don't generate or guess it on the client; the real one is read back
-      // from the server response after a successful create (see below).
       const resolvedSystemRole      = formData.customSystemRole      || formData.systemRole;
       const resolvedEmploymentStatus= formData.customEmploymentStatus|| formData.employmentStatus;
-      // Resolve final bank name (custom if "Other" was selected)
       const resolvedBankName        = formData.bankName === 'Other'
         ? formData.bankNameCustom
         : formData.bankName;
@@ -594,7 +581,6 @@ const response = await axios.post(
           username: formData.email.split('@')[0],
           email:    formData.email,
           role:     resolvedSystemRole,
-          // password intentionally omitted — backend generates a random one
         },
         employeeProfile: {
           name:             formData.name,
@@ -638,7 +624,6 @@ const response = await axios.post(
           bankName:          resolvedBankName,
           bankAccountNumber: formData.bankAccountNumber,
           bankAccountTitle:  formData.bankAccountTitle,
-          // ❌ bankBranchCode removed — no longer sent to backend
           ibanNumber:        formData.ibanNumber,
           qualifications:    formData.qualifications,
           previousExperience: formData.previousExperience ? parseFloat(formData.previousExperience) : 0,
@@ -652,18 +637,12 @@ const response = await axios.post(
         },
       };
 
-const response = await axios.post(
-  `${API_BASE}/employees/create-with-account`,
-  employeeData,
-        { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } },
-      );
+      // ✅ Updated: Use axiosInstance with /employees prefix
+      const response = await axiosInstance.post('/employees/create-with-account', employeeData);
 
       if (response.data.success) {
-        // Clear draft on success
         clearDraft();
 
-        // ✅ Use the REAL password generated by the backend (random,
-        // not derived from CNIC), instead of a client-guessed one.
         setGeneratedPassword(response.data.temporaryPassword || 'Check with system administrator');
         const empId =
           response.data?.data?.employeeId ??
@@ -694,6 +673,10 @@ const response = await axios.post(
       if (!navigator.onLine || error.code === 'ERR_NETWORK') {
         saveDraft(formData, documents);
         setServerError('⚠️ Network error — your form data has been saved as a draft. Come back when you\'re online.');
+      } else if (error.response?.status === 401) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('token');
+        window.location.href = '/login';
       } else if (error.response) {
         const errorMessage = error.response.data?.error || error.response.data?.message || 'Failed to add employee';
         if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
@@ -856,7 +839,6 @@ const response = await axios.post(
               <p className="mt-2 text-gray-600">Complete employee profile for HRM system. All fields with * are required.</p>
             </div>
             <div className="flex items-center space-x-3">
-              {/* Manual Save Draft button */}
               <button
                 type="button"
                 onClick={() => { saveDraft(formData, documents); alert('Draft saved!'); }}
@@ -1117,7 +1099,6 @@ const response = await axios.post(
                 Address Information
               </h2>
               <div className="space-y-6">
-                {/* Present Address */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Present Address *</label>
                   <textarea
@@ -1131,7 +1112,6 @@ const response = await axios.post(
                   {errors.presentAddress && <p className="mt-2 text-sm text-red-600">{errors.presentAddress}</p>}
                 </div>
 
-                {/* Same address checkbox */}
                 <div className="flex items-center p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <input
                     type="checkbox"
@@ -1149,7 +1129,6 @@ const response = await axios.post(
                   )}
                 </div>
 
-                {/* Permanent Address */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Permanent Address
@@ -1294,7 +1273,6 @@ const response = await axios.post(
                   <h3 className="text-lg font-medium text-gray-900 mb-4">Bank Account Details</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
-                    {/* Bank Name — Pakistani banks dropdown */}
                     <div className="lg:col-span-1">
                       <label className="block text-sm font-medium text-gray-700 mb-2">Bank Name</label>
                       <select
@@ -1317,7 +1295,6 @@ const response = await axios.post(
                       )}
                     </div>
 
-                    {/* ✅ Account Number — digits only, capped at ACCOUNT_NUMBER_MAX_LENGTH */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Account Number
@@ -1340,8 +1317,6 @@ const response = await axios.post(
                       <input type="text" name="bankAccountTitle" value={formData.bankAccountTitle} onChange={handleChange} placeholder="As per bank records"
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
                     </div>
-                    {/* ❌ Branch Code field removed per request */}
-                    {/* ✅ IBAN Number — digits only, capped at IBAN_MAX_LENGTH */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         IBAN Number

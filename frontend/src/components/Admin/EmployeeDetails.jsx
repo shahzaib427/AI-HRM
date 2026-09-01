@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosInstance';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -19,11 +19,8 @@ const EmployeeDetails = () => {
   const fetchEmployee = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('authToken');
-      
-      const response = await axios.get(`/api/employees/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // ✅ Updated: Use axiosInstance with /employees prefix
+      const response = await axiosInstance.get(`/employees/${id}`);
       
       if (response.data.success) {
         setEmployee(response.data.data);
@@ -32,6 +29,11 @@ const EmployeeDetails = () => {
       }
     } catch (error) {
       console.error('Error fetching employee:', error);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
       setError('Failed to load employee details');
     } finally {
       setLoading(false);
