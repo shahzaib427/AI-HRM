@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosInstance';
 import { useNavigate } from 'react-router-dom';
 import {
   BriefcaseIcon,
@@ -94,14 +94,15 @@ const Careers = () => {
     departments: 0
   });
 
-  // Fetch jobs from PUBLIC endpoint
+  // Fetch jobs from PUBLIC endpoint - ✅ Updated to use axiosInstance
   useEffect(() => {
     const fetchJobs = async () => {
       try {
         setLoading(true);
         console.log('Fetching jobs from public endpoint...');
 
-        const response = await axios.get('http://localhost:5000/api/public/jobs');
+        // ✅ Updated: Use axiosInstance with /public prefix
+        const response = await axiosInstance.get('/public/jobs');
 
         console.log('Public jobs response:', response.data);
 
@@ -129,7 +130,12 @@ const Careers = () => {
         }
       } catch (error) {
         console.error('Error fetching from public endpoint:', error.message);
-        await tryAuthenticatedEndpoint();
+        if (error.response?.status === 401) {
+          // Not authenticated, try authenticated endpoint
+          await tryAuthenticatedEndpoint();
+        } else {
+          setError('Unable to load job openings. Please try again later.');
+        }
       } finally {
         setLoading(false);
       }
@@ -140,11 +146,8 @@ const Careers = () => {
       if (token) {
         try {
           console.log('Trying authenticated endpoint...');
-          const response = await axios.get('http://localhost:5000/api/recruitment/jobs?status=Open', {
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
-          });
+          // ✅ Updated: Use axiosInstance with /recruitment prefix
+          const response = await axiosInstance.get('/recruitment/jobs?status=Open');
 
           if (response.data.success) {
             const openJobs = response.data.data.filter(job => job.status === 'Open');
@@ -161,6 +164,10 @@ const Careers = () => {
           }
         } catch (authError) {
           console.error('Authenticated endpoint also failed:', authError.message);
+          if (authError.response?.status === 401) {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('token');
+          }
         }
       }
 
