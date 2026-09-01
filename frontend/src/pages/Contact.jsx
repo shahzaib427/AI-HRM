@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FiClock, FiMail, FiMessageCircle, FiPhone, FiShield } from 'react-icons/fi';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosInstance';
 
 const Input = ({ label, type = 'text', value, onChange }) => (
   <div style={{ width: '100%' }}>
@@ -40,12 +40,10 @@ export default function ContactPage() {
   
   const update = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
-  // Function to submit to backend API
+  // ✅ Updated: Use axiosInstance for API calls
   const submitToBackend = async (formData) => {
-    // Use relative URL or environment variable with fallback
-    const API_URL = import.meta.env?.VITE_API_URL || 'http://localhost:5000/api';
-    
-    const response = await axios.post(`${API_URL}/contact`, formData, {
+    // ✅ Use axiosInstance with /contact prefix
+    const response = await axiosInstance.post('/contact', formData, {
       headers: {
         'Content-Type': 'application/json',
       }
@@ -93,6 +91,11 @@ export default function ContactPage() {
       
     } catch (error) {
       console.error('Submission error:', error);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
       if (error.response?.data?.error) {
         alert(error.response.data.error);
       } else {
