@@ -3,7 +3,11 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
+// ✅ CHANGED: no more nodemailer/SMTP here — all email now goes through
+// utils/sendEmail.js, which calls Brevo's HTTPS API (port 443) instead of
+// raw SMTP (port 587/2525), which Render was blocking at the platform level.
+// Adjust this path if sendEmail.js lives somewhere other than ../utils/sendEmail
+const sendEmail = require('../utils/sendEmail');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
 
@@ -67,34 +71,10 @@ function generateRandomPassword(length) {
   return passwordChars.join('');
 }
 
-// Email transporter
-const getEmailTransporter = () => {
-  try {
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      console.warn('⚠️ Email credentials not configured in .env file');
-      return null;
-    }
-
-    return nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: Number(process.env.SMTP_PORT) || 587,
-      secure: Number(process.env.SMTP_PORT) === 465, // true only for port 465
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-      },
-      tls: {
-        rejectUnauthorized: false
-      },
-      pool: true, // reuse connection instead of reconnecting every send — faster
-      connectionTimeout: 10000,
-      greetingTimeout: 10000
-    });
-  } catch (error) {
-    console.error('❌ Email transporter creation failed:', error.message);
-    return null;
-  }
-};
+// ❌ REMOVED: getEmailTransporter() — this created a nodemailer SMTP
+// transporter (SMTP_HOST/PORT/USER/PASS) which is what was hanging with
+// "Connection timeout" on Render. All three email functions below now call
+// sendEmail() from utils/sendEmail.js instead, which uses Brevo's HTTP API.
 
 // ===== REGISTER =====
 exports.register = async (req, res) => {
@@ -228,7 +208,7 @@ exports.forgotPassword = async (req, res) => {
 
     await user.save();
 
-    // ✅ FIXED: respond to the user immediately instead of waiting on the SMTP
+    // ✅ FIXED: respond to the user immediately instead of waiting on the email
     // round trip. If email delivery fails, it's logged — it no longer blocks
     // or fails the whole request.
     res.status(200).json({
@@ -251,85 +231,77 @@ exports.forgotPassword = async (req, res) => {
 };
 
 // ===== SEND TEMPORARY PASSWORD EMAIL =====
+// ✅ CHANGED: now calls sendEmail() (Brevo HTTP API) instead of
+// nodemailer transporter.sendMail() over SMTP.
 const sendTemporaryPasswordEmail = async (email, name, temporaryPassword) => {
   try {
-    const transporter = getEmailTransporter();
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #2563eb; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+          .content { background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; }
+          .password-box { background: white; border: 2px solid #dbeafe; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center; }
+          .password { font-family: monospace; font-size: 20px; letter-spacing: 2px; background: #f3f4f6; padding: 15px; border-radius: 6px; margin: 15px 0; }
+          .warning { background: #fef3c7; border: 1px solid #f59e0b; padding: 15px; border-radius: 6px; margin: 20px 0; }
+          .instructions { background: #ecfdf5; border: 1px solid #10b981; padding: 15px; border-radius: 6px; margin: 20px 0; }
+          .footer { text-align: center; margin-top: 30px; color: #6b7280; font-size: 14px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Password Reset Request</h1>
+          </div>
+          <div class="content">
+            <p>Hello <strong>${name}</strong>,</p>
+            <p>We received a request to reset your password for the HR System account.</p>
+            <p>Here is your new temporary password:</p>
+            <div class="password-box">
+              <p><strong>Temporary Password:</strong></p>
+              <div class="password">${temporaryPassword}</div>
+              <p><small>This password will expire in 7 days</small></p>
+            </div>
+            <div class="instructions">
+              <p><strong>📝 How to use this password:</strong></p>
+              <ol>
+                <li>Go to the login page: <strong>${process.env.FRONTEND_URL || 'http://localhost:3000'}/login</strong></li>
+                <li>Enter your email: <strong>${email}</strong></li>
+                <li>Enter the temporary password shown above</li>
+                <li>After login, you'll be prompted to change your password</li>
+              </ol>
+            </div>
+            <div class="warning">
+              <p><strong>⚠️ Important Security Information:</strong></p>
+              <ul>
+                <li>This is a temporary password - change it immediately after login</li>
+                <li>Never share your password with anyone</li>
+                <li>This email contains sensitive information</li>
+                <li>If you didn't request this, please contact HR immediately</li>
+              </ul>
+            </div>
+            <p><strong>Login URL:</strong> ${process.env.FRONTEND_URL || 'http://localhost:3000'}/login</p>
+            <p>Best regards,<br><strong>HR System Support Team</strong></p>
+          </div>
+          <div class="footer">
+            <p>This is an automated email. Please do not reply.</p>
+            <p>If you need assistance, contact your HR department.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
 
-    if (!transporter) {
-      console.error('❌ Email transporter not available');
-      return false;
-    }
-
-    await transporter.verify();
-    console.log('✅ Email server connection verified');
-
-    const mailOptions = {
-      from: `"HR System Support" <${process.env.SMTP_USER}>`,
+    await sendEmail({
       to: email,
       subject: 'Your Temporary Password - HR System',
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: #2563eb; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-            .content { background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; }
-            .password-box { background: white; border: 2px solid #dbeafe; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center; }
-            .password { font-family: monospace; font-size: 20px; letter-spacing: 2px; background: #f3f4f6; padding: 15px; border-radius: 6px; margin: 15px 0; }
-            .warning { background: #fef3c7; border: 1px solid #f59e0b; padding: 15px; border-radius: 6px; margin: 20px 0; }
-            .instructions { background: #ecfdf5; border: 1px solid #10b981; padding: 15px; border-radius: 6px; margin: 20px 0; }
-            .footer { text-align: center; margin-top: 30px; color: #6b7280; font-size: 14px; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>Password Reset Request</h1>
-            </div>
-            <div class="content">
-              <p>Hello <strong>${name}</strong>,</p>
-              <p>We received a request to reset your password for the HR System account.</p>
-              <p>Here is your new temporary password:</p>
-              <div class="password-box">
-                <p><strong>Temporary Password:</strong></p>
-                <div class="password">${temporaryPassword}</div>
-                <p><small>This password will expire in 7 days</small></p>
-              </div>
-              <div class="instructions">
-                <p><strong>📝 How to use this password:</strong></p>
-                <ol>
-                  <li>Go to the login page: <strong>${process.env.FRONTEND_URL || 'http://localhost:3000'}/login</strong></li>
-                  <li>Enter your email: <strong>${email}</strong></li>
-                  <li>Enter the temporary password shown above</li>
-                  <li>After login, you'll be prompted to change your password</li>
-                </ol>
-              </div>
-              <div class="warning">
-                <p><strong>⚠️ Important Security Information:</strong></p>
-                <ul>
-                  <li>This is a temporary password - change it immediately after login</li>
-                  <li>Never share your password with anyone</li>
-                  <li>This email contains sensitive information</li>
-                  <li>If you didn't request this, please contact HR immediately</li>
-                </ul>
-              </div>
-              <p><strong>Login URL:</strong> ${process.env.FRONTEND_URL || 'http://localhost:3000'}/login</p>
-              <p>Best regards,<br><strong>HR System Support Team</strong></p>
-            </div>
-            <div class="footer">
-              <p>This is an automated email. Please do not reply.</p>
-              <p>If you need assistance, contact your HR department.</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `
-    };
+      html
+    });
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ Temporary password email sent to ${email}, Message ID: ${info.messageId}`);
+    console.log(`✅ Temporary password email sent to ${email}`);
     return true;
 
   } catch (error) {
@@ -397,70 +369,65 @@ exports.changePassword = async (req, res) => {
 };
 
 // ===== SEND PASSWORD CHANGE CONFIRMATION EMAIL =====
+// ✅ CHANGED: now calls sendEmail() (Brevo HTTP API) instead of
+// nodemailer transporter.sendMail() over SMTP.
 const sendPasswordChangeConfirmationEmail = async (email, name) => {
   try {
-    const transporter = getEmailTransporter();
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #10b981; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+          .content { background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; }
+          .warning { background: #fef3c7; border: 1px solid #f59e0b; padding: 15px; border-radius: 6px; margin: 20px 0; }
+          .footer { text-align: center; margin-top: 30px; color: #6b7280; font-size: 14px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Password Changed Successfully</h1>
+          </div>
+          <div class="content">
+            <p>Hello <strong>${name}</strong>,</p>
+            <p>Your password has been successfully changed for your HR System account.</p>
+            <p><strong>Account Details:</strong></p>
+            <ul>
+              <li>Email: ${email}</li>
+              <li>Password Changed: ${new Date().toLocaleString()}</li>
+            </ul>
+            <div class="warning">
+              <p><strong>⚠️ Security Alert:</strong></p>
+              <ul>
+                <li>If you did not change your password, please contact HR immediately</li>
+                <li>Never share your password with anyone</li>
+                <li>Use a strong, unique password that you don't use elsewhere</li>
+              </ul>
+            </div>
+            <p>You can now login with your new password at:</p>
+            <p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login">
+              ${process.env.FRONTEND_URL || 'http://localhost:3000'}/login
+            </a></p>
+            <p>Best regards,<br><strong>HR System Support Team</strong></p>
+          </div>
+          <div class="footer">
+            <p>This is an automated email. Please do not reply.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
 
-    if (!transporter) {
-      console.error('❌ Email transporter not available');
-      return false;
-    }
-
-    const mailOptions = {
-      from: `"HR System Support" <${process.env.SMTP_USER}>`,
+    await sendEmail({
       to: email,
       subject: 'Password Successfully Changed - HR System',
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: #10b981; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-            .content { background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; }
-            .warning { background: #fef3c7; border: 1px solid #f59e0b; padding: 15px; border-radius: 6px; margin: 20px 0; }
-            .footer { text-align: center; margin-top: 30px; color: #6b7280; font-size: 14px; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>Password Changed Successfully</h1>
-            </div>
-            <div class="content">
-              <p>Hello <strong>${name}</strong>,</p>
-              <p>Your password has been successfully changed for your HR System account.</p>
-              <p><strong>Account Details:</strong></p>
-              <ul>
-                <li>Email: ${email}</li>
-                <li>Password Changed: ${new Date().toLocaleString()}</li>
-              </ul>
-              <div class="warning">
-                <p><strong>⚠️ Security Alert:</strong></p>
-                <ul>
-                  <li>If you did not change your password, please contact HR immediately</li>
-                  <li>Never share your password with anyone</li>
-                  <li>Use a strong, unique password that you don't use elsewhere</li>
-                </ul>
-              </div>
-              <p>You can now login with your new password at:</p>
-              <p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login">
-                ${process.env.FRONTEND_URL || 'http://localhost:3000'}/login
-              </a></p>
-              <p>Best regards,<br><strong>HR System Support Team</strong></p>
-            </div>
-            <div class="footer">
-              <p>This is an automated email. Please do not reply.</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `
-    };
+      html
+    });
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ Password change confirmation sent to ${email}, Message ID: ${info.messageId}`);
+    console.log(`✅ Password change confirmation sent to ${email}`);
     return true;
 
   } catch (error) {
@@ -503,113 +470,103 @@ exports.checkPasswordStatus = async (req, res) => {
 };
 
 // ===== SEND WELCOME EMAIL (For new employees) =====
-// ✅ FIXED: this is now the ONLY email-sending logic. It's split into a plain
-// internal function (sendWelcomeEmailInternal) that other controllers can
-// call directly — no more fake req/res "mock" objects — plus a thin route
-// handler wrapper for direct HTTP calls to this endpoint if needed.
-
+// ✅ CHANGED: now calls sendEmail() (Brevo HTTP API) instead of
+// nodemailer transporter.sendMail() over SMTP — this is the function that
+// was silently failing with "Connection timeout" before, since it was
+// still using the old getEmailTransporter()/nodemailer path even after
+// utils/sendEmail.js was fixed elsewhere.
 const sendWelcomeEmailInternal = async (email, name, employeeId, temporaryPassword) => {
   try {
-    const transporter = getEmailTransporter();
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 25px; text-align: center; border-radius: 10px 10px 0 0; }
+          .content { background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; }
+          .credentials-box { background: #f8fafc; border: 2px solid #dbeafe; border-radius: 8px; padding: 25px; margin: 25px 0; }
+          .credential-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e5e7eb; }
+          .credential-item:last-child { border-bottom: none; }
+          .label { font-weight: 600; color: #4b5563; }
+          .value { font-family: 'Courier New', monospace; font-weight: bold; color: #1f2937; }
+          .password { background: #fef3c7; padding: 15px; border-radius: 6px; margin: 15px 0; font-size: 20px; letter-spacing: 2px; text-align: center; font-weight: bold; }
+          .instructions { background: #ecfdf5; border: 1px solid #10b981; padding: 20px; border-radius: 8px; margin: 20px 0; }
+          .warning { background: #fef3c7; border: 1px solid #f59e0b; padding: 20px; border-radius: 8px; margin: 20px 0; }
+          .action-button { display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 10px 0; }
+          .footer { text-align: center; margin-top: 30px; color: #6b7280; font-size: 14px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Welcome to HR System</h1>
+            <p>Your account has been successfully created</p>
+          </div>
+          <div class="content">
+            <p>Dear <strong>${name}</strong>,</p>
+            <p>Welcome to the HR System! Your account has been created by the HR department.</p>
+            <div class="credentials-box">
+              <h3>Your Login Credentials:</h3>
+              <div class="credential-item">
+                <span class="label">Employee ID:</span>
+                <span class="value">${employeeId || 'Will be assigned'}</span>
+              </div>
+              <div class="credential-item">
+                <span class="label">Email Address:</span>
+                <span class="value">${email}</span>
+              </div>
+              <div class="credential-item">
+                <span class="label">Temporary Password:</span>
+              </div>
+              <div class="password">${temporaryPassword}</div>
+              <p><small><em>This is a temporary password. You must change it on first login.</em></small></p>
+            </div>
+            <div class="instructions">
+              <h3>📝 How to Get Started:</h3>
+              <ol>
+                <li>Go to the login page: <strong>${process.env.FRONTEND_URL || 'http://localhost:3000'}/login</strong></li>
+                <li>Enter your email address: <strong>${email}</strong></li>
+                <li>Enter the temporary password provided above</li>
+                <li>You will be prompted to change your password immediately</li>
+                <li>Complete your profile after login</li>
+              </ol>
+              <center>
+                <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login" class="action-button">
+                  Login to Your Account
+                </a>
+              </center>
+            </div>
+            <div class="warning">
+              <h3>⚠️ Important Security Notes:</h3>
+              <ul>
+                <li>This is a <strong>temporary password</strong> - you must change it on first login</li>
+                <li>Never share your password with anyone</li>
+                <li>This password will expire in 7 days</li>
+                <li>For security reasons, do not use this password for other accounts</li>
+                <li>If you didn't request this account, please contact HR immediately</li>
+              </ul>
+            </div>
+            <p><strong>Login URL:</strong> <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login">${process.env.FRONTEND_URL || 'http://localhost:3000'}/login</a></p>
+            <p>Best regards,<br><strong>HR Department</strong></p>
+          </div>
+          <div class="footer">
+            <p>This is an automated email. Please do not reply.</p>
+            <p>For assistance, contact your HR department or system administrator.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
 
-    if (!transporter) {
-      console.error('❌ Email transporter not available');
-      return false;
-    }
-
-    await transporter.verify();
-    console.log('✅ Email server connection verified for welcome email');
-
-    const mailOptions = {
-      from: `"HR System" <${process.env.SMTP_USER}>`,
+    await sendEmail({
       to: email,
       subject: 'Welcome to HR System - Your Account Credentials',
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 25px; text-align: center; border-radius: 10px 10px 0 0; }
-            .content { background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; }
-            .credentials-box { background: #f8fafc; border: 2px solid #dbeafe; border-radius: 8px; padding: 25px; margin: 25px 0; }
-            .credential-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e5e7eb; }
-            .credential-item:last-child { border-bottom: none; }
-            .label { font-weight: 600; color: #4b5563; }
-            .value { font-family: 'Courier New', monospace; font-weight: bold; color: #1f2937; }
-            .password { background: #fef3c7; padding: 15px; border-radius: 6px; margin: 15px 0; font-size: 20px; letter-spacing: 2px; text-align: center; font-weight: bold; }
-            .instructions { background: #ecfdf5; border: 1px solid #10b981; padding: 20px; border-radius: 8px; margin: 20px 0; }
-            .warning { background: #fef3c7; border: 1px solid #f59e0b; padding: 20px; border-radius: 8px; margin: 20px 0; }
-            .action-button { display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 10px 0; }
-            .footer { text-align: center; margin-top: 30px; color: #6b7280; font-size: 14px; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>Welcome to HR System</h1>
-              <p>Your account has been successfully created</p>
-            </div>
-            <div class="content">
-              <p>Dear <strong>${name}</strong>,</p>
-              <p>Welcome to the HR System! Your account has been created by the HR department.</p>
-              <div class="credentials-box">
-                <h3>Your Login Credentials:</h3>
-                <div class="credential-item">
-                  <span class="label">Employee ID:</span>
-                  <span class="value">${employeeId || 'Will be assigned'}</span>
-                </div>
-                <div class="credential-item">
-                  <span class="label">Email Address:</span>
-                  <span class="value">${email}</span>
-                </div>
-                <div class="credential-item">
-                  <span class="label">Temporary Password:</span>
-                </div>
-                <div class="password">${temporaryPassword}</div>
-                <p><small><em>This is a temporary password. You must change it on first login.</em></small></p>
-              </div>
-              <div class="instructions">
-                <h3>📝 How to Get Started:</h3>
-                <ol>
-                  <li>Go to the login page: <strong>${process.env.FRONTEND_URL || 'http://localhost:3000'}/login</strong></li>
-                  <li>Enter your email address: <strong>${email}</strong></li>
-                  <li>Enter the temporary password provided above</li>
-                  <li>You will be prompted to change your password immediately</li>
-                  <li>Complete your profile after login</li>
-                </ol>
-                <center>
-                  <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login" class="action-button">
-                    Login to Your Account
-                  </a>
-                </center>
-              </div>
-              <div class="warning">
-                <h3>⚠️ Important Security Notes:</h3>
-                <ul>
-                  <li>This is a <strong>temporary password</strong> - you must change it on first login</li>
-                  <li>Never share your password with anyone</li>
-                  <li>This password will expire in 7 days</li>
-                  <li>For security reasons, do not use this password for other accounts</li>
-                  <li>If you didn't request this account, please contact HR immediately</li>
-                </ul>
-              </div>
-              <p><strong>Login URL:</strong> <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login">${process.env.FRONTEND_URL || 'http://localhost:3000'}/login</a></p>
-              <p>Best regards,<br><strong>HR Department</strong></p>
-            </div>
-            <div class="footer">
-              <p>This is an automated email. Please do not reply.</p>
-              <p>For assistance, contact your HR department or system administrator.</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `
-    };
+      html
+    });
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ Welcome email sent to ${email}, Message ID: ${info.messageId}`);
+    console.log(`✅ Welcome email sent to ${email}`);
     return true;
 
   } catch (error) {
