@@ -101,12 +101,34 @@ db.init_app(app)
 
 
 # ── CORS ──────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────
+# UPDATED: allowed origins now come from an env var (ALLOWED_ORIGINS,
+# comma-separated) instead of being hardcoded to localhost only.
+# This was the root cause of the CORS error you were seeing —
+# https://ai-nine-amber.vercel.app was never in the origins list, so
+# the browser's preflight OPTIONS request was rejected before your
+# real POST /api/chat/send request could go through.
+#
+# On Render, set:
+#   ALLOWED_ORIGINS = https://ai-nine-amber.vercel.app,http://localhost:5173,http://localhost:5174
+#
+# If ALLOWED_ORIGINS isn't set, we fall back to the local dev origins
+# only (old behavior), so nothing breaks if you forget to set it —
+# it'll just fail the same way it did before, in dev only.
+# ─────────────────────────────────────────────────────────────────
+_default_origins = "http://localhost:5173,http://localhost:5174"
+
+_allowed_origins = [
+    origin.strip()
+    for origin in os.environ.get("ALLOWED_ORIGINS", _default_origins).split(",")
+    if origin.strip()
+]
+
+_startup_logger.info(f"🌐 CORS allowed origins = {_allowed_origins}")
+
 CORS(
     app,
-    origins=[
-        "http://localhost:5173",
-        "http://localhost:5174"
-    ],
+    origins=_allowed_origins,
     supports_credentials=True,
     allow_headers=[
         "Content-Type",
