@@ -556,14 +556,14 @@ const sendWelcomeEmailInternal = async (email, name, employeeId, temporaryPasswo
             <div class="instructions">
               <h3>📝 How to Get Started:</h3>
               <ol>
-                <li>Go to the login page: <strong>${process.env.FRONTEND_URL || 'http://localhost:3000'}/login</strong></li>
+                <li>Go to the login page: <strong>${process.env.FRONTEND_URL}/login</strong></li>
                 <li>Enter your email address: <strong>${email}</strong></li>
                 <li>Enter the temporary password provided above</li>
                 <li>You will be prompted to change your password immediately</li>
                 <li>Complete your profile after login</li>
               </ol>
               <center>
-                <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login" class="action-button">
+                <a href="${process.env.FRONTEND_URL}/login" class="action-button">
                   Login to Your Account
                 </a>
               </center>
@@ -578,7 +578,7 @@ const sendWelcomeEmailInternal = async (email, name, employeeId, temporaryPasswo
                 <li>If you didn't request this account, please contact HR immediately</li>
               </ul>
             </div>
-            <p><strong>Login URL:</strong> <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login">${process.env.FRONTEND_URL || 'http://localhost:3000'}/login</a></p>
+            <p><strong>Login URL:</strong> <a href="${process.env.FRONTEND_URL}/login">${process.env.FRONTEND_URL}/login</a></p>
             <p>Best regards,<br><strong>HR Department</strong></p>
           </div>
           <div class="footer">
