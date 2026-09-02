@@ -5,7 +5,16 @@ import axios from 'axios';
  * HRChatbot.jsx — COMPLETE UPDATED FILE
  * =======================================
  * All original UI code preserved exactly.
- * Only sendMessage() is updated to forward the JWT token.
+ *
+ * Changes in this version:
+ *   1. sendMessage() forwards the JWT token (unchanged from before).
+ *   2. NEW: while waiting on a request, if it takes longer than ~6s
+ *      (a strong signal the Render free-tier instance is cold-starting),
+ *      the typing indicator area shows a "waking up the server..." note
+ *      instead of just spinning silently. This only affects the UI —
+ *      it requires no backend changes. It pairs with the backend CORS
+ *      fix (ALLOWED_ORIGINS env var) so that once CORS is fixed, slow
+ *      cold starts are communicated clearly instead of looking broken.
  *
  * Props:
  *   isLoggedIn       {boolean}   – pass true when the user is authenticated
@@ -18,9 +27,11 @@ const HRChatbot = ({ isLoggedIn = false, onLoginRedirect }) => {
     const [userName, setUserName] = useState('');
     const [showNameInput, setShowNameInput] = useState(true);
     const [isTyping, setIsTyping] = useState(false);
+    const [isWakingUp, setIsWakingUp] = useState(false); // NEW
     const [error, setError] = useState(null);
     const [showLoginPrompt, setShowLoginPrompt] = useState(false);
     const messagesEndRef = useRef(null);
+    const wakeupTimerRef = useRef(null); // NEW
 
     // Load saved name on mount
     useEffect(() => {
@@ -75,6 +86,13 @@ const HRChatbot = ({ isLoggedIn = false, onLoginRedirect }) => {
         }
     }, [isLoggedIn, isOpen]);
 
+    // Clean up the wake-up timer if the component unmounts mid-request
+    useEffect(() => {
+        return () => {
+            if (wakeupTimerRef.current) clearTimeout(wakeupTimerRef.current);
+        };
+    }, []);
+
     const handleToggle = () => {
         if (!isLoggedIn && !isOpen) {
             setIsOpen(true);
@@ -106,9 +124,12 @@ const HRChatbot = ({ isLoggedIn = false, onLoginRedirect }) => {
 
     // ─────────────────────────────────────────────────────────────────────────
     // sendMessage — UPDATED
-    // Only change from original: reads JWT token from localStorage and adds
-    // Authorization header to the axios call so Flask can forward it to MERN.
-    // Everything else (UI state, error handling, name flow) is identical.
+    // 1. Reads JWT token from localStorage and adds Authorization header so
+    //    Flask can forward it to MERN (unchanged from before).
+    // 2. NEW: starts a 6s timer when the request goes out. If the response
+    //    hasn't come back by then, we assume the Render free instance is
+    //    cold-starting and switch the typing indicator to a "waking up"
+    //    message so the wait doesn't look like a hang/error.
     // ─────────────────────────────────────────────────────────────────────────
     const sendMessage = async () => {
         const trimmedInput = input.trim();
@@ -144,8 +165,15 @@ const HRChatbot = ({ isLoggedIn = false, onLoginRedirect }) => {
         }
 
         setIsTyping(true);
+
+        // NEW: after 6s with no response, assume cold start and let the
+        // user know instead of leaving them staring at a silent typing dot.
+        wakeupTimerRef.current = setTimeout(() => {
+            setIsWakingUp(true);
+        }, 6000);
+
         try {
-            // ── UPDATED: Read JWT token and add Authorization header ──────────
+            // ── Read JWT token and add Authorization header ──────────
             // Check what key YOUR MERN auth saves the token under.
             // Open Chrome DevTools → Application → Local Storage after login
             // and look for the key that holds a long "eyJ..." string.
@@ -156,7 +184,7 @@ const HRChatbot = ({ isLoggedIn = false, onLoginRedirect }) => {
                        || null;
             // ─────────────────────────────────────────────────────────────────
 
-const CHATBOT_URL = import.meta.env.VITE_CHATBOT_URL || 'http://localhost:5001';
+            const CHATBOT_URL = import.meta.env.VITE_CHATBOT_URL || 'http://localhost:5001';
             const response = await axios.post(
                 `${CHATBOT_URL}/api/chat/send`,
                 {
@@ -165,7 +193,10 @@ const CHATBOT_URL = import.meta.env.VITE_CHATBOT_URL || 'http://localhost:5001';
                     session_id: localStorage.getItem('session_id')
                 },
                 {
-                    // ── UPDATED: attach token if it exists ────────────────────
+                    // Free-tier Render cold starts + a 300s gunicorn timeout
+                    // mean this can legitimately take a while. 65s gives
+                    // enough room for a cold start without hanging forever.
+                    timeout: 65000,
                     // If no token (user not logged in), the chatbot still works
                     // in RAG-only mode (policy questions from documents).
                     // If token exists, Flask forwards it to MERN so the bot can
@@ -173,9 +204,10 @@ const CHATBOT_URL = import.meta.env.VITE_CHATBOT_URL || 'http://localhost:5001';
                     headers: {
                         ...(token ? { Authorization: `Bearer ${token}` } : {})
                     }
-                    // ─────────────────────────────────────────────────────────
                 }
             );
+            clearTimeout(wakeupTimerRef.current);
+            setIsWakingUp(false);
             setIsTyping(false);
             const botMessage = {
                 id: Date.now(),
@@ -188,10 +220,12 @@ const CHATBOT_URL = import.meta.env.VITE_CHATBOT_URL || 'http://localhost:5001';
                 localStorage.setItem('session_id', response.data.session_id);
             }
         } catch (error) {
+            clearTimeout(wakeupTimerRef.current);
+            setIsWakingUp(false);
             setIsTyping(false);
             let errorMessage = 'Sorry, I cannot connect to the server. ';
             if (error.code === 'ECONNABORTED') {
-                errorMessage += 'The request timed out.';
+                errorMessage += 'The server is taking too long to respond — it may still be waking up. Please try again in a moment.';
             } else if (error.response) {
                 errorMessage += `Server error: ${error.response.status}.`;
             } else if (error.request) {
@@ -412,12 +446,18 @@ const CHATBOT_URL = import.meta.env.VITE_CHATBOT_URL || 'http://localhost:5001';
 
                             {isTyping && (
                                 <div className="flex justify-start" style={{ animation: 'fade-in 0.3s ease-out' }}>
-                                    <div className="bg-white rounded-2xl rounded-bl-none px-4 py-3 border border-gray-100">
+                                    <div className="bg-white rounded-2xl rounded-bl-none px-4 py-3 border border-gray-100 max-w-[85%]">
                                         <div className="flex gap-1">
                                             <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></span>
                                             <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
                                             <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></span>
                                         </div>
+                                        {/* NEW: shown only if the request is still pending after 6s */}
+                                        {isWakingUp && (
+                                            <p className="text-[11px] text-gray-400 mt-2">
+                                                Server is waking up — this can take up to a minute on first use. Hang tight…
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -463,7 +503,7 @@ const CHATBOT_URL = import.meta.env.VITE_CHATBOT_URL || 'http://localhost:5001';
                             </div>
                             <div className="flex justify-between mt-2 px-1">
                                 <div className="text-[10px] text-gray-400">
-                                    {isTyping ? 'Assistant is typing...' : 'Ready to help'}
+                                    {isWakingUp ? 'Waking up server…' : isTyping ? 'Assistant is typing...' : 'Ready to help'}
                                 </div>
                                 <div className="text-[10px] text-gray-400 flex gap-2">
                                     <span>Shift+Enter ↵ new line</span>
