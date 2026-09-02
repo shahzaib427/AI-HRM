@@ -7,7 +7,7 @@ const crypto = require('crypto');
 // utils/sendEmail.js, which calls Brevo's HTTPS API (port 443) instead of
 // raw SMTP (port 587/2525), which Render was blocking at the platform level.
 // Adjust this path if sendEmail.js lives somewhere other than ../utils/sendEmail
-const sendEmail = require('../utils/sendEmail');
+const sendEmail = require('../utils/emailService');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
 
