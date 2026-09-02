@@ -1,9 +1,13 @@
-
 const User = require('../models/User');
 const fs = require('fs');
 const path = require('path');
 const NotificationService = require('../services/notificationService');
-const { generateEmployeeId, generateRandomPassword, sendWelcomeEmailInternal } = require('./authController');
+const {
+  generateEmployeeId,
+  generateRandomPassword,
+  generatePasswordFromCnic, // ✅ NEW — password built from employee's CNIC last-5-digits
+  sendWelcomeEmailInternal
+} = require('./authController');
 
 // ===== CONFIG: adjust these to match your bank's actual formats =====
 const IBAN_MAX_LENGTH = 24;            // fixed digit length for IBAN
@@ -556,10 +560,12 @@ exports.createEmployeeWithAccount = async (req, res) => {
       });
     }
 
-    // ✅ Auto-generate a random password (6-8 chars: letters, numbers, symbols)
-    // — imported from authController.js, same generator used everywhere
-    const password = generateRandomPassword(8);
-    console.log(`🔑 Auto-generated random password for ${email}`);
+    // ✅ CHANGED: password now embeds the employee's CNIC last-5-digits
+    // (plus a random letter + symbol) so it's easier for them to remember,
+    // instead of the previous fully-random password. Falls back to fully
+    // random automatically if idCardNumber wasn't provided / is too short.
+    const password = generatePasswordFromCnic(employeeProfile.idCardNumber);
+    console.log(`🔑 Generated password for ${email} (CNIC-based: ${!!employeeProfile.idCardNumber})`);
 
     const existingUser = await User.findOne({
       $or: [{ email }, { username: username || email.split('@')[0] }]
@@ -719,7 +725,7 @@ exports.createEmployeeWithAccount = async (req, res) => {
         if (sent) {
           console.log(`✅ Welcome email delivered to ${user.email}`);
         } else {
-          console.error(`⚠️ Welcome email FAILED for ${user.email} — check SMTP env vars on Render (SMTP_HOST/PORT/USER/PASS)`);
+          console.error(`⚠️ Welcome email FAILED for ${user.email} — check BREVO_API_KEY/FROM_EMAIL env vars on Render`);
         }
       })
       .catch((err) => {

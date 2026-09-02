@@ -7,7 +7,7 @@ const crypto = require('crypto');
 // utils/sendEmail.js, which calls Brevo's HTTPS API (port 443) instead of
 // raw SMTP (port 587/2525), which Render was blocking at the platform level.
 // Adjust this path if sendEmail.js lives somewhere other than ../utils/sendEmail
-const sendEmail = require('../utils/emailService');
+const sendEmail = require('../utils/sendEmail');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
 
@@ -62,6 +62,36 @@ function generateRandomPassword(length) {
   while (passwordChars.length < len) {
     passwordChars.push(pick(allChars));
   }
+
+  for (let i = passwordChars.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [passwordChars[i], passwordChars[j]] = [passwordChars[j], passwordChars[i]];
+  }
+
+  return passwordChars.join('');
+}
+
+// ===== NEW: password generator that embeds the employee's CNIC last-5-digits =====
+// Makes the temporary password easier for the employee to remember (their own
+// CNIC digits), while still mixing in a random letter + symbol so it isn't
+// 100% guessable by anyone who happens to know the employee's CNIC number.
+// Falls back to the fully-random generator if no valid CNIC digits are found.
+function generatePasswordFromCnic(cnicNumber) {
+  const digitsOnly = (cnicNumber || '').toString().replace(/[^0-9]/g, '');
+  const last5 = digitsOnly.slice(-5);
+
+  if (last5.length < 5) {
+    // No usable CNIC — fall back to the plain random generator
+    return generateRandomPassword(8);
+  }
+
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';  // no I/O to avoid confusion
+  const symbols = '@&#$!%*';
+  const pick = (charset) => charset[Math.floor(Math.random() * charset.length)];
+
+  // 5 CNIC digits + 1 random uppercase letter + 1 random symbol = 7 chars,
+  // shuffled so the CNIC digits aren't just sitting in a predictable block.
+  let passwordChars = [...last5.split(''), pick(upper), pick(symbols)];
 
   for (let i = passwordChars.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -606,3 +636,4 @@ exports.sendWelcomeEmailInternal = sendWelcomeEmailInternal;
 // instead of keeping duplicate copies that could drift out of sync
 exports.generateEmployeeId = generateEmployeeId;
 exports.generateRandomPassword = generateRandomPassword;
+exports.generatePasswordFromCnic = generatePasswordFromCnic;
