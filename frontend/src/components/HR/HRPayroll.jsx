@@ -64,8 +64,8 @@ const PayslipModal = ({ isOpen, onClose, payroll, isHR }) => {
     try {
       // ✅ Updated: Use /leaves prefix and correct endpoints
       const endpoint = isHR
-        ? `/payroll/my-payslip/${payroll._id}`
-        : `/payroll/payslip-view/${payroll._id}`;
+        ? `/hr/payroll/my-payslip/${payroll._id}`
+        : `/hr/payroll/payslip-view/${payroll._id}`;
       const response = await api.get(endpoint, { responseType: 'text' });
       if (response.data) setPayslipHtml(response.data);
       else setError('No data received');
@@ -81,8 +81,8 @@ const PayslipModal = ({ isOpen, onClose, payroll, isHR }) => {
     try {
       // ✅ Updated: Use /leaves prefix and correct endpoints
       const endpoint = isHR
-        ? `/payroll/my-payslip/${payroll._id}/download`
-        : `/payroll/payslip-download/${payroll._id}`;
+        ? `/hr/payroll/my-payslip/${payroll._id}/download`
+        : `/hr/payroll/payslip-download/${payroll._id}`;
       const response = await api.get(endpoint, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data], { type: 'text/html' }));
       const link = document.createElement('a');
@@ -187,7 +187,7 @@ const HRPayrollDashboard = () => {
 
       // ✅ Updated: Use /payroll prefix
       const res = await api.get(
-        `/payroll/my-payrolls?year=${currentYear}&month=${currentMonth}`
+        `/hr/payroll/my-payrolls?year=${currentYear}&month=${currentMonth}`
       );
       const list = res.data?.data || [];
 
@@ -195,7 +195,7 @@ const HRPayrollDashboard = () => {
         setMyPayroll(list[0]);
       } else {
         const fallback = await api.get(
-          `/payroll/my-payrolls?year=${currentYear}`
+          `/hr/payroll/my-payrolls?year=${currentYear}`
         );
         const allList = fallback.data?.data || [];
         setMyPayroll(allList.length > 0 ? allList[0] : null);
@@ -214,7 +214,7 @@ const HRPayrollDashboard = () => {
     try {
       const currentYear = new Date().getFullYear();
       // ✅ Updated: Use /payroll prefix
-      const response = await api.get(`/payroll/my-payrolls?year=${currentYear}`);
+      const response = await api.get(`/hr/payroll/my-payrolls?year=${currentYear}`);
       if (response.data?.success && response.data?.data) setMyPayrollHistory(response.data.data);
       else setMyPayrollHistory([]);
     } catch (error) {
@@ -239,7 +239,7 @@ const HRPayrollDashboard = () => {
       params.append('excludeSelf', 'true');
 
       // ✅ Updated: Use /payroll prefix
-      const response = await api.get(`/payroll/employee-payrolls?${params.toString()}`);
+      const response = await api.get(`/hr/payroll/employee-payrolls?${params.toString()}`);
       
       if (response.data?.success) {
         setEmployeePayrolls(response.data.data || []);
@@ -268,7 +268,7 @@ const HRPayrollDashboard = () => {
       if (filters.month && filters.month !== 'all') params.append('month', filters.month);
       
       // ✅ Updated: Use /payroll prefix
-      const response = await api.get(`/payroll/employee-stats?${params.toString()}`);
+      const response = await api.get(`/hr/payroll/employee-stats?${params.toString()}`);
       if (response.data?.success) {
         setEmployeeStats(response.data.data);
       }
@@ -280,7 +280,7 @@ const HRPayrollDashboard = () => {
   const fetchMonthsYears = async () => {
     try {
       // ✅ Updated: Use /payroll prefix
-      const response = await api.get('/payroll/months-years');
+      const response = await api.get('/hr/payroll/months-years');
       if (response.data?.success && response.data?.data) {
         setMonthsYears(response.data.data);
       } else {
@@ -309,8 +309,8 @@ const HRPayrollDashboard = () => {
     try {
       // ✅ Updated: Use /payroll prefix
       const endpoint = isHR
-        ? `/payroll/my-payslip/${payroll._id}/download`
-        : `/payroll/payslip-download/${payroll._id}`;
+        ? `/hr/payroll/my-payslip/${payroll._id}/download`
+        : `/hr/payroll/payslip-download/${payroll._id}`;
       const response = await api.get(endpoint, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data], { type: 'text/html' }));
       const link = document.createElement('a');
@@ -330,7 +330,7 @@ const HRPayrollDashboard = () => {
       if (filters.status && filters.status !== 'all') params.append('status', filters.status);
 
       // ✅ Updated: Use /payroll prefix
-      const response = await api.get(`/payroll/employee-payrolls?${params.toString()}&limit=10000&excludeSelf=true`);
+      const response = await api.get(`/hr/payroll/employee-payrolls?${params.toString()}&limit=10000&excludeSelf=true`);
       if (response.data?.success && response.data?.data) {
         const XLSX = await import('xlsx');
         const excelData = response.data.data.map((p, i) => ({
