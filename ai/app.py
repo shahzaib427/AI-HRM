@@ -60,8 +60,8 @@ from models import db
 
 from routes import register_blueprints
 from routes.career_chat_routes import career_chat_bp
-# CHANGED: also import _get_face_app so we can warm it up in a
-# background thread at startup (same pattern as boat_module below).
+# Also import _get_face_app so we can warm it up in a background
+# thread at startup (same pattern as boat_module below).
 from routes.face_routes import face_bp, _get_face_app
 from routes.ats_routes import ats_bp
 
@@ -103,12 +103,33 @@ db.init_app(app)
 
 
 # ── CORS ──────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────
+# Allowed origins come from an env var (ALLOWED_ORIGINS, comma-
+# separated) instead of being hardcoded to localhost only.
+# On Render, set:
+#   ALLOWED_ORIGINS = https://ai-nine-amber.vercel.app,http://localhost:5173,http://localhost:5174
+#
+# ⚠️ IMPORTANT: don't reintroduce a hardcoded origins=[...] list here
+# again — that's what silently undid this fix last time. Any future
+# edits to this file should keep reading from ALLOWED_ORIGINS.
+#
+# If ALLOWED_ORIGINS isn't set, we fall back to the local dev origins
+# only, so nothing breaks if you forget to set it — it'll just fail
+# the same way it did before, in dev only.
+# ─────────────────────────────────────────────────────────────────
+_default_origins = "http://localhost:5173,http://localhost:5174"
+
+_allowed_origins = [
+    origin.strip()
+    for origin in os.environ.get("ALLOWED_ORIGINS", _default_origins).split(",")
+    if origin.strip()
+]
+
+_startup_logger.info(f"🌐 CORS allowed origins = {_allowed_origins}")
+
 CORS(
     app,
-    origins=[
-        "http://localhost:5173",
-        "http://localhost:5174"
-    ],
+    origins=_allowed_origins,
     supports_credentials=True,
     allow_headers=[
         "Content-Type",
