@@ -60,7 +60,9 @@ from models import db
 
 from routes import register_blueprints
 from routes.career_chat_routes import career_chat_bp
-from routes.face_routes import face_bp
+# CHANGED: also import _get_face_app so we can warm it up in a
+# background thread at startup (same pattern as boat_module below).
+from routes.face_routes import face_bp, _get_face_app
 from routes.ats_routes import ats_bp
 
 
@@ -101,34 +103,12 @@ db.init_app(app)
 
 
 # ── CORS ──────────────────────────────────────────────────────────
-# ─────────────────────────────────────────────────────────────────
-# UPDATED: allowed origins now come from an env var (ALLOWED_ORIGINS,
-# comma-separated) instead of being hardcoded to localhost only.
-# This was the root cause of the CORS error you were seeing —
-# https://ai-nine-amber.vercel.app was never in the origins list, so
-# the browser's preflight OPTIONS request was rejected before your
-# real POST /api/chat/send request could go through.
-#
-# On Render, set:
-#   ALLOWED_ORIGINS = https://ai-nine-amber.vercel.app,http://localhost:5173,http://localhost:5174
-#
-# If ALLOWED_ORIGINS isn't set, we fall back to the local dev origins
-# only (old behavior), so nothing breaks if you forget to set it —
-# it'll just fail the same way it did before, in dev only.
-# ─────────────────────────────────────────────────────────────────
-_default_origins = "http://localhost:5173,http://localhost:5174"
-
-_allowed_origins = [
-    origin.strip()
-    for origin in os.environ.get("ALLOWED_ORIGINS", _default_origins).split(",")
-    if origin.strip()
-]
-
-_startup_logger.info(f"🌐 CORS allowed origins = {_allowed_origins}")
-
 CORS(
     app,
-    origins=_allowed_origins,
+    origins=[
+        "http://localhost:5173",
+        "http://localhost:5174"
+    ],
     supports_credentials=True,
     allow_headers=[
         "Content-Type",
@@ -243,7 +223,7 @@ def get_boat_predict():
 
 
 # ================================================================
-# BACKGROUND WARM-UP
+# BACKGROUND WARM-UP — HR / BOAT MODULE
 # ================================================================
 # WHY: Render's proxy has its own request timeout, shorter than
 # gunicorn's --timeout 300. If the FIRST /chat request has to load
@@ -272,6 +252,40 @@ def _warmup_boat_module():
 
 
 threading.Thread(target=_warmup_boat_module, daemon=True).start()
+
+
+# ================================================================
+# BACKGROUND WARM-UP — FACE RECOGNITION MODEL
+# ================================================================
+# WHY: InsightFace's buffalo_sc model (see _get_face_app() in
+# routes/face_routes.py) is lazy-loaded on first call. On Render,
+# the first real check-in/checkout request after a cold start or
+# idle spin-down has to pay the full model-load cost (downloading/
+# reading weights + ONNX runtime init) synchronously inside that
+# request. That's slow enough to:
+#   - exceed Render's proxy timeout → 502 Bad Gateway, and/or
+#   - cause the platform to throttle concurrent/retried requests
+#     while the model is still loading → 429 Too Many Requests
+#
+# FIX: same pattern as _warmup_boat_module above — load the face
+# model in a background thread immediately after boot, so it's
+# already resident in memory before a real user hits /ai/face/verify.
+#
+# _get_face_app() has its own internal "already loaded" check
+# (via the module-level _face_app global in face_routes.py), so a
+# real request arriving before warm-up finishes will simply load it
+# once, not twice.
+
+def _warmup_face_model():
+    try:
+        logger.info("🔥 Warming up face recognition model in background...")
+        _get_face_app()
+        logger.info("🔥 Face recognition model warm-up complete!")
+    except Exception as e:
+        logger.exception(f"🔥 Face model warm-up failed: {e}")
+
+
+threading.Thread(target=_warmup_face_model, daemon=True).start()
 
 
 # ================================================================
