@@ -135,17 +135,43 @@ async function callAIVerify(employeeId, imageBase64, retries = 2) {
   }
 }
 
-/** Call Python AI service to register a face */
-async function callAIRegister(employeeId, imageBase64) {
-  const { data } = await axios.post(
-    `${AI_SERVICE_URL}/ai/face/register`,
-    { employeeId, image: imageBase64 },
-    {
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${INTERNAL_TOKEN}` },
-      timeout: 30_000
+/**
+ * Call Python AI service to register a face.
+ *
+ * FIXED: this previously had NO retry logic, unlike callAIVerify above.
+ * AI_SERVICE_URL points at a Render-hosted instance, which cold-starts
+ * and can return 429/502/503 on the first request(s) after idling.
+ * Without a retry, a single cold start during registration caused every
+ * photo to fail and the whole registration to be reported as a face
+ * problem ("No face detected") even though the real cause was the AI
+ * service being briefly unreachable. Now it retries the same way
+ * callAIVerify does before giving up.
+ */
+async function callAIRegister(employeeId, imageBase64, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const { data } = await axios.post(
+        `${AI_SERVICE_URL}/ai/face/register`,
+        { employeeId, image: imageBase64 },
+        {
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${INTERNAL_TOKEN}` },
+          timeout: 30_000
+        }
+      );
+      return data;
+    } catch (err) {
+      const status = err.response?.status;
+      const retryable = [429, 502, 503].includes(status);
+
+      if (!retryable || attempt === retries) {
+        throw err;
+      }
+
+      const waitMs = 1500 * (attempt + 1); // 1.5s, then 3s
+      console.warn(`⚠️ AI register attempt ${attempt + 1} failed with status ${status}, retrying in ${waitMs}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
     }
-  );
-  return data;
+  }
 }
 
 // =============== CSV EXPORT FUNCTIONS ===============
@@ -656,9 +682,9 @@ exports.registerFace = async (req, res) => {
       });
     }
 
-    // ── everything below this line is unchanged from your original code ──
     let successfulImages = 0;
     let failedImages = [];
+    let transientFailureCount = 0; // NEW: tracks failures caused by the AI service, not the photo itself
     let finalEmbeddingDim = null;
 
     for (let i = 0; i < images.length; i++) {
@@ -673,13 +699,28 @@ exports.registerFace = async (req, res) => {
       } catch (err) {
         const status = err.response?.status;
         const message = err.response?.data?.error || err.message;
+        console.error(`   ❌ Image ${i + 1} failed — status ${status}:`, message);
+
         if (status === 401) {
           return res.status(502).json({ success: false, message: 'AI service auth failed — check INTERNAL_SERVICE_TOKEN' });
         }
         if (status === 422) {
+          // Genuine "no face detected" style failure from the AI model itself
           failedImages.push({ index: i + 1, error: message || 'No face detected in image' });
+        } else if ([429, 502, 503].includes(status)) {
+          // FIXED: previously fell into the generic else-branch below and got
+          // reported to the frontend as if it were a face-detection problem.
+          // callAIRegister already retried this a couple of times before
+          // giving up — this means the AI service itself was unavailable,
+          // not that the photo was bad.
+          transientFailureCount++;
+          failedImages.push({
+            index: i + 1,
+            error: `AI service temporarily unavailable (status ${status}) — not a face-detection issue`,
+            transient: true
+          });
         } else if (!err.response) {
-          return res.status(503).json({ success: false, message: 'AI service is unreachable — is it running on port 5001?' });
+          return res.status(503).json({ success: false, message: 'AI service is unreachable — is it running?' });
         } else {
           failedImages.push({ index: i + 1, error: message });
         }
@@ -690,7 +731,16 @@ exports.registerFace = async (req, res) => {
     const MIN_SUCCESS_RATE = 0.6;
 
     if (successfulImages === 0) {
-      return res.status(422).json({ success: false, message: 'Face registration failed for all images', details: { failedImages, totalAttempted: images.length } });
+      // NEW: if every failure was transient (AI service issue), say so explicitly
+      // instead of always defaulting to a face-detection message.
+      const allTransient = transientFailureCount === images.length;
+      return res.status(422).json({
+        success: false,
+        message: allTransient
+          ? 'Face registration failed because the AI recognition service was unavailable. Please try again shortly.'
+          : 'Face registration failed for all images',
+        details: { failedImages, totalAttempted: images.length }
+      });
     }
     if (successRate < MIN_SUCCESS_RATE) {
       return res.status(422).json({ success: false, message: `Only ${successfulImages}/${images.length} images succeeded (need ${Math.ceil(MIN_SUCCESS_RATE * images.length)} minimum)`, details: { successfulImages, failedImages, totalAttempted: images.length } });
