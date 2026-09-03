@@ -95,17 +95,44 @@ function validateGPS(latitude, longitude) {
   };
 } 
 
-/** Call Python AI service to verify a face */
-async function callAIVerify(employeeId, imageBase64) {
-  const { data } = await axios.post(
-    `${AI_SERVICE_URL}/ai/face/verify`,
-    { employeeId, image: imageBase64 },
-    {
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${INTERNAL_TOKEN}` },
-      timeout: 30_000
+/**
+ * Call Python AI service to verify a face.
+ *
+ * CHANGED: added retry/backoff for transient failures (429 Too Many
+ * Requests, 502 Bad Gateway, 503 Service Unavailable). These status
+ * codes typically mean the AI service (hosted on Render) is cold-
+ * starting or briefly overloaded — retrying a couple of times with a
+ * short delay resolves most of them without failing the user's
+ * check-in/checkout attempt outright.
+ *
+ * Non-retryable errors (404 = no registered face, 401 = auth failure,
+ * etc.) are thrown immediately on the first attempt, same as before.
+ */
+async function callAIVerify(employeeId, imageBase64, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const { data } = await axios.post(
+        `${AI_SERVICE_URL}/ai/face/verify`,
+        { employeeId, image: imageBase64 },
+        {
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${INTERNAL_TOKEN}` },
+          timeout: 30_000
+        }
+      );
+      return data;
+    } catch (err) {
+      const status = err.response?.status;
+      const retryable = [429, 502, 503].includes(status);
+
+      if (!retryable || attempt === retries) {
+        throw err;
+      }
+
+      const waitMs = 1500 * (attempt + 1); // 1.5s, then 3s
+      console.warn(`⚠️ AI verify attempt ${attempt + 1} failed with status ${status}, retrying in ${waitMs}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
     }
-  );
-  return data;
+  }
 }
 
 /** Call Python AI service to register a face */
