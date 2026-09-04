@@ -31,6 +31,5 @@ router.post('/bulk-delete', protect, authorize(['admin', 'hr']), controller.bulk
 // ========================================
 router.get('/:id', protect, controller.getMessageById);                // ← MOVED DOWN
 router.delete('/:id', protect, authorize(['admin', 'hr']), controller.deleteMessage); // ← MOVED DOWN
-router.post('/:id/reply', protect, authorize(['admin', 'hr']), controller.replyToMessage); 
-
+router.post('/:id/reply', protect, controller.replyToMessage);
 module.exports = router;

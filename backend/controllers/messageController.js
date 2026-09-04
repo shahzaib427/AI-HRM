@@ -560,10 +560,11 @@ const replyToMessage = async (req, res) => {
     const { id } = req.params;
     const { message, status } = req.body;
 
-    console.log('📨 REPLYING to:', id, 'by:', user.name);
-
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, message: 'Invalid message ID' });
+    }
+    if (!message?.trim()) {
+      return res.status(400).json({ success: false, message: 'Reply message is required' });
     }
 
     const originalMessage = await Message.findById(id);
@@ -571,48 +572,46 @@ const replyToMessage = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Message not found' });
     }
 
-    const reply = {
-      sender: {
-        id: new mongoose.Types.ObjectId(user.id || user._id),
-        name: user.name || 'Admin',
-        role: user.role || 'admin'
-      },
+    const userId = (user.id || user._id)?.toString();
+    const userRole = user.role || user.systemRole;
+    const isParticipant =
+      originalMessage.sender?.id?.toString() === userId ||
+      originalMessage.recipientId?.toString() === userId;
+
+    if (!['admin', 'hr'].includes(userRole) && !isParticipant) {
+      return res.status(403).json({ success: false, message: 'You are not authorized to reply to this message' });
+    }
+
+    originalMessage.responses.push({
+      sender: { id: new mongoose.Types.ObjectId(userId), name: user.name || 'User', role: userRole || 'employee' },
       message: message.trim(),
       respondedAt: new Date()
-    };
-
-    originalMessage.responses.push(reply);
-    
-    if (status) {
-      originalMessage.status = status;
-      originalMessage.lastUpdated = new Date();
-    }
-
-    await originalMessage.save();
-
-    // ✅ SEND NOTIFICATION FOR REPLY
-    const io = req.app.get('io');
-    const notificationService = new NotificationService(io);
-    
-    // Get the original sender as recipient for the reply
-    const originalSender = await User.findById(originalMessage.sender.id);
-    if (originalSender) {
-      await notificationService.notifyNewMessage(originalMessage, user, originalSender);
-    }
-
-    console.log('✅ REPLY ADDED with notification:', originalMessage._id);
-    res.json({ 
-      success: true, 
-      message: 'Reply sent with notification!',
-      data: originalMessage 
     });
 
+    // Only HR/Admin can change the workflow status via a reply
+    if (status && ['admin', 'hr'].includes(userRole)) {
+      originalMessage.status = status;
+    }
+    originalMessage.lastUpdated = new Date();
+    await originalMessage.save();
+
+    // Notify whichever party did NOT just send this reply
+    const io = req.app.get('io');
+    const notificationService = new NotificationService(io);
+    const notifyTargetId = originalMessage.sender.id.toString() === userId
+      ? originalMessage.recipientId
+      : originalMessage.sender.id;
+    if (notifyTargetId) {
+      const notifyTarget = await User.findById(notifyTargetId);
+      if (notifyTarget) await notificationService.notifyNewMessage(originalMessage, user, notifyTarget);
+    }
+
+    res.json({ success: true, message: 'Reply sent', data: originalMessage });
   } catch (error) {
     console.error('❌ REPLY ERROR:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
 const bulkDeleteMessages = async (req, res) => {
   try {
     const messageIds = req.body.messageIds || req.body.ids || [];
