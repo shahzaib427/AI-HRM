@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FiClock, FiMail, FiMessageCircle, FiPhone, FiShield } from 'react-icons/fi';
-import axiosInstance from '../../utils/axiosInstance';
+import axiosInstance from '../utils/axiosInstance';
 
 const Input = ({ label, type = 'text', value, onChange }) => (
   <div style={{ width: '100%' }}>
