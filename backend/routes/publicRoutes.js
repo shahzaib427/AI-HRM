@@ -44,8 +44,13 @@ const upload = multer({
 router.get('/jobs', async (req, res) => {
   try {
     console.log('Fetching public jobs...');
+    // NOTE: 'status' is intentionally included in the select projection below.
+    // The query already filters to { status: 'Open' }, but Mongoose's
+    // .select() with a whitelist only returns the listed fields — omitting
+    // 'status' meant the frontend received job objects with no status
+    // property at all, breaking any client-side status checks/badges.
     const jobs = await Job.find({ status: 'Open' })
-      .select('title department jobType location description salaryRange experienceLevel createdAt deadline applicantsCount skillsRequired')
+      .select('title department jobType location description salaryRange experienceLevel createdAt deadline applicantsCount skillsRequired status')
       .sort('-createdAt');
     console.log(`Found ${jobs.length} open jobs`);
     res.json({ success: true, count: jobs.length, data: jobs });
@@ -72,13 +77,12 @@ router.get('/jobs/:id', async (req, res) => {
 // POST /api/public/apply
 router.post('/apply', upload.single('resume'), async (req, res) => {
   try {
-        console.log('=== APPLY DEBUG ===');
+    console.log('=== APPLY DEBUG ===');
     console.log('Content-Type:', req.headers['content-type']);
     console.log('Body keys:', Object.keys(req.body));
     console.log('req.file:', req.file);
     console.log('==================');
     const {
-      
       jobId, firstName, lastName, email, phone,
       currentCompany, currentPosition, totalExperience,
       currentSalary, expectedSalary, noticePeriod,
