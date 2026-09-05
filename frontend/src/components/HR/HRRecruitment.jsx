@@ -35,6 +35,11 @@ const getExperienceYears = (exp) => {
   return exp;
 };
 
+// Small helper: pause for N ms. Used to stagger API calls on load so we
+// don't fire a burst of simultaneous requests at the free-tier Flask
+// service (which was causing 429 Too Many Requests errors).
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 // Badge Component
 const Badge = ({ children, variant = 'default' }) => {
   const variants = {
@@ -216,6 +221,13 @@ const HRRecruitment = () => {
   };
 
   // Fetch recruitment data
+  // ✅ FIXED: previously this fired dashboard + jobs + candidates + ats/stats
+  // + ats/bulk-scores all at once via Promise.all, which sent a burst of
+  // 5-6 simultaneous requests to the Flask ATS service. On Render's free
+  // tier that burst was getting rejected with 429 Too Many Requests.
+  // Now the core recruitment data loads together (it's cheap, MongoDB-only),
+  // but the ATS-related calls (bulk-scores, stats) are deliberately delayed
+  // and run one after another instead of all at once.
   const fetchRecruitmentData = async () => {
     try {
       setLoading(true);
@@ -229,10 +241,15 @@ const HRRecruitment = () => {
 
       if (statsRes.data.success) setRecruitmentStats(statsRes.data.data.stats || {});
       if (jobsRes.data.success) setJobPostings(jobsRes.data.data || []);
+
       if (candidatesRes.data.success) {
         const cands = candidatesRes.data.data || [];
         setCandidates(cands);
-        fetchBulkATSScores(cands.map(c => c._id));
+
+        // Wait a moment before hitting the ATS service so this request
+        // doesn't land in the same instant as the three above.
+        await wait(800);
+        await fetchBulkATSScores(cands.map(c => c._id));
       }
     } catch (err) {
       if (err.response?.status === 401) setError('Session expired. Please login again.');
@@ -260,7 +277,19 @@ const HRRecruitment = () => {
     } catch (_) {}
   };
 
-  useEffect(() => { fetchRecruitmentData(); fetchATSStats(); }, []);
+  // ✅ FIXED: fetchRecruitmentData() and fetchATSStats() used to run
+  // side-by-side in the same effect, adding yet another simultaneous
+  // request into the initial burst. Now fetchATSStats() only runs after
+  // fetchRecruitmentData() (and its own internal delay before bulk-scores)
+  // has finished, spreading the ATS calls out over ~1-2 seconds instead of
+  // firing them all in the same instant.
+  useEffect(() => {
+    (async () => {
+      await fetchRecruitmentData();
+      await wait(500);
+      fetchATSStats();
+    })();
+  }, []);
 
   // Trigger ATS analysis
   const triggerATSAnalysis = async (candidateId, forceReanalyze = false) => {
@@ -280,7 +309,11 @@ const HRRecruitment = () => {
         fetchATSStats();
       }
     } catch (err) {
-      showNotification(err.response?.data?.message || 'ATS analysis failed', 'error');
+      if (err.response?.status === 429) {
+        showNotification('ATS service is busy — please wait a few seconds and try again.', 'error');
+      } else {
+        showNotification(err.response?.data?.message || 'ATS analysis failed', 'error');
+      }
     } finally {
       setAnalyzingIds(prev => { const s = new Set(prev); s.delete(candidateId); return s; });
     }
