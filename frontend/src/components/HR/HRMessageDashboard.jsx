@@ -36,6 +36,17 @@ const Badge = ({ children, variant = 'default' }) => {
   );
 };
 
+// ✅ NEW: Role badge — shows HR / Admin / Employee based on sender.role
+const RoleBadge = ({ role }) => {
+  const map = {
+    hr:       { label: 'HR',       variant: 'primary' },
+    admin:    { label: 'Admin',    variant: 'purple'  },
+    employee: { label: 'Employee', variant: 'info'    },
+  };
+  const cfg = map[role] || { label: role || 'User', variant: 'default' };
+  return <Badge variant={cfg.variant}>{cfg.label}</Badge>;
+};
+
 const Avatar = ({ name = 'U', size = 'md' }) => {
   const sizes = { sm: 'w-7 h-7 text-xs', md: 'w-9 h-9 text-sm', lg: 'w-11 h-11 text-base' };
   const colors = ['bg-indigo-100 text-indigo-700', 'bg-violet-100 text-violet-700', 'bg-emerald-100 text-emerald-700', 'bg-amber-100 text-amber-700', 'bg-rose-100 text-rose-700'];
@@ -114,11 +125,72 @@ const ConfirmDialog = ({ open, onClose, onConfirm, loading, count = 1, permanent
   );
 };
 
+// ─── Reply Modal (inline — no page navigation) ────────────────────────────────
+
+const ReplyModal = ({ open, message, onClose, onSubmit, loading }) => {
+  const [text, setText] = useState('');
+
+  useEffect(() => {
+    if (open) setText('');
+  }, [open]);
+
+  if (!open || !message) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-gray-900 font-semibold text-lg flex items-center gap-2">
+            <FaReply className="text-indigo-500 text-sm" /> Reply
+          </h3>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-400">
+            <CloseIcon style={{ fontSize: 18 }} />
+          </button>
+        </div>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-xs text-gray-400">To</span>
+          <Avatar name={message.sender?.name || 'U'} size="sm" />
+          <span className="text-sm font-medium text-gray-800">{message.sender?.name}</span>
+          <RoleBadge role={message.sender?.role} />
+        </div>
+        <p className="text-xs text-gray-400 mb-4 truncate">Re: {message.subject || 'No Subject'}</p>
+
+        {/* Original message preview */}
+        <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 mb-4 max-h-28 overflow-y-auto">
+          <p className="text-xs text-gray-500 whitespace-pre-wrap">{message.message}</p>
+        </div>
+
+        <textarea
+          rows={5}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Type your reply here…"
+          className="w-full text-sm border border-gray-200 rounded-lg px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 resize-none"
+        />
+
+        <div className="flex gap-3 mt-5">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={() => onSubmit(text)}
+            disabled={loading || !text.trim()}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            {loading ? 'Sending…' : (<><SendIcon style={{ fontSize: 15 }} /> Send Reply</>)}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── Message View Drawer ──────────────────────────────────────────────────────
 
 const MessageDrawer = ({ message, open, onClose, onReply }) => {
   if (!open || !message) return null;
-  
+
   const getPriorityColor = (priority) => {
     if (priority === 'high' || priority === 'urgent') return 'danger';
     if (priority === 'medium') return 'warning';
@@ -150,8 +222,11 @@ const MessageDrawer = ({ message, open, onClose, onReply }) => {
         <div className="flex items-center gap-3 px-5 py-4 bg-gray-50 border-b border-gray-100">
           <Avatar name={message.sender?.name || 'U'} size="md" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900">{message.sender?.name || 'Unknown'}</p>
-            <p className="text-xs text-gray-500">{message.sender?.role?.toUpperCase() || 'Employee'} · {message.category || 'General'}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-gray-900">{message.sender?.name || 'Unknown'}</p>
+              <RoleBadge role={message.sender?.role} />
+            </div>
+            <p className="text-xs text-gray-500">{message.sender?.employeeId || 'N/A'} · {message.category || 'General'}</p>
           </div>
           {message.createdAt && (
             <span className="text-xs text-gray-400 flex-shrink-0">
@@ -163,6 +238,28 @@ const MessageDrawer = ({ message, open, onClose, onReply }) => {
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-5">
           <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap">{message.message}</p>
+
+          {/* Conversation thread, if any */}
+          {message.responses?.length > 0 && (
+            <div className="mt-6 space-y-3">
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Replies</p>
+              {message.responses.map((res, idx) => (
+                <div key={idx} className="flex items-start gap-2.5">
+                  <Avatar name={res.sender?.name || 'U'} size="sm" />
+                  <div className="flex-1 min-w-0 bg-gray-50 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-medium text-gray-800">{res.sender?.name}</span>
+                      <RoleBadge role={res.sender?.role} />
+                      <span className="text-[10px] text-gray-400 ml-auto">
+                        {res.respondedAt ? format(new Date(res.respondedAt), 'MMM dd, h:mm a') : ''}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{res.message}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Actions */}
@@ -220,6 +317,10 @@ const HRMessageDashboard = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
 
+  // ✅ NEW: inline reply modal state (replaces navigate-to-reply-page)
+  const [replyDialog, setReplyDialog] = useState({ open: false, message: null });
+  const [sendingReply, setSendingReply] = useState(false);
+
   // Get current user
   useEffect(() => {
     const userStr = localStorage.getItem('user');
@@ -236,13 +337,13 @@ const HRMessageDashboard = () => {
   const fetchMessages = async () => {
     try {
       setLoading(true);
-      
+
       const params = new URLSearchParams({
         excludeDeleted: 'true',
         page: (pagination.page + 1).toString(),
         limit: pagination.limit.toString()
       });
-      
+
       if (filters.status) params.append('status', filters.status);
       if (filters.priority) params.append('priority', filters.priority);
       if (filters.category) params.append('category', filters.category);
@@ -250,7 +351,7 @@ const HRMessageDashboard = () => {
       if (filters.assignedToMe) params.append('assignedToMe', 'true');
 
       const response = await axiosInstance.get(`/messages?${params.toString()}`);
-      
+
       if (response.data.success) {
         const filteredMessages = (response.data.data || []).filter(msg => msg.status !== 'deleted');
         setMessages(filteredMessages);
@@ -258,7 +359,7 @@ const HRMessageDashboard = () => {
           ...prev,
           total: response.data.count || filteredMessages.length || 0
         }));
-        
+
         // Calculate stats
         const total = filteredMessages.length;
         const newMessages = filteredMessages.filter(m => m.status === 'new' || m.status === 'sent').length;
@@ -291,7 +392,7 @@ const HRMessageDashboard = () => {
       3: { assignedToMe: true },
       4: { status: 'resolved' }
     };
-    
+
     if (tabValue !== 0) {
       setFilters(prev => ({ ...prev, ...tabFilters[tabValue] }));
     } else {
@@ -337,8 +438,27 @@ const HRMessageDashboard = () => {
 
   const handleCloseView = () => { setViewDialog(false); setSelectedMessage(null); };
 
+  // ✅ CHANGED: open inline reply modal instead of navigating to a reply page
   const handleReplyMessage = (messageId) => {
-    navigate(`/hr/messages/${messageId}/reply`);
+    const msg = messages.find(m => m._id === messageId);
+    if (msg) setReplyDialog({ open: true, message: msg });
+  };
+
+  // ✅ NEW: submit reply via the same message thread, no new message created
+  const handleSubmitReply = async (text) => {
+    if (!text.trim() || !replyDialog.message) return;
+    try {
+      setSendingReply(true);
+      await axiosInstance.post(`/messages/${replyDialog.message._id}/reply`, { message: text });
+      toast.success('Reply sent');
+      setReplyDialog({ open: false, message: null });
+      await fetchMessages();
+    } catch (error) {
+      console.error('Reply error:', error);
+      toast.error(error.response?.data?.message || 'Failed to send reply');
+    } finally {
+      setSendingReply(false);
+    }
   };
 
   const handleDelete = async (messageId) => {
@@ -707,11 +827,14 @@ const HRMessageDashboard = () => {
                         <div className="flex items-center gap-2">
                           <Avatar name={message.sender?.name || 'U'} size="sm" />
                           <div>
-                            <p className={`text-sm ${message.status === 'new' ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'} truncate max-w-xs`}>
-                              {message.subject || 'No Subject'}
-                            </p>
-                            <p className="text-xs text-gray-400 truncate max-w-xs">
+                            <div className="flex items-center gap-1.5">
+                              <p className={`text-sm ${message.status === 'new' ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'} truncate max-w-xs`}>
+                                {message.subject || 'No Subject'}
+                              </p>
+                            </div>
+                            <p className="text-xs text-gray-400 truncate max-w-xs flex items-center gap-1.5">
                               From: {message.sender?.name || 'Unknown'} · {message.sender?.employeeId || 'N/A'}
+                              <RoleBadge role={message.sender?.role} />
                             </p>
                           </div>
                         </div>
@@ -823,6 +946,15 @@ const HRMessageDashboard = () => {
         open={viewDialog}
         onClose={handleCloseView}
         onReply={handleReplyMessage}
+      />
+
+      {/* ✅ NEW: inline reply modal */}
+      <ReplyModal
+        open={replyDialog.open}
+        message={replyDialog.message}
+        onClose={() => setReplyDialog({ open: false, message: null })}
+        onSubmit={handleSubmitReply}
+        loading={sendingReply}
       />
 
       {/* CSS Animations */}

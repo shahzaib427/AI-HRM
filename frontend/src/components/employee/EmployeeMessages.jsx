@@ -19,12 +19,24 @@ const Badge = ({ children, variant = 'default' }) => {
     warning:  'bg-amber-50 text-amber-700',
     danger:   'bg-red-50 text-red-700',
     info:     'bg-sky-50 text-sky-700',
+    purple:   'bg-purple-50 text-purple-700',
   };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${variants[variant]}`}>
       {children}
     </span>
   );
+};
+
+// ✅ NEW: Role badge — shows HR / Admin / Employee based on sender.role
+const RoleBadge = ({ role }) => {
+  const map = {
+    hr:       { label: 'HR',       variant: 'primary' },
+    admin:    { label: 'Admin',    variant: 'purple'  },
+    employee: { label: 'Employee', variant: 'info'    },
+  };
+  const cfg = map[role] || { label: role || 'User', variant: 'default' };
+  return <Badge variant={cfg.variant}>{cfg.label}</Badge>;
 };
 
 const Avatar = ({ name = 'U', size = 'md' }) => {
@@ -90,6 +102,68 @@ const ConfirmDialog = ({ open, onClose, onConfirm, loading, count = 1 }) => {
   );
 };
 
+// ─── Reply Modal (inline — replies in-thread, no navigation, no new message) ──
+
+const ReplyModal = ({ open, message, onClose, onSubmit, loading }) => {
+  const [text, setText] = useState('');
+
+  useEffect(() => {
+    if (open) setText('');
+  }, [open]);
+
+  if (!open || !message) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg p-6">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-gray-900 font-semibold text-lg flex items-center gap-2">
+            <FaReply className="text-indigo-500 text-sm" /> Reply
+          </h3>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-400">
+            ✕
+          </button>
+        </div>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-xs text-gray-400">To</span>
+          <Avatar name={message.sender?.name || 'U'} size="sm" />
+          <span className="text-sm font-medium text-gray-800">{message.sender?.name}</span>
+          <RoleBadge role={message.sender?.role} />
+        </div>
+        <p className="text-xs text-gray-400 mb-4 truncate">Re: {message.subject || 'No Subject'}</p>
+
+        {/* Original message preview */}
+        <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 mb-4 max-h-28 overflow-y-auto">
+          <p className="text-xs text-gray-500 whitespace-pre-wrap">{message.message}</p>
+        </div>
+
+        <textarea
+          rows={5}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Type your reply here…"
+          className="w-full text-sm border border-gray-200 rounded-lg px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 resize-none"
+        />
+
+        <div className="flex gap-3 mt-5">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={() => onSubmit(text)}
+            disabled={loading || !text.trim()}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            <FaPaperPlane className="text-xs" />
+            {loading ? 'Sending…' : 'Send Reply'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── Message View Drawer ──────────────────────────────────────────────────────
 
 const MessageDrawer = ({ message, open, onClose, onReply }) => {
@@ -119,8 +193,10 @@ const MessageDrawer = ({ message, open, onClose, onReply }) => {
         <div className="flex items-center gap-3 px-5 py-4 bg-gray-50 border-b border-gray-100">
           <Avatar name={message.sender?.name || 'U'} size="md" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900">{message.sender?.name || 'Unknown'}</p>
-            <p className="text-xs text-gray-500">{message.sender?.role?.toUpperCase() || 'Employee'}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-gray-900">{message.sender?.name || 'Unknown'}</p>
+              <RoleBadge role={message.sender?.role} />
+            </div>
           </div>
           {message.createdAt && (
             <span className="text-xs text-gray-400 flex-shrink-0">
@@ -132,6 +208,28 @@ const MessageDrawer = ({ message, open, onClose, onReply }) => {
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-5">
           <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap">{message.message}</p>
+
+          {/* Conversation thread, if any */}
+          {message.responses?.length > 0 && (
+            <div className="mt-6 space-y-3">
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Replies</p>
+              {message.responses.map((res, idx) => (
+                <div key={idx} className="flex items-start gap-2.5">
+                  <Avatar name={res.sender?.name || 'U'} size="sm" />
+                  <div className="flex-1 min-w-0 bg-gray-50 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-medium text-gray-800">{res.sender?.name}</span>
+                      <RoleBadge role={res.sender?.role} />
+                      <span className="text-[10px] text-gray-400 ml-auto">
+                        {res.respondedAt ? format(new Date(res.respondedAt), 'MMM dd, h:mm a') : ''}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{res.message}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Actions */}
@@ -167,6 +265,10 @@ const EmployeeMessages = () => {
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
+  // ✅ NEW: inline reply modal state — replaces the old localStorage + navigate('/employee/messages/compose') flow
+  const [replyDialog, setReplyDialog] = useState({ open: false, message: null });
+  const [sendingReply, setSendingReply] = useState(false);
+
   const fetchMessages = useCallback(async () => {
     try {
       setLoading(true);
@@ -194,16 +296,28 @@ const EmployeeMessages = () => {
 
   const handleCloseView = () => { setViewDialog(false); setSelectedMessage(null); };
 
+  // ✅ CHANGED: previously this stashed the message in localStorage and navigated
+  // to the Compose page (which created a brand-new message instead of a reply).
+  // Now it opens an inline modal and posts to the existing message's thread.
   const handleReplyMessage = (messageId) => {
-    const message = messages.find(msg => msg._id === messageId);
-    if (message) {
-      localStorage.setItem('replyMessage', JSON.stringify({
-        id: message._id,
-        subject: `Re: ${message.subject}`,
-        recipientId: message.sender?.id || message.sender?._id,
-        recipientName: message.sender?.name,
-      }));
-      navigate('/employee/messages/compose');
+    const msg = messages.find(m => m._id === messageId);
+    if (msg) setReplyDialog({ open: true, message: msg });
+  };
+
+  // ✅ NEW: posts to /messages/:id/reply — appends to the same conversation
+  const handleSubmitReply = async (text) => {
+    if (!text.trim() || !replyDialog.message) return;
+    try {
+      setSendingReply(true);
+      await axiosInstance.post(`/messages/${replyDialog.message._id}/reply`, { message: text });
+      toast.success('Reply sent');
+      setReplyDialog({ open: false, message: null });
+      await fetchMessages();
+    } catch (error) {
+      console.error('Reply error:', error);
+      toast.error(error.response?.data?.message || 'Failed to send reply');
+    } finally {
+      setSendingReply(false);
     }
   };
 
@@ -473,6 +587,7 @@ const EmployeeMessages = () => {
                             <p className="text-sm text-gray-800 font-medium truncate max-w-[120px]">
                               {message.sender?.name || 'Unknown'}
                             </p>
+                            <RoleBadge role={message.sender?.role} />
                           </div>
                         </div>
                        </td>
@@ -567,6 +682,15 @@ const EmployeeMessages = () => {
         open={viewDialog}
         onClose={handleCloseView}
         onReply={handleReplyMessage}
+      />
+
+      {/* ✅ NEW: inline reply modal — replaces old compose-page redirect */}
+      <ReplyModal
+        open={replyDialog.open}
+        message={replyDialog.message}
+        onClose={() => setReplyDialog({ open: false, message: null })}
+        onSubmit={handleSubmitReply}
+        loading={sendingReply}
       />
 
       {/* CSS animations */}
