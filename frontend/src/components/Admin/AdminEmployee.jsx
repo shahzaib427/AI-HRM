@@ -8,19 +8,20 @@ import {
   FaSearch, FaFilter, FaTh, FaTable, FaEye, FaEdit, 
   FaTrash, FaToggleOn, FaToggleOff, FaEnvelope, FaPhone,
   FaMapMarkerAlt, FaCalendarAlt, FaDollarSign, FaBuilding,
-  FaChartLine, FaDownload, FaPrint
+  FaChartLine, FaDownload, FaPrint, FaClock, FaUserTie,
+  FaUsersCog
 } from 'react-icons/fa';
 
-// KPI Card Component - Fixed size
+// KPI Card Component - Improved with better spacing
 const KpiCard = ({ icon: Icon, label, value, sub, iconBg, valueColor = 'text-gray-900' }) => (
-  <div className="bg-white rounded-xl border border-gray-100 p-4 hover:shadow-md transition-all duration-200 min-w-[120px]">
+  <div className="bg-white rounded-xl border border-gray-100 p-4 hover:shadow-md transition-all duration-200 min-w-[140px] flex-1">
     <div className="flex items-center justify-between">
       <div className="flex-1 min-w-0">
         <p className="text-xs text-gray-500 font-medium mb-1 truncate">{label}</p>
         <p className={`text-xl font-semibold ${valueColor}`}>{value}</p>
         {sub && <p className="text-[10px] text-gray-400 mt-0.5 truncate">{sub}</p>}
       </div>
-      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ml-2 ${iconBg}`}>
+      <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ml-3 ${iconBg}`}>
         <Icon className="w-4 h-4 text-white" />
       </div>
     </div>
@@ -394,17 +395,55 @@ const getImageUrl = (path) => {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-        {/* Stats Cards - Fixed layout with responsive grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-9 gap-3">
-          <KpiCard icon={FaUsers} label="Total" value={stats.total} sub="All staff" iconBg="bg-indigo-500" />
-          <KpiCard icon={FaUserCheck} label="Active" value={stats.active} sub="Working" iconBg="bg-emerald-500" valueColor="text-emerald-600" />
-          <KpiCard icon={FaUserTimes} label="Inactive" value={stats.inactive} sub="Not working" iconBg="bg-red-500" valueColor="text-red-600" />
-          <KpiCard icon={FaUserShield} label="Admins" value={stats.admins} sub="Administrators" iconBg="bg-purple-500" />
-          <KpiCard icon={FaBriefcase} label="HR" value={stats.hr} sub="HR Team" iconBg="bg-orange-500" />
-          <KpiCard icon={FaUserGraduate} label="Regular" value={stats.regular} sub="Employees" iconBg="bg-blue-500" />
-          <KpiCard icon={FaBuilding} label="Permanent" value={stats.permanent} sub="Full-time" iconBg="bg-indigo-500" />
-          <KpiCard icon={FaFileContract} label="Contract" value={stats.contract} sub="Contractual" iconBg="bg-yellow-500" />
-          <KpiCard icon={FaUserGraduate} label="Interns" value={stats.intern} sub="Trainees" iconBg="bg-pink-500" />
+        {/* Stats Cards - Grouped Layout with better spacing */}
+        <div className="space-y-4">
+          {/* Row 1: Overview Stats */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <FaChartLine className="text-indigo-500 text-sm" />
+              <h3 className="text-sm font-medium text-gray-700">Overview</h3>
+              <span className="text-xs text-gray-400">|</span>
+              <span className="text-xs text-gray-400">Total workforce</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <KpiCard icon={FaUsers} label="Total Employees" value={stats.total} sub="All staff" iconBg="bg-indigo-500" />
+              <KpiCard icon={FaUserCheck} label="Active" value={stats.active} sub="Currently working" iconBg="bg-emerald-500" valueColor="text-emerald-600" />
+              <KpiCard icon={FaUserTimes} label="Inactive" value={stats.inactive} sub="Not working" iconBg="bg-red-500" valueColor="text-red-600" />
+              <KpiCard icon={FaUserShield} label="Administrators" value={stats.admins} sub="System admins" iconBg="bg-purple-500" />
+            </div>
+          </div>
+
+          {/* Row 2: Role & Employment Type Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Role Stats */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <FaUserTie className="text-orange-500 text-sm" />
+                <h3 className="text-sm font-medium text-gray-700">By Role</h3>
+                <span className="text-xs text-gray-400">|</span>
+                <span className="text-xs text-gray-400">Department distribution</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <KpiCard icon={FaBriefcase} label="HR Team" value={stats.hr} sub="HR professionals" iconBg="bg-orange-500" />
+                <KpiCard icon={FaUserGraduate} label="Regular Staff" value={stats.regular} sub="Employees" iconBg="bg-blue-500" />
+              </div>
+            </div>
+
+            {/* Employment Type Stats */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <FaUsersCog className="text-teal-500 text-sm" />
+                <h3 className="text-sm font-medium text-gray-700">Employment Type</h3>
+                <span className="text-xs text-gray-400">|</span>
+                <span className="text-xs text-gray-400">Contract & permanent</span>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <KpiCard icon={FaBuilding} label="Permanent" value={stats.permanent} sub="Full-time" iconBg="bg-indigo-500" />
+                <KpiCard icon={FaFileContract} label="Contract" value={stats.contract} sub="Contractual" iconBg="bg-yellow-500" />
+                <KpiCard icon={FaUserGraduate} label="Interns" value={stats.intern} sub="Trainees" iconBg="bg-pink-500" />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Filters Section */}
@@ -969,29 +1008,6 @@ const getImageUrl = (path) => {
                   </div>
                 </div>
               )}
-
-              {/* Additional Information Tab
-              {activeTab === 'additional' && (
-                <div className="space-y-6">
-                  <div className="space-y-4">
-                    <h3 className="text-base font-semibold text-gray-800 border-b pb-2">Qualifications & Skills</h3>
-                    <InfoRow label="Qualifications" value={selectedEmployee.qualifications} multiline />
-                    {selectedEmployee.skills && selectedEmployee.skills.length > 0 && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Skills</label>
-                        <div className="flex flex-wrap gap-2">
-                          {Array.isArray(selectedEmployee.skills) 
-                            ? selectedEmployee.skills.map((skill, index) => (
-                                <Badge key={index} variant="info">{skill}</Badge>
-                              ))
-                            : <span className="text-gray-600">{selectedEmployee.skills}</span>
-                          }
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )} */}
 
               {/* System Information Tab */}
               {activeTab === 'system' && (
