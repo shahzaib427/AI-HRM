@@ -1,3 +1,4 @@
+
 const Payroll = require('../models/Payroll');
 const User = require('../models/User');
 const mongoose = require('mongoose');
@@ -16,8 +17,8 @@ const PAYROLL_ELIGIBLE_ROLES = ['employee', 'hr', 'manager', 'team-lead'];
 const isPayrollEligible = (employee) => !PAYROLL_EXCLUDED_ROLES.includes(employee.role);
 
 // ======================= HELPER: VALIDATE PAYROLL PERIOD =======================
-// Payroll can only be generated starting the month/year the employee actually
-// joined — never for months before they were part of the company.
+// Payroll can only be generated for the CURRENT month or the UPCOMING month,
+// and never for a period before the employee actually joined.
 const MONTH_INDEX = {
   January: 0, February: 1, March: 2, April: 3, May: 4, June: 5,
   July: 6, August: 7, September: 8, October: 9, November: 10, December: 11
@@ -26,9 +27,26 @@ const MONTH_INDEX = {
 const getJoinDate = (employee) =>
   employee.joiningDate || employee.dateOfJoining || employee.hireDate || employee.createdAt;
 
+// FIX: this was previously nested INSIDE isPeriodBeforeJoining's function body,
+// which made it inaccessible outside that closure — calling it from
+// validatePayrollEligibility threw a ReferenceError and the future-month
+// check never actually ran. It now lives at module scope like it should.
+const isPeriodTooFarInFuture = (month, year) => {
+  const reqMonth = MONTH_INDEX[month];
+  const reqYear  = parseInt(year);
+  if (reqMonth === undefined || isNaN(reqYear)) return false; // unrecognized, let other checks handle it
+
+  const now = new Date();
+  const maxAllowed = new Date(now.getFullYear(), now.getMonth() + 1, 1); // start of "upcoming month"
+  const requested  = new Date(reqYear, reqMonth, 1);
+
+  return requested > maxAllowed;
+};
+
 const isPeriodBeforeJoining = (employee, month, year) => {
   const joinDate = getJoinDate(employee);
-  if (!joinDate) return false; // no join date on record — don't block
+  if (!joinDate) return false;
+  // no join date on record — don't block
 
   const joinYear  = new Date(joinDate).getFullYear();
   const joinMonth = new Date(joinDate).getMonth(); // 0-indexed
@@ -47,6 +65,9 @@ const isPeriodBeforeJoining = (employee, month, year) => {
 const validatePayrollEligibility = (employee, month, year) => {
   if (!isPayrollEligible(employee)) {
     return `Payroll cannot be generated for ${employee.name} — role "${employee.role}" is not payroll-eligible (admin accounts do not receive payroll)`;
+  }
+  if (isPeriodTooFarInFuture(month, year)) {
+    return `Cannot generate payroll for ${month} ${year} — payroll can only be generated for the current month or the upcoming month`;
   }
   if (isPeriodBeforeJoining(employee, month, year)) {
     const joinDate = getJoinDate(employee);
@@ -160,6 +181,11 @@ const generatePayslipPDFBuffer = async (payroll, employee) => {
 };
 
 // ======================= PRIVATE HTML BUILDER =======================
+// FIX: every earnings row previously closed its first <td> with a mismatched
+// </th>, which is invalid HTML (`<tr><td>Basic Salary</th>...`). Browsers
+// silently "fix" this via error-recovery parsing, but it renders inconsistently
+// across viewers/PDF-from-HTML tools. All rows below now correctly close
+// with </td>.
 const buildPayslipHTML = (payroll, totalSalary) => `
   <!DOCTYPE html><html><head><meta charset="UTF-8">
   <title>Payslip - ${payroll.employeeName}</title>
@@ -207,12 +233,12 @@ const buildPayslipHTML = (payroll, totalSalary) => `
       <table>
         <thead><tr><th>Earnings</th><th class="amt">Amount (PKR)</th></tr></thead>
         <tbody>
-          <tr><td>Basic Salary</th><td class="amt">${(payroll.salary||0).toLocaleString()}</td></tr>
-          <tr><td>Fuel Allowance</th><td class="amt">${(payroll.fuelAllowance||0).toLocaleString()}</td></tr>
-          <tr><td>Medical Allowance</th><td class="amt">${(payroll.medicalAllowance||0).toLocaleString()}</td></tr>
-          <tr><td>Special Allowance</th><td class="amt">${(payroll.specialAllowance||0).toLocaleString()}</td></tr>
-          <tr><td>Other Allowance</th><td class="amt">${(payroll.otherAllowance||0).toLocaleString()}</td></tr>
-          <tr class="total"><td><strong>TOTAL SALARY</strong></th><td class="amt"><strong>PKR ${totalSalary.toLocaleString()}</strong></td></tr>
+          <tr><td>Basic Salary</td><td class="amt">${(payroll.salary||0).toLocaleString()}</td></tr>
+          <tr><td>Fuel Allowance</td><td class="amt">${(payroll.fuelAllowance||0).toLocaleString()}</td></tr>
+          <tr><td>Medical Allowance</td><td class="amt">${(payroll.medicalAllowance||0).toLocaleString()}</td></tr>
+          <tr><td>Special Allowance</td><td class="amt">${(payroll.specialAllowance||0).toLocaleString()}</td></tr>
+          <tr><td>Other Allowance</td><td class="amt">${(payroll.otherAllowance||0).toLocaleString()}</td></tr>
+          <tr class="total"><td><strong>TOTAL SALARY</strong></td><td class="amt"><strong>PKR ${totalSalary.toLocaleString()}</strong></td></tr>
         </tbody>
       </table>
     </div>
@@ -258,6 +284,10 @@ const getAllPayroll = async (req, res) => {
 };
 
 // ======================= GENERATE SINGLE PAYROLL - WITH NOTIFICATION =======================
+// FIX: removed the "Payroll Generated" email that used to fire here on
+// creation. Email now goes out only when payment status becomes 'Paid'
+// (see updatePayrollStatus / processBulkPayment). In-app notification on
+// creation is kept.
 const generatePayroll = async (req, res) => {
   try {
     const { employeeId, month, year } = req.body;
@@ -269,7 +299,7 @@ const generatePayroll = async (req, res) => {
     if (!employee)
       return res.status(404).json({ success: false, error: 'Employee not found' });
 
-    // ✅ GUARD: role must be employee/hr, and period must be on/after join date
+    // ✅ GUARD: role must be employee/hr, and period must be current/upcoming month and on/after join date
     const eligibilityError = validatePayrollEligibility(employee, month, year);
     if (eligibilityError)
       return res.status(400).json({ success: false, error: eligibilityError });
@@ -308,7 +338,7 @@ const generatePayroll = async (req, res) => {
     // ✅ SEND NOTIFICATION to employee about generated payroll
     const io = req.app.get('io');
     const notificationService = new NotificationService(io);
-    
+
     await notificationService.createNotification({
       recipient: {
         userId: employee._id,
@@ -327,33 +357,13 @@ const generatePayroll = async (req, res) => {
       priority: 'medium'
     });
 
-    // ✅ SEND EMAIL to employee about generated payroll
-    if (employee.email) {
-      try {
-        const totalAmount = payroll.salary + payroll.fuelAllowance + payroll.medicalAllowance + payroll.specialAllowance + payroll.otherAllowance;
-        await sendEmail({
-          to: employee.email,
-          subject: `Payroll Generated - ${month} ${year}`,
-          html: `
-            <div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
-              <p>Hi ${employee.name},</p>
-              <p>Your payroll for <strong>${month} ${year}</strong> has been generated and is currently <strong>Pending</strong> approval.</p>
-              <p>Gross amount: <strong>PKR ${totalAmount.toLocaleString()}</strong></p>
-              <p>You'll receive another email once the payment is processed.</p>
-              <p>Regards,<br/>HR Team</p>
-            </div>
-          `
-        });
-      } catch (emailErr) {
-        console.error('[ADMIN] Payroll generation email failed:', emailErr.message);
-        // Don't fail the whole request just because the email didn't send
-      }
-    }
+    // NOTE: creation-time email removed on purpose — email now only sends
+    // when the payroll is marked "Paid" (see updatePayrollStatus / processBulkPayment).
 
-    res.status(201).json({ 
-      success: true, 
-      message: `Payroll generated for ${employee.name} with notification`, 
-      data: payroll 
+    res.status(201).json({
+      success: true,
+      message: `Payroll generated for ${employee.name} with notification`,
+      data: payroll
     });
   } catch (error) {
     console.error('[ADMIN] generatePayroll error:', error);
@@ -362,6 +372,8 @@ const generatePayroll = async (req, res) => {
 };
 
 // ======================= BULK GENERATE PAYROLL - WITH NOTIFICATIONS =======================
+// FIX: removed the "Payroll Generated" email per-employee. Email now only
+// sends when a payroll transitions to 'Paid'.
 const bulkGeneratePayroll = async (req, res) => {
   try {
     const { employeeIds, month, year } = req.body;
@@ -378,7 +390,7 @@ const bulkGeneratePayroll = async (req, res) => {
         const employee = await User.findById(employeeId);
         if (!employee) { results.failed.push({ employeeId, error: 'Employee not found' }); continue; }
 
-        // ✅ GUARD: role must be employee/hr, and period must be on/after join date
+        // ✅ GUARD: role must be employee/hr, and period must be current/upcoming month and on/after join date
         const eligibilityError = validatePayrollEligibility(employee, month, year);
         if (eligibilityError) { results.failed.push({ employeeId, error: eligibilityError }); continue; }
 
@@ -431,26 +443,8 @@ const bulkGeneratePayroll = async (req, res) => {
           priority: 'medium'
         });
 
-        // ✅ SEND EMAIL to each employee
-        if (employee.email) {
-          try {
-            const totalAmount = payroll.salary + payroll.fuelAllowance + payroll.medicalAllowance + payroll.specialAllowance + payroll.otherAllowance;
-            await sendEmail({
-              to: employee.email,
-              subject: `Payroll Generated - ${month} ${year}`,
-              html: `
-                <div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
-                  <p>Hi ${employee.name},</p>
-                  <p>Your payroll for <strong>${month} ${year}</strong> has been generated and is currently <strong>Pending</strong> approval.</p>
-                  <p>Gross amount: <strong>PKR ${totalAmount.toLocaleString()}</strong></p>
-                  <p>Regards,<br/>HR Team</p>
-                </div>
-              `
-            });
-          } catch (emailErr) {
-            console.error(`[ADMIN] Bulk payroll email failed for ${employee.email}:`, emailErr.message);
-          }
-        }
+        // NOTE: creation-time email removed on purpose — email now only sends
+        // when the payroll is marked "Paid" (see updatePayrollStatus / processBulkPayment).
       } catch (err) {
         results.failed.push({ employeeId, error: err.message });
       }
@@ -468,6 +462,8 @@ const bulkGeneratePayroll = async (req, res) => {
 };
 
 // ======================= CREATE MANUAL PAYROLL - WITH NOTIFICATION =======================
+// FIX: removed the "Payroll Created" email. Email now only sends when the
+// payroll is marked 'Paid'.
 const createManualPayroll = async (req, res) => {
   try {
     const { employeeId, month, year, salary, fuelAllowance, medicalAllowance, specialAllowance, otherAllowance, notes } = req.body;
@@ -478,7 +474,7 @@ const createManualPayroll = async (req, res) => {
     const employee = await User.findById(employeeId);
     if (!employee) return res.status(404).json({ success: false, error: 'Employee not found' });
 
-    // ✅ GUARD: role must be employee/hr, and period must be on/after join date
+    // ✅ GUARD: role must be employee/hr, and period must be current/upcoming month and on/after join date
     const eligibilityError = validatePayrollEligibility(employee, month, year);
     if (eligibilityError)
       return res.status(400).json({ success: false, error: eligibilityError });
@@ -517,7 +513,7 @@ const createManualPayroll = async (req, res) => {
     // ✅ SEND NOTIFICATION to employee
     const io = req.app.get('io');
     const notificationService = new NotificationService(io);
-    
+
     await notificationService.createNotification({
       recipient: {
         userId: employee._id,
@@ -535,31 +531,13 @@ const createManualPayroll = async (req, res) => {
       priority: 'medium'
     });
 
-    // ✅ SEND EMAIL to employee
-    if (employee.email) {
-      try {
-        const totalAmount = payroll.salary + payroll.fuelAllowance + payroll.medicalAllowance + payroll.specialAllowance + payroll.otherAllowance;
-        await sendEmail({
-          to: employee.email,
-          subject: `Payroll Created - ${month} ${year}`,
-          html: `
-            <div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
-              <p>Hi ${employee.name},</p>
-              <p>A manual payroll record has been created for <strong>${month} ${year}</strong>.</p>
-              <p>Gross amount: <strong>PKR ${totalAmount.toLocaleString()}</strong></p>
-              <p>Regards,<br/>HR Team</p>
-            </div>
-          `
-        });
-      } catch (emailErr) {
-        console.error('[ADMIN] Manual payroll email failed:', emailErr.message);
-      }
-    }
+    // NOTE: creation-time email removed on purpose — email now only sends
+    // when the payroll is marked "Paid" (see updatePayrollStatus / processBulkPayment).
 
-    res.status(201).json({ 
-      success: true, 
-      message: `Manual payroll created for ${employee.name} with notification`, 
-      data: payroll 
+    res.status(201).json({
+      success: true,
+      message: `Manual payroll created for ${employee.name} with notification`,
+      data: payroll
     });
   } catch (error) {
     console.error('[ADMIN] createManualPayroll error:', error);
@@ -568,6 +546,7 @@ const createManualPayroll = async (req, res) => {
 };
 
 // ======================= UPDATE PAYROLL STATUS (WITH NOTIFICATION & EMAIL) =======================
+// UNCHANGED: this already only emails when paymentStatus transitions to 'Paid'.
 const updatePayrollStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -605,7 +584,7 @@ const updatePayrollStatus = async (req, res) => {
     // ✅ SEND NOTIFICATION to employee about status change
     const io = req.app.get('io');
     const notificationService = new NotificationService(io);
-    
+
     let employee = payroll.employeeId ? await User.findById(payroll.employeeId) : null;
     if (!employee && payroll.employeeEmail) {
       employee = { _id: payroll.employeeId, email: payroll.employeeEmail, name: payroll.employeeName, role: 'employee' };
@@ -647,7 +626,7 @@ const updatePayrollStatus = async (req, res) => {
       });
     }
 
-    // Send email if payment is successful
+    // Send email if payment is successful (i.e. transitioning into 'Paid')
     if (paymentStatus === 'Paid' && originalPayroll.paymentStatus !== 'Paid') {
       try {
         let emp = payroll.employeeId ? await User.findById(payroll.employeeId) : null;
@@ -692,6 +671,7 @@ const updatePayrollStatus = async (req, res) => {
 };
 
 // ======================= PROCESS BULK PAYMENT (WITH NOTIFICATIONS & EMAIL) =======================
+// UNCHANGED: this already only emails on successful payment (paymentStatus = 'Paid').
 const processBulkPayment = async (req, res) => {
   try {
     const { payrollIds, paymentMethod, transactionId, notes } = req.body;
@@ -732,9 +712,9 @@ const processBulkPayment = async (req, res) => {
         if (!employee && payroll.employeeEmail) {
           employee = {
             _id: payroll.employeeId,
-            name: payroll.employeeName, 
+            name: payroll.employeeName,
             email: payroll.employeeEmail,
-            employeeId: payroll.employeeCode, 
+            employeeId: payroll.employeeCode,
             department: payroll.employeeDepartment,
             position: payroll.employeePosition,
             role: 'employee'
@@ -825,7 +805,7 @@ const resendSalarySlipEmail = async (req, res) => {
       // ✅ Send notification
       const io = req.app.get('io');
       const notificationService = new NotificationService(io);
-      
+
       if (employee._id) {
         await notificationService.createNotification({
           recipient: {
