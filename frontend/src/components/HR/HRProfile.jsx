@@ -629,10 +629,18 @@ const HRProfile = () => {
   const Input = ({ label, name, value, onChange, disabled = false, required = false, type = 'text', placeholder }) => (
     <div className="space-y-1.5">
       <label className="block text-xs font-medium text-gray-700">{label}{required && <span className="text-red-500 ml-0.5">*</span>}{disabled && <span className="text-xs text-gray-400 ml-2">(Read-only)</span>}</label>
-      <input type={type} name={name} value={value || ''} onChange={onChange} disabled={disabled} placeholder={placeholder}
+      <input 
+        type={type} 
+        name={name} 
+        value={value || ''} 
+        onChange={onChange} 
+        disabled={disabled} 
+        placeholder={placeholder}
         className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors ${
           disabled ? 'bg-gray-50 border-gray-200 text-gray-500 cursor-not-allowed' : 'border-gray-200 hover:border-gray-300'
-        }`} />
+        }`}
+        style={{ wordBreak: 'break-all' }}
+      />
     </div>
   );
 
@@ -727,7 +735,7 @@ const HRProfile = () => {
                 <FaCamera className="w-4 h-4" />
               </button>
             </div>
-            <div className="flex-1 text-center md:text-left">
+            <div className="flex-1 text-center md:text-left min-w-0">
               <h1 className="text-3xl font-bold text-gray-900">{profile.name || 'HR Manager'}</h1>
               <p className="text-xl text-indigo-600 font-semibold mt-1">
                 {profile.position || 'HR Manager'} • {profile.department || 'Human Resources'}
@@ -735,19 +743,19 @@ const HRProfile = () => {
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-gray-50 p-3 rounded-lg">
                   <p className="text-sm text-gray-600">Employee ID</p>
-                  <p className="font-medium text-gray-900">{profile.employeeId || 'N/A'}</p>
+                  <p className="font-medium text-gray-900 break-all">{profile.employeeId || 'N/A'}</p>
                 </div>
                 <div className="bg-gray-50 p-3 rounded-lg">
                   <p className="text-sm text-gray-600">Email</p>
-                  <p className="font-medium text-gray-900">{profile.email || 'N/A'}</p>
+                  <p className="font-medium text-gray-900 break-all text-sm">{profile.email || 'N/A'}</p>
                 </div>
                 <div className="bg-gray-50 p-3 rounded-lg">
                   <p className="text-sm text-gray-600">Phone</p>
-                  <p className="font-medium text-gray-900">{profile.phone || 'N/A'}</p>
+                  <p className="font-medium text-gray-900 break-all">{profile.phone || 'N/A'}</p>
                 </div>
                 <div className="bg-gray-50 p-3 rounded-lg">
                   <p className="text-sm text-gray-600">HR Since</p>
-                  <p className="font-medium text-gray-900">{profile.joiningDate || 'N/A'}</p>
+                  <p className="font-medium text-gray-900 break-all">{profile.joiningDate || 'N/A'}</p>
                 </div>
               </div>
             </div>
