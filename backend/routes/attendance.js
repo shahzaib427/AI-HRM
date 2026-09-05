@@ -36,6 +36,11 @@ const {
   validateGPSEndpoint,
   aiServiceHealth,
 
+  // ── Face CRUD (new) ────────────────────────────────────────────────────────
+  listRegisteredFaces,
+  getFaceStatus,
+  deleteFace,
+
   // ── Test ───────────────────────────────────────────────────────────────────
   testEndpoint,
 } = require('../controllers/attendanceController');
@@ -75,8 +80,15 @@ router.put('/clear-stuck-checkout/:id',   protect, authorize('admin', 'hr'), cle
 // All attendance records  (query: page, limit, employeeId, dateFrom, dateTo, status, search)
 router.get('/', protect, authorize('admin', 'hr'), getAllAttendance);
 
-// Register an employee face embedding
-router.post('/ai/register-face', protect, authorize('admin', 'hr'), registerFace);
+// ── Face registration CRUD ──────────────────────────────────────────────────
+// Create / Update (re-registering overwrites the previous embedding)
+router.post('/ai/register-face',        protect, authorize('admin', 'hr'), registerFace);
+// Read — everyone currently registered
+router.get('/ai/faces',                 protect, authorize('admin', 'hr'), listRegisteredFaces);
+// Read — status for one employee (cross-checked against the AI service)
+router.get('/ai/faces/:employeeId',     protect, authorize('admin', 'hr'), getFaceStatus);
+// Delete — unregister a face
+router.delete('/ai/faces/:employeeId',  protect, authorize('admin', 'hr'), deleteFace);
 
 // Check whether the Python AI service is reachable
 router.get('/ai/service-health', protect, authorize('admin', 'hr'), aiServiceHealth);
@@ -90,7 +102,7 @@ router.get('/reports',                    protect, authorize('admin', 'hr'), get
 router.post('/send-biweekly-reports',     protect, authorize('admin', 'hr'), sendBiWeeklyReports);
 
 // ============================================================================
-// FULL CRUD
+// FULL CRUD (attendance records)
 // ============================================================================
 
 // Bulk delete - MUST come before /:id so it isn't shadowed

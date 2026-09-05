@@ -94,6 +94,21 @@ function validateGPS(latitude, longitude) {
       : `Out of office range — ${Math.round(distance)} m away (max ${MAX_DISTANCE_M} m)`
   };
 } 
+async function mapWithConcurrency(items, limit, iteratee) {
+  const results = new Array(items.length);
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < items.length) {
+      const i = cursor++;
+      results[i] = await iteratee(items[i], i);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(limit, items.length) }, worker);
+  await Promise.all(workers);
+  return results;
+}
 
 /**
  * Call Python AI service to verify a face.
@@ -649,13 +664,13 @@ exports.registerFace = async (req, res) => {
   try {
     const { employeeId, images } = req.body;
     const requesterRole = req.user?.role;
-    const requesterId    = req.user?._id || req.user?.id;
-
+    const requesterId = req.user?._id || req.user?.id;
+ 
     console.log('📸 Face Registration Request:');
     console.log('   Requested by:', requesterId, `(${requesterRole})`);
     console.log('   Employee ID:', employeeId);
     console.log('   Images count:', images?.length);
-
+ 
     if (!employeeId) {
       return res.status(400).json({ success: false, message: 'employeeId is required' });
     }
@@ -665,74 +680,76 @@ exports.registerFace = async (req, res) => {
     if (images.length > 20) {
       return res.status(400).json({ success: false, message: `Maximum 20 images allowed, but received ${images.length}` });
     }
-
-    // Need the target's role to enforce the HR rule below
+ 
     const employee = await User.findById(employeeId).select('name email role');
     if (!employee) {
       return res.status(404).json({ success: false, message: 'Employee not found' });
     }
-
+ 
     // 🔒 Only an Admin can register a face for an HR account.
-    // This also blocks an HR user from registering their own face,
-    // since they themselves carry the 'hr' role.
     if (employee.role === 'hr' && requesterRole !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Only an Admin can register a face for an HR account. Please ask an Admin to do this.'
       });
     }
-
-    let successfulImages = 0;
-    let failedImages = [];
-    let transientFailureCount = 0; // NEW: tracks failures caused by the AI service, not the photo itself
+ 
+    let fatalError = null; // set when we hit an error that should abort the whole request
     let finalEmbeddingDim = null;
-
-    for (let i = 0; i < images.length; i++) {
+ 
+    // Process up to 3 photos at once instead of strictly one-by-one.
+    const perImageResults = await mapWithConcurrency(images, 3, async (img, i) => {
+      if (fatalError) return { skipped: true };
       try {
-        const aiResult = await callAIRegister(String(employeeId), images[i]);
+        const aiResult = await callAIRegister(String(employeeId), img);
         if (aiResult.success) {
-          successfulImages++;
           finalEmbeddingDim = aiResult.embeddingDim;
-        } else {
-          failedImages.push({ index: i + 1, error: aiResult.error || 'Registration failed' });
+          return { ok: true };
         }
+        return { ok: false, index: i + 1, error: aiResult.error || 'Registration failed' };
       } catch (err) {
         const status = err.response?.status;
         const message = err.response?.data?.error || err.message;
         console.error(`   ❌ Image ${i + 1} failed — status ${status}:`, message);
-
+ 
         if (status === 401) {
-          return res.status(502).json({ success: false, message: 'AI service auth failed — check INTERNAL_SERVICE_TOKEN' });
+          fatalError = { code: 502, message: 'AI service auth failed — check INTERNAL_SERVICE_TOKEN' };
+          return { ok: false, index: i + 1, error: message, fatal: true };
+        }
+        if (!err.response) {
+          fatalError = { code: 503, message: 'AI service is unreachable — is it running?' };
+          return { ok: false, index: i + 1, error: message, fatal: true };
         }
         if (status === 422) {
-          // Genuine "no face detected" style failure from the AI model itself
-          failedImages.push({ index: i + 1, error: message || 'No face detected in image' });
-        } else if ([429, 502, 503].includes(status)) {
-          // FIXED: previously fell into the generic else-branch below and got
-          // reported to the frontend as if it were a face-detection problem.
-          // callAIRegister already retried this a couple of times before
-          // giving up — this means the AI service itself was unavailable,
-          // not that the photo was bad.
-          transientFailureCount++;
-          failedImages.push({
+          return { ok: false, index: i + 1, error: message || 'No face detected in image' };
+        }
+        if ([429, 502, 503].includes(status)) {
+          // callAIRegister already retried internally — this means the AI
+          // service itself was unavailable, not that the photo was bad.
+          return {
+            ok: false,
             index: i + 1,
             error: `AI service temporarily unavailable (status ${status}) — not a face-detection issue`,
             transient: true
-          });
-        } else if (!err.response) {
-          return res.status(503).json({ success: false, message: 'AI service is unreachable — is it running?' });
-        } else {
-          failedImages.push({ index: i + 1, error: message });
+          };
         }
+        return { ok: false, index: i + 1, error: message };
       }
+    });
+ 
+    if (fatalError) {
+      return res.status(fatalError.code).json({ success: false, message: fatalError.message });
     }
-
+ 
+    const completed = perImageResults.filter((r) => !r.skipped);
+    const successfulImages = completed.filter((r) => r.ok).length;
+    const failedImages = completed.filter((r) => !r.ok).map(({ ok, ...rest }) => rest);
+    const transientFailureCount = failedImages.filter((f) => f.transient).length;
+ 
     const successRate = successfulImages / images.length;
     const MIN_SUCCESS_RATE = 0.6;
-
+ 
     if (successfulImages === 0) {
-      // NEW: if every failure was transient (AI service issue), say so explicitly
-      // instead of always defaulting to a face-detection message.
       const allTransient = transientFailureCount === images.length;
       return res.status(422).json({
         success: false,
@@ -743,18 +760,28 @@ exports.registerFace = async (req, res) => {
       });
     }
     if (successRate < MIN_SUCCESS_RATE) {
-      return res.status(422).json({ success: false, message: `Only ${successfulImages}/${images.length} images succeeded (need ${Math.ceil(MIN_SUCCESS_RATE * images.length)} minimum)`, details: { successfulImages, failedImages, totalAttempted: images.length } });
+      return res.status(422).json({
+        success: false,
+        message: `Only ${successfulImages}/${images.length} images succeeded (need ${Math.ceil(MIN_SUCCESS_RATE * images.length)} minimum)`,
+        details: { successfulImages, failedImages, totalAttempted: images.length }
+      });
     }
-
-    await User.findByIdAndUpdate(employeeId, { hasFaceRegistered: true, faceRegistrationDate: new Date(), registeredImageCount: successfulImages });
-
+ 
+    await User.findByIdAndUpdate(employeeId, {
+      hasFaceRegistered: true,
+      faceRegistrationDate: new Date(),
+      registeredImageCount: successfulImages
+    });
+ 
     return res.json({
       success: true,
       message: `Face registered for ${employee.name} using ${successfulImages}/${images.length} photos`,
-      employeeId, embeddingDim: finalEmbeddingDim, successfulImages,
+      employeeId,
+      embeddingDim: finalEmbeddingDim,
+      successfulImages,
       failedImages: failedImages.length > 0 ? failedImages : undefined
     });
-
+ 
   } catch (err) {
     console.error('❌ Register face error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -763,6 +790,105 @@ exports.registerFace = async (req, res) => {
 /**
  * GET /attendance/ai/gps-validate?lat=xx&lng=yy
  */
+
+exports.listRegisteredFaces = async (req, res) => {
+  try {
+    const employees = await User.find({ hasFaceRegistered: true })
+      .select('name email employeeId department faceRegistrationDate registeredImageCount');
+    res.json({ success: true, count: employees.length, data: employees });
+  } catch (error) {
+    console.error('❌ List registered faces error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+ 
+/**
+ * GET /attendance/ai/faces/:employeeId
+ * READ: registration status for one employee. Cross-checks Mongo against
+ * the AI service so a drift between the two (e.g. a manual DB edit) is
+ * visible rather than silently trusted.
+ */
+exports.getFaceStatus = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    const employee = await User.findById(employeeId)
+      .select('name employeeId hasFaceRegistered faceRegistrationDate registeredImageCount');
+    if (!employee) {
+      return res.status(404).json({ success: false, message: 'Employee not found' });
+    }
+ 
+    let aiStatus = null;
+    try {
+      const { data } = await axios.get(`${AI_SERVICE_URL}/ai/face/status/${employeeId}`, {
+        headers: { Authorization: `Bearer ${INTERNAL_TOKEN}` },
+        timeout: 8_000
+      });
+      aiStatus = data;
+    } catch (err) {
+      console.warn('⚠️ Could not reach AI service for status cross-check:', err.message);
+    }
+ 
+    res.json({
+      success: true,
+      employee,
+      aiService: aiStatus, // null if the AI service couldn't be reached — not fatal
+      inSync: aiStatus ? employee.hasFaceRegistered === !!aiStatus.registered : null
+    });
+  } catch (error) {
+    console.error('❌ Get face status error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+ 
+/**
+ * DELETE /attendance/ai/faces/:employeeId
+ * DELETE: removes the registered face from the AI service AND clears the
+ * Mongo flags, so the two stores can't drift out of sync.
+ */
+exports.deleteFace = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    const employee = await User.findById(employeeId).select('name role');
+    if (!employee) {
+      return res.status(404).json({ success: false, message: 'Employee not found' });
+    }
+ 
+    const requesterRole = req.user?.role;
+    if (employee.role === 'hr' && requesterRole !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only an Admin can remove a face for an HR account.'
+      });
+    }
+ 
+    try {
+      await axios.delete(`${AI_SERVICE_URL}/ai/face/delete/${employeeId}`, {
+        headers: { Authorization: `Bearer ${INTERNAL_TOKEN}` },
+        timeout: 10_000
+      });
+    } catch (err) {
+      // 404 from the AI service just means it was already gone there —
+      // still proceed to clear the Mongo flags so the two stay in sync.
+      if (err.response?.status !== 404) {
+        return res.status(502).json({
+          success: false,
+          message: `Could not remove face from AI service: ${err.response?.data?.error || err.message}`
+        });
+      }
+    }
+ 
+    await User.findByIdAndUpdate(employeeId, {
+      hasFaceRegistered: false,
+      faceRegistrationDate: undefined,
+      registeredImageCount: 0
+    });
+ 
+    res.json({ success: true, message: `Face registration removed for ${employee.name}` });
+  } catch (error) {
+    console.error('❌ Delete face error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
 exports.validateGPSEndpoint = (req, res) => {
   const { lat, lng } = req.query;
   const result = validateGPS(lat, lng);
