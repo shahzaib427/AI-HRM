@@ -4,7 +4,7 @@ import {
   FaBrain, FaCamera, FaDownload, FaSpinner, FaCheckCircle,
   FaTimesCircle, FaUser, FaSearch, FaImages, FaRedo, FaInfoCircle,
   FaUserPlus, FaUpload, FaSmile, FaRegSmile, FaUserCheck, FaShieldAlt,
-  FaChevronDown, FaExclamationTriangle
+  FaChevronDown, FaExclamationTriangle, FaTrash
 } from 'react-icons/fa';
 
 // Badge Component - Matching Payroll style
@@ -69,6 +69,11 @@ const RegisterFace = () => {
 
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
+
+  // Unregister (delete) support — tracks which employee row is mid-delete
+  // so we can show a per-row spinner instead of a global one.
+  const [deletingId, setDeletingId] = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -278,6 +283,32 @@ const RegisterFace = () => {
     if (fileRef.current) fileRef.current.value = '';
   };
 
+  // ── Unregister (DELETE) a previously registered face ─────────────────
+  // Kept separate from selection so clicking it in the dropdown list
+  // doesn't also select that employee for a new registration.
+  const handleDeleteFace = async (employee, e) => {
+    e.stopPropagation();
+    if (!window.confirm(`Remove the registered face for ${employee.name}? They will need to be re-registered before using AI check-in/out again.`)) {
+      return;
+    }
+    setDeleteError(null);
+    setDeletingId(employee._id);
+    try {
+      await axiosInstance.delete(`/attendance/ai/faces/${employee._id}`);
+      setAllEmployees(prev => prev.map(e2 =>
+        e2._id === employee._id ? { ...e2, hasFaceRegistered: false } : e2
+      ));
+      if (selected?._id === employee._id) {
+        setSelected(prev => (prev ? { ...prev, hasFaceRegistered: false } : prev));
+      }
+    } catch (err) {
+      console.error('❌ Failed to remove face:', err);
+      setDeleteError(err.response?.data?.message || 'Failed to remove the registered face. Please try again.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!selected || activeImages.length === 0) {
       alert('Please select an employee and capture/upload photos');
@@ -290,16 +321,25 @@ const RegisterFace = () => {
     setResult(null);
 
     try {
-      const { data } = await axiosInstance.post('/attendance/ai/register-face', {
-        employeeId: selected._id,
-        images: imagesToSend,
-      });
+      // Registration can take a while the first time the AI service has to
+      // wake up from a cold start (each photo may retry a couple of times
+      // server-side). A short default timeout here would abort the request
+      // client-side even though the backend eventually succeeds — that's
+      // what made this look like "sometimes it just doesn't work".
+      const { data } = await axiosInstance.post(
+        '/attendance/ai/register-face',
+        { employeeId: selected._id, images: imagesToSend },
+        { timeout: 120000 }
+      );
 
       if (data.success) {
         setResult({
           success: true,
           message: data.message || `Face registered for ${selected.name}`
         });
+        setAllEmployees(prev => prev.map(e2 =>
+          e2._id === selected._id ? { ...e2, hasFaceRegistered: true } : e2
+        ));
         setCapturedImages([]);
         setUploadedImages([]);
         if (fileRef.current) fileRef.current.value = '';
@@ -316,7 +356,12 @@ const RegisterFace = () => {
       const status = err.response?.status;
       const errorMsg = err.response?.data?.message || err.response?.data?.error || err.message;
 
-      if (status === 422) {
+      if (err.code === 'ECONNABORTED') {
+        setResult({
+          success: false,
+          message: 'The AI service is taking longer than usual to respond (likely waking up from being idle). Please wait a minute and try again.'
+        });
+      } else if (status === 422) {
         setResult({
           success: false,
           message: 'No face detected in one or more photos. Please ensure:\n• Face is clearly visible\n• Good lighting\n• No glasses glare\n• Face is facing the camera'
@@ -492,6 +537,13 @@ const RegisterFace = () => {
           </div>
         </div>
 
+        {deleteError && (
+          <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-3 flex items-center gap-3">
+            <FaTimesCircle className="text-red-500 flex-shrink-0" />
+            <p className="text-sm text-red-700">{deleteError}</p>
+          </div>
+        )}
+
         {/* Step 1: Select Employee */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
@@ -513,14 +565,30 @@ const RegisterFace = () => {
                   <div>
                     <p className="text-base font-semibold text-gray-800">{selected.name}</p>
                     <p className="text-sm text-gray-500">{selected.employeeId} · {selected.department}</p>
+                    {selected.hasFaceRegistered && (
+                      <p className="text-xs text-emerald-600 mt-0.5">Already registered — submitting will overwrite the existing face.</p>
+                    )}
                   </div>
                 </div>
-                <button 
-                  onClick={resetAll} 
-                  className="flex items-center gap-1.5 px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium"
-                >
-                  <FaRedo className="text-xs" /> Change
-                </button>
+                <div className="flex items-center gap-2">
+                  {selected.hasFaceRegistered && (
+                    <button
+                      onClick={(e) => handleDeleteFace(selected, e)}
+                      disabled={deletingId === selected._id}
+                      className="flex items-center gap-1.5 px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium disabled:opacity-50"
+                    >
+                      {deletingId === selected._id
+                        ? <FaSpinner className="animate-spin text-xs" />
+                        : <FaTrash className="text-xs" />} Unregister
+                    </button>
+                  )}
+                  <button 
+                    onClick={resetAll} 
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors font-medium"
+                  >
+                    <FaRedo className="text-xs" /> Change
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="relative" ref={dropdownRef}>
@@ -580,29 +648,45 @@ const RegisterFace = () => {
                       </div>
                     ) : employees.length > 0 ? (
                       employees.map((emp, idx) => (
-                        <button
+                        <div
                           key={emp._id}
-                          onClick={() => handleSelectEmployee(emp)}
                           onMouseEnter={() => setHighlightedIndex(idx)}
                           className={`w-full flex items-center gap-4 px-5 py-3.5 transition-colors text-left border-b border-gray-50 last:border-0 ${
                             highlightedIndex === idx ? 'bg-indigo-50' : 'hover:bg-gray-50'
                           }`}
                         >
-                          <div className="w-11 h-11 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
-                            {emp.profilePicture ? (
-                              <img src={emp.profilePicture} alt={emp.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <FaUser className="text-gray-400" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-800 truncate">{emp.name}</p>
-                            <p className="text-xs text-gray-400 truncate">{emp.employeeId} · {emp.department || 'No department'}</p>
-                          </div>
+                          <button
+                            onClick={() => handleSelectEmployee(emp)}
+                            className="flex items-center gap-4 flex-1 min-w-0 text-left"
+                          >
+                            <div className="w-11 h-11 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                              {emp.profilePicture ? (
+                                <img src={emp.profilePicture} alt={emp.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <FaUser className="text-gray-400" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-800 truncate">{emp.name}</p>
+                              <p className="text-xs text-gray-400 truncate">{emp.employeeId} · {emp.department || 'No department'}</p>
+                            </div>
+                          </button>
                           <Badge variant={emp.hasFaceRegistered ? 'success' : 'default'}>
                             {emp.hasFaceRegistered ? 'Registered' : 'Not Registered'}
                           </Badge>
-                        </button>
+                          {emp.hasFaceRegistered && (
+                            <button
+                              onClick={(e) => handleDeleteFace(emp, e)}
+                              disabled={deletingId === emp._id}
+                              title="Unregister face"
+                              className="ml-1 p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                            >
+                              {deletingId === emp._id
+                                ? <FaSpinner className="animate-spin text-xs" />
+                                : <FaTrash className="text-xs" />}
+                            </button>
+                          )}
+                        </div>
                       ))
                     ) : (
                       <div className="p-6 text-center">
@@ -882,6 +966,12 @@ const RegisterFace = () => {
                   </>
                 )}
               </button>
+
+              {submitting && (
+                <p className="text-center text-xs text-gray-400">
+                  This can take up to a minute or two the first time — the AI service may need to wake up.
+                </p>
+              )}
 
               {activeImages.length > 0 && activeImages.length < REQUIRED_PHOTOS && (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
