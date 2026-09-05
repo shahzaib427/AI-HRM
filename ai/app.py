@@ -63,6 +63,7 @@ from routes.career_chat_routes import career_chat_bp
 # Also import _get_face_app so we can warm it up in a background
 # thread at startup (same pattern as boat_module below).
 from routes.face_routes import face_bp, _get_face_app
+from models.face_embedding import FaceEmbedding
 from routes.ats_routes import ats_bp
 
 

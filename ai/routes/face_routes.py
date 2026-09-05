@@ -1,20 +1,44 @@
-﻿import os
+﻿"""
+Replaces: <flask-ai-service>/routes/face_routes.py
+
+WHAT CHANGED AND WHY
+---------------------
+1. Embeddings now live in the database (models/face_embedding.py) instead
+   of an in-process dict + local JSON file. Every request reads/writes the
+   same row, so results are consistent no matter which gunicorn worker
+   handles the request and no matter how many times the service restarts.
+   This is the fix for the "sometimes works, sometimes doesn't" behavior.
+
+2. Full CRUD, matching what the Node backend and React UI now expect:
+     POST   /ai/face/register        create OR update (upsert) a face
+     POST   /ai/face/verify          read + compare (unchanged behavior)
+     GET    /ai/face/status/<id>     read: is this employee registered?
+     GET    /ai/face/list            read: all registered employee ids
+     DELETE /ai/face/delete/<id>     delete a registered face
+
+3. Threshold comment now matches the actual Node-side gate, so the two
+   services don't silently drift out of sync again.
+"""
+
+import os
 import io
+import time
 import base64
-import json
 import logging
 import numpy as np
 from PIL import Image
 from flask import Blueprint, request, jsonify
 
+from models import db
+from models.face_embedding import FaceEmbedding
+
 logger = logging.getLogger("face_routes")
 face_bp = Blueprint("face", __name__, url_prefix="/ai/face")
 INTERNAL_TOKEN = os.environ.get("INTERNAL_SERVICE_TOKEN", "internal-secret-change-me")
 
-EMBEDDINGS_FILE = os.path.join(os.path.dirname(__file__), "embeddings.json")
-
-# ── InsightFace model (loaded once at startup) ───────────────────
+# ── InsightFace model (loaded once per process, warmed up at startup) ────
 _face_app = None
+
 
 def _get_face_app():
     global _face_app
@@ -29,31 +53,12 @@ def _get_face_app():
         logger.info("InsightFace model loaded (buffalo_sc)")
     return _face_app
 
-# ── Persistent storage ───────────────────────────────────────────
-def _load_embeddings():
-    if os.path.exists(EMBEDDINGS_FILE):
-        try:
-            with open(EMBEDDINGS_FILE, "r") as f:
-                data = json.load(f)
-            return {k: np.array(v, dtype=np.float32) for k, v in data.items()}
-        except Exception as e:
-            logger.error(f"Failed to load embeddings: {e}")
-    return {}
 
-def _save_embeddings(embeddings):
-    try:
-        with open(EMBEDDINGS_FILE, "w") as f:
-            json.dump({k: v.tolist() for k, v in embeddings.items()}, f)
-    except Exception as e:
-        logger.error(f"Failed to save embeddings: {e}")
-
-_embeddings = _load_embeddings()
-logger.info(f"Loaded {len(_embeddings)} face embeddings from disk")
-
-# ── Helpers ──────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────
 def _auth_ok():
     auth = request.headers.get("Authorization", "")
     return auth == f"Bearer {INTERNAL_TOKEN}"
+
 
 def _decode_img_array(b64: str) -> np.ndarray:
     """Decode base64 image → uint8 RGB numpy array."""
@@ -68,6 +73,7 @@ def _decode_img_array(b64: str) -> np.ndarray:
         scale = MAX_SIZE / max(w, h)
         pil_img = pil_img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
     return np.array(pil_img, dtype=np.uint8)
+
 
 def _get_face_embedding(b64: str) -> np.ndarray:
     """
@@ -88,15 +94,15 @@ def _get_face_embedding(b64: str) -> np.ndarray:
     if not faces:
         raise ValueError("No face detected — ensure face is clearly visible and well-lit")
 
-    face = max(faces, key=lambda f: (f.bbox[2]-f.bbox[0]) * (f.bbox[3]-f.bbox[1]))
+    face = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
 
     embedding = np.array(face.embedding, dtype=np.float32)
     norm = np.linalg.norm(embedding)
     if norm > 0:
         embedding = embedding / norm
 
-    logger.debug(f"ArcFace embedding dim={len(embedding)}")
     return embedding
+
 
 def _cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
     na, nb = np.linalg.norm(a), np.linalg.norm(b)
@@ -104,17 +110,25 @@ def _cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
         return 0.0
     return float(np.dot(a, b) / (na * nb))
 
+
+def _get_embedding_row(emp_id: str):
+    """Always hits the DB — this is the fix for the multi-worker bug.
+    No per-process cache means no worker can ever have stale/missing data."""
+    return FaceEmbedding.query.filter_by(employee_id=emp_id).first()
+
+
 # ── Routes ───────────────────────────────────────────────────────
 
 @face_bp.route("/register", methods=["POST"])
 def register_face():
+    """CREATE or UPDATE (upsert) an employee's registered face."""
     if not _auth_ok():
         return jsonify({"success": False, "error": "Unauthorized"}), 401
 
-    body   = request.get_json(silent=True) or {}
-    emp_id = body.get("employeeId", "").strip()
+    body = request.get_json(silent=True) or {}
+    emp_id = (body.get("employeeId") or "").strip()
     images = body.get("images", [])
-    image  = body.get("image", "").strip()
+    image = (body.get("image") or "").strip()
 
     if not emp_id:
         return jsonify({"success": False, "error": "employeeId is required"}), 400
@@ -123,14 +137,14 @@ def register_face():
     if not all_images:
         return jsonify({"success": False, "error": "image is required"}), 400
 
+    started = time.time()
     try:
         embeddings = []
         for img in all_images:
             try:
-                emb = _get_face_embedding(img)
-                embeddings.append(emb)
+                embeddings.append(_get_face_embedding(img))
             except ValueError as e:
-                logger.warning(f"Skipping image: {e}")
+                logger.warning(f"[{emp_id}] skipping image: {e}")
 
         if not embeddings:
             return jsonify({"success": False, "error": "No face detected in any provided image"}), 422
@@ -140,92 +154,115 @@ def register_face():
         if norm > 0:
             avg_embedding = avg_embedding / norm
 
-        _embeddings[emp_id] = avg_embedding.astype(np.float32)
-        _save_embeddings(_embeddings)
-        logger.info(f"Face registered ({len(embeddings)} photos averaged): {emp_id}")
+        row = _get_embedding_row(emp_id)
+        if row is None:
+            row = FaceEmbedding(employee_id=emp_id)
+            db.session.add(row)
+
+        row.embedding = avg_embedding.astype(np.float32).tolist()
+        row.embedding_dim = int(len(avg_embedding))
+        row.photo_count = len(embeddings)
+        db.session.commit()
+
+        logger.info(
+            f"Face registered for {emp_id}: {len(embeddings)}/{len(all_images)} photos "
+            f"used, {time.time() - started:.1f}s"
+        )
         return jsonify({
-            "success":      True,
-            "employeeId":   emp_id,
-            "embeddingDim": int(len(avg_embedding)),
-            "photoCount":   len(embeddings),
-            "message":      f"Face registered successfully ({len(embeddings)} photos)"
+            "success": True,
+            "employeeId": emp_id,
+            "embeddingDim": row.embedding_dim,
+            "photoCount": row.photo_count,
+            "message": f"Face registered successfully ({row.photo_count} photos)"
         })
     except Exception as e:
-        logger.exception("Registration error")
+        db.session.rollback()
+        logger.exception(f"[{emp_id}] registration error")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 @face_bp.route("/verify", methods=["POST"])
 def verify_face():
+    """READ + compare: is this live photo the registered employee?"""
     if not _auth_ok():
         return jsonify({"success": False, "error": "Unauthorized"}), 401
 
-    body   = request.get_json(silent=True) or {}
-    emp_id = body.get("employeeId", "").strip()
-    image  = body.get("image", "").strip()
+    body = request.get_json(silent=True) or {}
+    emp_id = (body.get("employeeId") or "").strip()
+    image = (body.get("image") or "").strip()
 
     if not emp_id:
         return jsonify({"success": False, "error": "employeeId is required"}), 400
     if not image:
         return jsonify({"success": False, "error": "image is required"}), 400
 
-    stored = _embeddings.get(emp_id)
-    if stored is None:
+    row = _get_embedding_row(emp_id)
+    if row is None:
         return jsonify({
             "success": False, "match": False,
             "error": f"No registered face for employee: {emp_id}"
         }), 404
 
     try:
+        stored = np.array(row.embedding, dtype=np.float32)
         live_emb = _get_face_embedding(image)
         similarity = _cosine_sim(stored, live_emb)
 
-        # ── Threshold ────────────────────────────────────────────────
-        # Changed from 0.50 → 0.45 so the frontend 70% confidence
-        # requirement (MIN_CONFIDENCE=0.70 in Node backend) stays the
-        # effective gate.  The Python threshold is now a lower safety
-        # floor; the Node side rejects anything below 0.70.
-        #
-        # ArcFace cosine similarity (L2-normalised):
-        #   same person  →  0.85 – 0.99   ✅
-        #   diff person  →  0.40 – 0.65   ❌
-        # ────────────────────────────────────────────────────────────
-        THRESHOLD = 0.45  # ← lowered; Node backend enforces 0.70
-        is_match  = similarity >= THRESHOLD
+        # Threshold kept intentionally low here — the Node backend applies
+        # the real gate (FACE_MIN_CONFIDENCE, currently 0.65). Keep these
+        # two in sync if either changes; this one is just a safety floor.
+        THRESHOLD = 0.45
+        is_match = similarity >= THRESHOLD
 
         logger.info(f"Verify [{emp_id}]: sim={similarity:.4f} match={is_match}")
         return jsonify({
-            "success":    True,
-            "match":      is_match,
+            "success": True,
+            "match": is_match,
             "confidence": round(float(similarity), 4),
             "employeeId": emp_id,
-            "threshold":  THRESHOLD
+            "threshold": THRESHOLD
         })
-
     except ValueError as e:
         return jsonify({"success": False, "match": False, "error": str(e)}), 422
     except Exception as e:
-        logger.exception("Verification error")
+        logger.exception(f"[{emp_id}] verification error")
         return jsonify({"success": False, "match": False, "error": str(e)}), 500
+
+
+@face_bp.route("/status/<employee_id>", methods=["GET"])
+def face_status(employee_id):
+    """READ: registration status + metadata for one employee."""
+    if not _auth_ok():
+        return jsonify({"success": False, "error": "Unauthorized"}), 401
+
+    row = _get_embedding_row(employee_id)
+    if row is None:
+        return jsonify({"success": True, "registered": False, "employeeId": employee_id})
+    return jsonify({"success": True, "registered": True, **row.to_dict()})
 
 
 @face_bp.route("/delete/<employee_id>", methods=["DELETE"])
 def delete_face(employee_id):
+    """DELETE a registered face."""
     if not _auth_ok():
         return jsonify({"success": False, "error": "Unauthorized"}), 401
-    if employee_id in _embeddings:
-        del _embeddings[employee_id]
-        _save_embeddings(_embeddings)
-        return jsonify({"success": True, "message": f"Face for {employee_id} removed"})
-    return jsonify({"success": False, "error": "Employee not found"}), 404
+
+    row = _get_embedding_row(employee_id)
+    if row is None:
+        return jsonify({"success": False, "error": "Employee not found"}), 404
+
+    db.session.delete(row)
+    db.session.commit()
+    logger.info(f"Face removed for {employee_id}")
+    return jsonify({"success": True, "message": f"Face for {employee_id} removed"})
 
 
 @face_bp.route("/list", methods=["GET"])
 def list_faces():
+    """READ: all registered employee ids."""
     if not _auth_ok():
         return jsonify({"success": False, "error": "Unauthorized"}), 401
-    return jsonify({
-        "success":    True,
-        "registered": list(_embeddings.keys()),
-        "count":      len(_embeddings)
-    })
+
+    rows = FaceEmbedding.query.with_entities(FaceEmbedding.employee_id).all()
+    ids = [r.employee_id for r in rows]
+    return jsonify({"success": True, "registered": ids, "count": len(ids)})
