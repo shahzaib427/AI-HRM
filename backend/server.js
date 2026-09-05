@@ -190,9 +190,16 @@ app.use('*', (req, res) => {
 });
 
 // ── Global error handler ───────────────────────────────────────────────────
+// ✅ FIXED: this used to always send 500 no matter what, even when a route
+// handler had already set res.status(404) (or any other code) before
+// throwing. That silently turned real 404s (e.g. "resume not found on
+// disk") into confusing 500s on the frontend. Now we respect whatever
+// status was already set on the response, and only fall back to 500
+// if nothing else was set.
 app.use((err, req, res, next) => {
   console.error('❌ Server Error:', err.stack);
-  res.status(500).json({ success: false, error: err.message || 'Internal server error' });
+  const statusCode = res.statusCode && res.statusCode !== 200 ? res.statusCode : 500;
+  res.status(statusCode).json({ success: false, error: err.message || 'Internal server error' });
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────
