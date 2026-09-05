@@ -49,6 +49,28 @@ const KpiCard = ({ title, value, icon, color }) => {
   );
 };
 
+// ======================= HELPER: RELIABLE FILE DOWNLOAD =======================
+// FIX: XLSX.writeFile()'s internal download mechanism creates an <a> element
+// and clicks it WITHOUT necessarily attaching it to the DOM first. On some
+// browser/extension combinations that click silently no-ops — no thrown
+// error, no console warning, no file, nothing. handleDownloadPayslip (below)
+// already avoids this by explicitly doing appendChild -> click -> remove;
+// this helper applies that same proven pattern to Excel exports too. We use
+// XLSX.write() (which just returns raw bytes) instead of XLSX.writeFile()
+// (which tries to trigger the download itself internally).
+const downloadWorkbook = (wb, filename) => {
+  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob  = new Blob([wbout], { type: 'application/octet-stream' });
+  const url   = window.URL.createObjectURL(blob);
+  const link  = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+
 const AdminPayroll = () => {
   const [payrolls, setPayrolls] = useState([]);
   const [stats, setStats] = useState({ totalPayrolls: 0, pendingPayments: 0, paidPayments: 0, totalAmount: 0 });
@@ -328,6 +350,11 @@ useEffect(() => {
     }
   };
 
+  // FIX: replaced XLSX.writeFile() (which internally clicks an <a> that may
+  // never be attached to the DOM, so the download can silently no-op with
+  // zero errors) with the downloadWorkbook() helper above, which follows the
+  // same appendChild -> click -> remove pattern already proven to work in
+  // handleDownloadPayslip.
   const handleExportSinglePayroll = (payroll) => {
     const totalSalary = calculateTotalSalary(payroll);
     const excelData = [{
@@ -341,10 +368,13 @@ useEffect(() => {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(excelData);
     XLSX.utils.book_append_sheet(wb, ws, 'Payroll');
-    XLSX.writeFile(wb, `Payroll_${payroll.employeeCode}_${payroll.month}_${payroll.year}.xlsx`);
+    downloadWorkbook(wb, `Payroll_${payroll.employeeCode}_${payroll.month}_${payroll.year}.xlsx`);
     alert('Exported successfully!');
   };
 
+  // FIX: same downloadWorkbook() replacement as above, plus a real error
+  // message in the catch block (was a bare 'Export failed' before, which
+  // hid the actual cause).
   const handleExportToExcel = async () => {
     try {
       setExportLoading(true);
@@ -364,10 +394,11 @@ useEffect(() => {
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(excelData);
       XLSX.utils.book_append_sheet(wb, ws, 'Payroll Records');
-      XLSX.writeFile(wb, `Payroll_Export_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      downloadWorkbook(wb, `Payroll_Export_${new Date().toISOString().slice(0, 10)}.xlsx`);
       alert(`Exported ${allPayrolls.length} records!`);
     } catch (error) {
-      alert('Export failed');
+      console.error('Export error:', error);
+      alert('Export failed: ' + (error.response?.data?.error || error.message));
     } finally {
       setExportLoading(false);
     }
