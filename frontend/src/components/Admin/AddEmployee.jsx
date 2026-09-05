@@ -7,6 +7,18 @@ import { useAuth } from '../../contexts/AuthContext';
 const IBAN_MAX_LENGTH = 24;
 const ACCOUNT_NUMBER_MAX_LENGTH = 24;
 
+// ─── Validation regexes / required-field list (single source of truth, shared by ──
+// ─── real-time field validation AND final-submit validation) ──────────────────
+const NAME_REGEX = /^[\p{L}\s.'-]+$/u;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const REQUIRED_FIELDS = [
+  'name', 'fatherName', 'email', 'phone', 'idCardNumber',
+  'idCardIssueDate', 'idCardExpiryDate', 'employeeType',
+  'department', 'position', 'joiningDate', 'presentAddress',
+];
+// Optional fields that still get format-validated in real time / on submit
+const OPTIONAL_VALIDATED_FIELDS = ['alternatePhone', 'dateOfBirth', 'bankAccountNumber', 'ibanNumber'];
+
 // ─── Pakistani Banks List ────────────────────────────────────────────────────
 const PAKISTANI_BANKS = [
   { value: '', label: 'Select Bank' },
@@ -151,6 +163,9 @@ const AddEmployee = () => {
   const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  // ── Real-time validation: tracks which fields the user has actually interacted
+  // with (typed in, or focused-then-left). Untouched fields never show errors.
+  const [touched, setTouched] = useState({});
   const [serverError, setServerError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -208,6 +223,145 @@ const AddEmployee = () => {
   const handleDiscardDraft = () => {
     clearDraft();
     setDraftBanner(null);
+  };
+
+  // ─── Real-time field validation ─────────────────────────────────────────────
+  // Single source of truth: used for live onChange/onBlur feedback AND for the
+  // final validateForm() check on submit, so the two never drift apart.
+  const validateField = useCallback((name, rawValue, data = formData) => {
+    const value = (rawValue ?? '').toString();
+    const trimmed = value.trim();
+
+    switch (name) {
+      case 'name':
+        if (!trimmed) return 'Full name is required';
+        if (trimmed.length < 2) return 'Name must be at least 2 characters';
+        if (!NAME_REGEX.test(trimmed)) return 'Name should only contain letters';
+        return '';
+      case 'fatherName':
+        if (!trimmed) return 'Father name is required';
+        if (!NAME_REGEX.test(trimmed)) return 'Father name should only contain letters';
+        return '';
+      case 'email':
+        if (!trimmed) return 'Email address is required';
+        if (!EMAIL_REGEX.test(trimmed)) return 'Please enter a valid email address (e.g. name@company.com)';
+        return '';
+      case 'phone': {
+        if (!trimmed) return 'Phone number is required';
+        const digits = trimmed.replace(/\D/g, '');
+        if (digits.length < 10 || digits.length > 15) return 'Phone number must be 10-15 digits';
+        if (!/^[\+]?[0-9\s-]+$/.test(trimmed)) return 'Phone number can only contain digits, spaces, "+" and "-"';
+        return '';
+      }
+      case 'alternatePhone': {
+        if (!trimmed) return '';
+        const digits = trimmed.replace(/\D/g, '');
+        if (digits.length < 10 || digits.length > 15) return 'Please enter a valid phone number';
+        if (!/^[\+]?[0-9\s-]+$/.test(trimmed)) return 'Phone number can only contain digits, spaces, "+" and "-"';
+        return '';
+      }
+      case 'idCardNumber':
+        if (!trimmed) return 'CNIC number is required';
+        if (!/^\d{5}-\d{7}-\d{1}$/.test(trimmed)) return 'CNIC must be in format: 12345-1234567-1';
+        return '';
+      case 'idCardIssueDate': {
+        if (!trimmed) return 'CNIC issue date is required';
+        if (data.idCardExpiryDate && new Date(trimmed) > new Date(data.idCardExpiryDate)) {
+          return 'Issue date cannot be after expiry date';
+        }
+        return '';
+      }
+      case 'idCardExpiryDate': {
+        if (!trimmed) return 'CNIC expiry date is required';
+        if (new Date(trimmed) < new Date()) return 'CNIC has expired';
+        if (data.idCardIssueDate && new Date(data.idCardIssueDate) > new Date(trimmed)) {
+          return 'Expiry date cannot be before issue date';
+        }
+        return '';
+      }
+      case 'dateOfBirth': {
+        if (!trimmed) return '';
+        const dob = new Date(trimmed);
+        const today = new Date();
+        let age = today.getFullYear() - dob.getFullYear();
+        const md = today.getMonth() - dob.getMonth();
+        if (md < 0 || (md === 0 && today.getDate() < dob.getDate())) age--;
+        if (age < 18) return 'Employee must be at least 18 years old';
+        return '';
+      }
+      case 'employeeType':
+        if (!trimmed) return 'Employee type is required';
+        return '';
+      case 'department':
+        if (!trimmed) return 'Department is required';
+        return '';
+      case 'position':
+        if (!trimmed) return 'Position is required';
+        return '';
+      case 'joiningDate':
+        if (!trimmed) return 'Joining date is required';
+        return '';
+      case 'presentAddress':
+        if (!trimmed) return 'Present address is required';
+        if (trimmed.length < 5) return 'Please enter a complete address';
+        return '';
+      case 'bankAccountNumber':
+        if (trimmed && trimmed.length > ACCOUNT_NUMBER_MAX_LENGTH) {
+          return `Account number can be at most ${ACCOUNT_NUMBER_MAX_LENGTH} digits`;
+        }
+        return '';
+      case 'ibanNumber':
+        if (trimmed && trimmed.length > IBAN_MAX_LENGTH) {
+          return `IBAN can be at most ${IBAN_MAX_LENGTH} digits`;
+        }
+        return '';
+      default:
+        return '';
+    }
+  }, [formData]);
+
+  // Decides whether an error should be visible right now:
+  //  - a non-empty INVALID value shows its error immediately (no need to blur first)
+  //  - an EMPTY required value only shows "required" once the field has been touched
+  const applyFieldError = useCallback((name, value, options = {}) => {
+    const { forceShow = false } = options;
+    const error = validateField(name, value);
+    const isEmpty = !(value ?? '').toString().trim();
+
+    setErrors(prev => {
+      const next = { ...prev };
+      if (isEmpty && !forceShow && !touched[name]) {
+        delete next[name];
+      } else if (error) {
+        next[name] = error;
+      } else {
+        delete next[name];
+      }
+      return next;
+    });
+  }, [validateField, touched]);
+
+  const handleBlur = (e) => {
+    const { name, value } = e.target;
+    setTouched(prev => ({ ...prev, [name]: true }));
+    applyFieldError(name, value, { forceShow: true });
+    // CNIC dates depend on each other — re-check the sibling date too
+    if (name === 'idCardIssueDate' && formData.idCardExpiryDate) {
+      applyFieldError('idCardExpiryDate', formData.idCardExpiryDate, { forceShow: true });
+    }
+    if (name === 'idCardExpiryDate' && formData.idCardIssueDate) {
+      applyFieldError('idCardIssueDate', formData.idCardIssueDate, { forceShow: true });
+    }
+  };
+
+  // Returns the border/ring classes for a field: red when invalid, subtle green
+  // when validly filled in, neutral gray otherwise.
+  const getFieldBorderClass = (name) => {
+    if (errors[name]) return 'border-red-500 focus:ring-red-500 focus:border-red-500';
+    if (touched[name] && (formData[name] ?? '').toString().trim() !== '') {
+      return 'border-green-400 focus:ring-green-500 focus:border-green-500';
+    }
+    return 'border-gray-300 focus:ring-blue-500 focus:border-blue-500';
   };
 
   // ─── Static data ───────────────────────────────────────────────────────────
@@ -334,7 +488,7 @@ const AddEmployee = () => {
         presentAddress: value,
         permanentAddress: prev.sameAddress ? value : prev.permanentAddress,
       }));
-      if (errors.presentAddress) setErrors(prev => ({ ...prev, presentAddress: '' }));
+      applyFieldError('presentAddress', value);
       return;
     }
 
@@ -353,7 +507,14 @@ const AddEmployee = () => {
     }
 
     setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
-    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+
+    // Real-time validation: fires immediately for invalid, non-empty values;
+    // "required" errors on empty fields wait for blur (handled inside applyFieldError).
+    if (type !== 'checkbox') {
+      applyFieldError(name, value);
+    } else if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
+    }
   };
 
   const handleBankDigitsChange = (e) => {
@@ -361,7 +522,7 @@ const AddEmployee = () => {
     const maxLength = name === 'ibanNumber' ? IBAN_MAX_LENGTH : ACCOUNT_NUMBER_MAX_LENGTH;
     const digitsOnly = value.replace(/[^0-9]/g, '').slice(0, maxLength);
     setFormData(prev => ({ ...prev, [name]: digitsOnly }));
-    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+    applyFieldError(name, digitsOnly);
   };
 
   const handleDropdownChange = (e) => {
@@ -383,6 +544,13 @@ const AddEmployee = () => {
       [name]: value,
       ...(showField ? { [showField]: value === 'other' } : {}),
     }));
+
+    // Selecting an option is a deliberate action, so validate it right away
+    // rather than waiting for a blur event.
+    if (['employeeType', 'department', 'position'].includes(name)) {
+      setTouched(prev => ({ ...prev, [name]: true }));
+      applyFieldError(name, value, { forceShow: true });
+    }
   };
 
   const handleArrayFieldChange = (field, index, subField, value) => {
@@ -393,12 +561,50 @@ const AddEmployee = () => {
     });
   };
 
+  // Emergency contacts have an interdependent required rule (if one of
+  // name/phone is filled, the other becomes required) — validate both
+  // sides immediately whenever either one changes.
+  const applyEmergencyContactError = (index, contacts) => {
+    const contact = contacts[index];
+    setErrors(prev => {
+      const next = { ...prev };
+      if (contact.name && !contact.phone) {
+        next[`emergencyContactPhone_${index}`] = 'Emergency contact phone is required';
+      } else {
+        delete next[`emergencyContactPhone_${index}`];
+      }
+      if (contact.phone && !contact.name) {
+        next[`emergencyContactName_${index}`] = 'Emergency contact name is required';
+      } else {
+        delete next[`emergencyContactName_${index}`];
+      }
+      return next;
+    });
+  };
+
+  const handleEmergencyContactChange = (index, subField, value) => {
+    setFormData(prev => {
+      const newContacts = [...prev.emergencyContacts];
+      newContacts[index] = { ...newContacts[index], [subField]: value };
+      applyEmergencyContactError(index, newContacts);
+      return { ...prev, emergencyContacts: newContacts };
+    });
+  };
+
   const addEmergencyContact = () => setFormData(prev => ({
     ...prev, emergencyContacts: [...prev.emergencyContacts, { name: '', phone: '', relation: 'parent' }],
   }));
-  const removeEmergencyContact = (index) => setFormData(prev => ({
-    ...prev, emergencyContacts: prev.emergencyContacts.filter((_, i) => i !== index),
-  }));
+  const removeEmergencyContact = (index) => {
+    setFormData(prev => ({
+      ...prev, emergencyContacts: prev.emergencyContacts.filter((_, i) => i !== index),
+    }));
+    setErrors(prev => {
+      const next = { ...prev };
+      delete next[`emergencyContactName_${index}`];
+      delete next[`emergencyContactPhone_${index}`];
+      return next;
+    });
+  };
   const addExperience = () => setFormData(prev => ({
     ...prev, experiences: [...prev.experiences, { company: '', position: '', duration: '', description: '' }],
   }));
@@ -492,54 +698,23 @@ const AddEmployee = () => {
     }
   };
 
+  // ─── Final-submit validation ─────────────────────────────────────────────
+  // Reuses validateField for every field so there is exactly one place that
+  // knows the actual validation rules — real-time checks and this check can
+  // never silently drift apart from each other.
   const validateForm = () => {
     const newErrors = {};
-    const requiredFields = {
-      name:            'Full name is required',
-      fatherName:      'Father name is required',
-      email:           'Email address is required',
-      phone:           'Phone number is required',
-      idCardNumber:    'CNIC number is required',
-      idCardIssueDate: 'CNIC issue date is required',
-      idCardExpiryDate:'CNIC expiry date is required',
-      employeeType:    'Employee type is required',
-      department:      'Department is required',
-      position:        'Position is required',
-      joiningDate:     'Joining date is required',
-      presentAddress:  'Present address is required',
-    };
-    Object.keys(requiredFields).forEach(field => {
-      if (!formData[field] || formData[field].toString().trim() === '')
-        newErrors[field] = requiredFields[field];
+
+    [...REQUIRED_FIELDS, ...OPTIONAL_VALIDATED_FIELDS].forEach(field => {
+      const err = validateField(field, formData[field]);
+      if (err) newErrors[field] = err;
     });
-    if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
-      newErrors.email = 'Please enter a valid email address (e.g. name@company.com)';
-    }
-    if (formData.phone && !/^[\+]?[1-9][\d]{0,15}$/.test(formData.phone.replace(/\D/g, '')))
-      newErrors.phone = 'Please enter a valid phone number';
-    if (formData.idCardNumber && !/^\d{5}-\d{7}-\d{1}$/.test(formData.idCardNumber))
-      newErrors.idCardNumber = 'CNIC must be in format: 12345-1234567-1';
-    if (formData.dateOfBirth) {
-      const dob   = new Date(formData.dateOfBirth);
-      const today = new Date();
-      let age = today.getFullYear() - dob.getFullYear();
-      const md = today.getMonth() - dob.getMonth();
-      if (md < 0 || (md === 0 && today.getDate() < dob.getDate())) age--;
-      if (age < 18) newErrors.dateOfBirth = 'Employee must be at least 18 years old';
-    }
-    if (formData.idCardIssueDate && formData.idCardExpiryDate &&
-        new Date(formData.idCardIssueDate) > new Date(formData.idCardExpiryDate))
-      newErrors.idCardIssueDate = 'Issue date cannot be after expiry date';
-    if (formData.idCardExpiryDate && new Date(formData.idCardExpiryDate) < new Date())
-      newErrors.idCardExpiryDate = 'CNIC has expired';
-    if (formData.ibanNumber && formData.ibanNumber.length > IBAN_MAX_LENGTH)
-      newErrors.ibanNumber = `IBAN can be at most ${IBAN_MAX_LENGTH} digits`;
-    if (formData.bankAccountNumber && formData.bankAccountNumber.length > ACCOUNT_NUMBER_MAX_LENGTH)
-      newErrors.bankAccountNumber = `Account number can be at most ${ACCOUNT_NUMBER_MAX_LENGTH} digits`;
+
     formData.emergencyContacts.forEach((contact, index) => {
       if (contact.name  && !contact.phone) newErrors[`emergencyContactPhone_${index}`] = 'Emergency contact phone is required';
       if (contact.phone && !contact.name)  newErrors[`emergencyContactName_${index}`]  = 'Emergency contact name is required';
     });
+
     return newErrors;
   };
 
@@ -552,11 +727,23 @@ const AddEmployee = () => {
       return;
     }
 
+    // Mark every validated field as touched so all relevant errors render,
+    // not just the ones the user happened to already visit.
+    setTouched(prev => {
+      const next = { ...prev };
+      [...REQUIRED_FIELDS, ...OPTIONAL_VALIDATED_FIELDS].forEach(f => { next[f] = true; });
+      return next;
+    });
+
     const validationErrors = validateForm();
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       const firstError = Object.keys(validationErrors)[0];
-      document.querySelector(`[name="${firstError}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const el = document.querySelector(`[name="${firstError}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.focus({ preventScroll: true });
+      }
       return;
     }
     setLoading(true);
@@ -664,6 +851,7 @@ const AddEmployee = () => {
           setProfilePreview('');
           setDocumentPreviews({});
           setErrors({});
+          setTouched({});
         }, 2000);
       } else {
         throw new Error(response.data.error || 'Failed to create employee');
@@ -678,17 +866,32 @@ const AddEmployee = () => {
         localStorage.removeItem('token');
         window.location.href = '/login';
       } else if (error.response) {
-        const errorMessage = error.response.data?.error || error.response.data?.message || 'Failed to add employee';
-        if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
-          setServerError(`Error: Email ${formData.email} already exists. Please use a different email.`);
-        } else {
-          setServerError(`Error: ${errorMessage}`);
+        // ── Turn raw backend error payloads into user-friendly messages ──
+        const respData = error.response.data || {};
+        let friendlyMessage = respData.error || respData.message || 'Failed to add employee';
+        if (Array.isArray(respData.details) && respData.details.length > 0) {
+          friendlyMessage = respData.details.join(' ');
         }
+        const lower = friendlyMessage.toLowerCase();
+
+        if (respData.field === 'email' || (lower.includes('email') && (lower.includes('exist') || lower.includes('duplicate')))) {
+          friendlyMessage = `An account with the email "${formData.email}" already exists. Please use a different email address.`;
+          setErrors(prev => ({ ...prev, email: 'This email is already registered' }));
+          setTouched(prev => ({ ...prev, email: true }));
+        } else if (respData.field === 'username' || lower.includes('username')) {
+          friendlyMessage = 'This username is already taken. Please try a different email address.';
+        } else if (lower.includes('employeeid') || lower.includes('employee id')) {
+          friendlyMessage = 'Could not generate a unique Employee ID. Please try submitting again.';
+        } else if (lower.includes('validation failed') && !(Array.isArray(respData.details) && respData.details.length > 0)) {
+          friendlyMessage = 'Please check the highlighted fields and try again.';
+        }
+
+        setServerError(`⚠️ ${friendlyMessage}`);
       } else if (error.request) {
         saveDraft(formData, documents);
         setServerError('⚠️ Network error — your form data has been saved as a draft. Come back when you\'re online.');
       } else {
-        setServerError('An error occurred. Please try again.');
+        setServerError('An unexpected error occurred. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -896,7 +1099,7 @@ const AddEmployee = () => {
         )}
 
         <div className="bg-white shadow-xl rounded-lg overflow-hidden">
-          <form onSubmit={handleSubmit} className="divide-y divide-gray-200">
+          <form onSubmit={handleSubmit} className="divide-y divide-gray-200" noValidate>
 
             {/* ── Section 1: Personal Information ── */}
             <div className="p-6">
@@ -907,55 +1110,56 @@ const AddEmployee = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div className="col-span-1 md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
-                  <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder="John Doe"
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.name ? 'border-red-500' : 'border-gray-300'}`} />
+                  <input type="text" name="name" value={formData.name} onChange={handleChange} onBlur={handleBlur} placeholder="John Doe"
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition-colors ${getFieldBorderClass('name')}`} />
                   {errors.name && <p className="mt-2 text-sm text-red-600">{errors.name}</p>}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Father Name *</label>
-                  <input type="text" name="fatherName" value={formData.fatherName} onChange={handleChange} placeholder="Father's Name"
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.fatherName ? 'border-red-500' : 'border-gray-300'}`} />
+                  <input type="text" name="fatherName" value={formData.fatherName} onChange={handleChange} onBlur={handleBlur} placeholder="Father's Name"
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition-colors ${getFieldBorderClass('fatherName')}`} />
                   {errors.fatherName && <p className="mt-2 text-sm text-red-600">{errors.fatherName}</p>}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Email Address *</label>
-                  <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="john.doe@company.com"
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.email ? 'border-red-500' : 'border-gray-300'}`} />
+                  <input type="email" name="email" value={formData.email} onChange={handleChange} onBlur={handleBlur} placeholder="john.doe@company.com"
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition-colors ${getFieldBorderClass('email')}`} />
                   {errors.email && <p className="mt-2 text-sm text-red-600">{errors.email}</p>}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Primary Phone *</label>
-                  <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="+923134750548"
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.phone ? 'border-red-500' : 'border-gray-300'}`} />
+                  <input type="tel" name="phone" value={formData.phone} onChange={handleChange} onBlur={handleBlur} placeholder="+923134750548"
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition-colors ${getFieldBorderClass('phone')}`} />
                   {errors.phone && <p className="mt-2 text-sm text-red-600">{errors.phone}</p>}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Alternate Phone</label>
-                  <input type="tel" name="alternatePhone" value={formData.alternatePhone} onChange={handleChange} placeholder="+923001234567"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                  <input type="tel" name="alternatePhone" value={formData.alternatePhone} onChange={handleChange} onBlur={handleBlur} placeholder="+923001234567"
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition-colors ${getFieldBorderClass('alternatePhone')}`} />
+                  {errors.alternatePhone && <p className="mt-2 text-sm text-red-600">{errors.alternatePhone}</p>}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">CNIC/NICOP Number *</label>
-                  <input type="text" name="idCardNumber" value={formData.idCardNumber} onChange={handleChange} placeholder="42101-1234567-1"
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.idCardNumber ? 'border-red-500' : 'border-gray-300'}`} />
+                  <input type="text" name="idCardNumber" value={formData.idCardNumber} onChange={handleChange} onBlur={handleBlur} placeholder="42101-1234567-1"
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition-colors ${getFieldBorderClass('idCardNumber')}`} />
                   {errors.idCardNumber && <p className="mt-2 text-sm text-red-600">{errors.idCardNumber}</p>}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">CNIC Issue Date *</label>
-                  <input type="date" name="idCardIssueDate" value={formData.idCardIssueDate} onChange={handleChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.idCardIssueDate ? 'border-red-500' : 'border-gray-300'}`} />
+                  <input type="date" name="idCardIssueDate" value={formData.idCardIssueDate} onChange={handleChange} onBlur={handleBlur}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition-colors ${getFieldBorderClass('idCardIssueDate')}`} />
                   {errors.idCardIssueDate && <p className="mt-2 text-sm text-red-600">{errors.idCardIssueDate}</p>}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">CNIC Expiry Date *</label>
-                  <input type="date" name="idCardExpiryDate" value={formData.idCardExpiryDate} onChange={handleChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.idCardExpiryDate ? 'border-red-500' : 'border-gray-300'}`} />
+                  <input type="date" name="idCardExpiryDate" value={formData.idCardExpiryDate} onChange={handleChange} onBlur={handleBlur}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition-colors ${getFieldBorderClass('idCardExpiryDate')}`} />
                   {errors.idCardExpiryDate && <p className="mt-2 text-sm text-red-600">{errors.idCardExpiryDate}</p>}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Date of Birth</label>
-                  <input type="date" name="dateOfBirth" value={formData.dateOfBirth} onChange={handleChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.dateOfBirth ? 'border-red-500' : 'border-gray-300'}`} />
+                  <input type="date" name="dateOfBirth" value={formData.dateOfBirth} onChange={handleChange} onBlur={handleBlur}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition-colors ${getFieldBorderClass('dateOfBirth')}`} />
                   {errors.dateOfBirth && <p className="mt-2 text-sm text-red-600">{errors.dateOfBirth}</p>}
                 </div>
                 <div>
@@ -988,8 +1192,8 @@ const AddEmployee = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Employee Type *</label>
-                  <select name="employeeType" value={formData.employeeType} onChange={handleDropdownChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.employeeType ? 'border-red-500' : 'border-gray-300'}`}>
+                  <select name="employeeType" value={formData.employeeType} onChange={handleDropdownChange} onBlur={handleBlur}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition-colors ${getFieldBorderClass('employeeType')}`}>
                     <option value="">Select Type</option>
                     {employeeTypes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
@@ -1018,8 +1222,8 @@ const AddEmployee = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Department *</label>
-                  <select name="department" value={formData.department} onChange={handleDropdownChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.department ? 'border-red-500' : 'border-gray-300'}`}>
+                  <select name="department" value={formData.department} onChange={handleDropdownChange} onBlur={handleBlur}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition-colors ${getFieldBorderClass('department')}`}>
                     <option value="">Select Department</option>
                     {departments.map(d => <option key={d} value={d}>{d}</option>)}
                     <option value="other">Other (Add Custom)</option>
@@ -1035,8 +1239,8 @@ const AddEmployee = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Position *</label>
-                  <select name="position" value={formData.position} onChange={handleDropdownChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.position ? 'border-red-500' : 'border-gray-300'}`}>
+                  <select name="position" value={formData.position} onChange={handleDropdownChange} onBlur={handleBlur}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition-colors ${getFieldBorderClass('position')}`}>
                     <option value="">Select Position</option>
                     {availablePositions.map(p => <option key={p} value={p}>{p}</option>)}
                     <option value="other">Other (Add Custom)</option>
@@ -1052,8 +1256,8 @@ const AddEmployee = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Joining Date *</label>
-                  <input type="date" name="joiningDate" value={formData.joiningDate} onChange={handleChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.joiningDate ? 'border-red-500' : 'border-gray-300'}`} />
+                  <input type="date" name="joiningDate" value={formData.joiningDate} onChange={handleChange} onBlur={handleBlur}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition-colors ${getFieldBorderClass('joiningDate')}`} />
                   {errors.joiningDate && <p className="mt-2 text-sm text-red-600">{errors.joiningDate}</p>}
                 </div>
                 <div>
@@ -1105,9 +1309,10 @@ const AddEmployee = () => {
                     name="presentAddress"
                     value={formData.presentAddress}
                     onChange={handleChange}
+                    onBlur={handleBlur}
                     placeholder="House #, Street, Area"
                     rows="3"
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.presentAddress ? 'border-red-500' : 'border-gray-300'}`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition-colors ${getFieldBorderClass('presentAddress')}`}
                   />
                   {errors.presentAddress && <p className="mt-2 text-sm text-red-600">{errors.presentAddress}</p>}
                 </div>
@@ -1186,13 +1391,13 @@ const AddEmployee = () => {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Contact Name {index === 0 && '*'}</label>
-                        <input type="text" value={contact.name} onChange={(e) => handleArrayFieldChange('emergencyContacts', index, 'name', e.target.value)} placeholder="Full name"
+                        <input type="text" value={contact.name} onChange={(e) => handleEmergencyContactChange(index, 'name', e.target.value)} placeholder="Full name"
                           className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors[`emergencyContactName_${index}`] ? 'border-red-500' : 'border-gray-300'}`} />
                         {errors[`emergencyContactName_${index}`] && <p className="mt-2 text-sm text-red-600">{errors[`emergencyContactName_${index}`]}</p>}
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Contact Phone {index === 0 && '*'}</label>
-                        <input type="tel" value={contact.phone} onChange={(e) => handleArrayFieldChange('emergencyContacts', index, 'phone', e.target.value)} placeholder="+923001234567"
+                        <input type="tel" value={contact.phone} onChange={(e) => handleEmergencyContactChange(index, 'phone', e.target.value)} placeholder="+923001234567"
                           className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors[`emergencyContactPhone_${index}`] ? 'border-red-500' : 'border-gray-300'}`} />
                         {errors[`emergencyContactPhone_${index}`] && <p className="mt-2 text-sm text-red-600">{errors[`emergencyContactPhone_${index}`]}</p>}
                       </div>
@@ -1306,9 +1511,10 @@ const AddEmployee = () => {
                         name="bankAccountNumber"
                         value={formData.bankAccountNumber}
                         onChange={handleBankDigitsChange}
+                        onBlur={handleBlur}
                         maxLength={ACCOUNT_NUMBER_MAX_LENGTH}
                         placeholder="1234567890123"
-                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.bankAccountNumber ? 'border-red-500' : 'border-gray-300'}`}
+                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition-colors ${getFieldBorderClass('bankAccountNumber')}`}
                       />
                       {errors.bankAccountNumber && <p className="mt-2 text-sm text-red-600">{errors.bankAccountNumber}</p>}
                     </div>
@@ -1328,9 +1534,10 @@ const AddEmployee = () => {
                         name="ibanNumber"
                         value={formData.ibanNumber}
                         onChange={handleBankDigitsChange}
+                        onBlur={handleBlur}
                         maxLength={IBAN_MAX_LENGTH}
                         placeholder="e.g. 000123456789012345678901"
-                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.ibanNumber ? 'border-red-500' : 'border-gray-300'}`}
+                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition-colors ${getFieldBorderClass('ibanNumber')}`}
                       />
                       {errors.ibanNumber && <p className="mt-2 text-sm text-red-600">{errors.ibanNumber}</p>}
                     </div>
