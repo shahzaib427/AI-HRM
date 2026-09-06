@@ -158,6 +158,31 @@ app.use('/api/billing', billingRoutes);
 // ⚠️ FIX: mount the guest checkout route
 app.use('/api/subscription', subscriptionRoutes);
 
+// ⚠️⚠️⚠️ TEMPORARY — DELETE THIS ENTIRE ROUTE AFTER USE ⚠️⚠️⚠️
+// This exists only because Render's free tier has no Shell access,
+// so we can't run a one-off script to generate the internal service
+// token. This route generates it instead, using the server's own
+// live JWT_SECRET (guaranteed to match, since it runs inside this
+// exact server process).
+//
+// USAGE:
+//   1. Deploy this.
+//   2. Visit https://ai-hrm-backend.onrender.com/api/generate-internal-token-TEMP
+//   3. Copy the "token" value from the JSON response.
+//   4. Paste it into the Flask service's NODE_INTERNAL_JWT env var on Render.
+//   5. DELETE this whole route block below and redeploy.
+//      Leaving this route live is a security risk — anyone who finds
+//      this URL can mint a token with full internal-service privileges.
+app.get('/api/generate-internal-token-TEMP', (req, res) => {
+  const token = jwt.sign(
+    { id: 'internal-flask-service' },
+    process.env.JWT_SECRET || 'your-secret-key',
+    { expiresIn: '3650d' }
+  );
+  res.json({ token });
+});
+// ⚠️⚠️⚠️ END TEMPORARY ROUTE — REMEMBER TO DELETE ⚠️⚠️⚠️
+
 // ── Health check ───────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({
