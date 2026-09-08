@@ -102,8 +102,8 @@ const getProfileImageUrl = () => {
       icon: <FaBrain className="text-[15px]" />,
       isDropdown: true,
       children: [
-        { path: '/employee/career-coach', label: 'Career Coach', icon: <FaUserGraduate className="text-xs" /> },
-        { path: '/employee/learning-hub', label: 'Learning Hub', icon: <FaGraduationCap className="text-xs" /> },
+        // { path: '/employee/career-coach', label: 'Career Coach', icon: <FaUserGraduate className="text-xs" /> },
+        // { path: '/employee/learning-hub', label: 'Learning Hub', icon: <FaGraduationCap className="text-xs" /> },
         { path: '/employee/wellness',     label: 'Wellness',     icon: <FaHandHoldingHeart className="text-xs" /> },
       ]
     } : null;
