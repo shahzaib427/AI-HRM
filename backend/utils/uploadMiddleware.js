@@ -19,15 +19,20 @@ const cloudinary = require('../config/cloudinary');
 
 const storage = new CloudinaryStorage({
   cloudinary,
-  params: async (req, file) => ({
-    folder: 'hrm-resumes',
-    // 'raw' resource type is required for non-image files like PDF/DOC/DOCX —
-    // Cloudinary's default 'image' type would reject or mishandle them.
-    resource_type: 'raw',
-    // Keep the original filename (minus extension) plus a timestamp, so
-    // files are still easy to identify in the Cloudinary dashboard.
-    public_id: `${Date.now()}-${file.originalname.replace(/\.[^/.]+$/, '')}`,
-  }),
+  params: async (req, file) => {
+    // ✅ ADDED: strip spaces and special characters from the filename
+    // before sending it to Cloudinary. Raw spaces in public_id can cause
+    // problems with certain Cloudinary operations/URLs down the line.
+    const safeName = file.originalname
+      .replace(/\.[^/.]+$/, '')       // remove extension
+      .replace(/[^a-zA-Z0-9-_]/g, '_'); // replace anything unsafe with _
+
+    return {
+      folder: 'hrm-resumes',
+      resource_type: 'raw',
+      public_id: `${Date.now()}-${safeName}`,
+    };
+  },
 });
 
 const fileFilter = (req, file, cb) => {
