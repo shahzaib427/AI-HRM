@@ -1,21 +1,33 @@
+// ✅ REWRITTEN: previously used multer.diskStorage() to save resumes to a
+// local folder (backend/uploads/resumes). On Render, that folder is wiped
+// every time the service redeploys or restarts (free tier especially),
+// which caused resumes to silently disappear while MongoDB still pointed
+// to the now-deleted file (leading to confusing 404s on "Run ATS" / "View
+// Resume").
+//
+// Now files are uploaded directly to Cloudinary, which is permanent cloud
+// storage — resumes survive redeploys, restarts, and scaling events.
+//
+// Requires these environment variables to be set (see Cloudinary dashboard):
+//   CLOUDINARY_CLOUD_NAME
+//   CLOUDINARY_API_KEY
+//   CLOUDINARY_API_SECRET
+
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinary = require('../config/cloudinary');
 
-const uploadDir = path.join(__dirname, '..', 'uploads', 'resumes');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-  console.log(`✅ Created directory: ${uploadDir}`);
-}
-
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: async (req, file) => ({
+    folder: 'hrm-resumes',
+    // 'raw' resource type is required for non-image files like PDF/DOC/DOCX —
+    // Cloudinary's default 'image' type would reject or mishandle them.
+    resource_type: 'raw',
+    // Keep the original filename (minus extension) plus a timestamp, so
+    // files are still easy to identify in the Cloudinary dashboard.
+    public_id: `${Date.now()}-${file.originalname.replace(/\.[^/.]+$/, '')}`,
+  }),
 });
 
 const fileFilter = (req, file, cb) => {
@@ -26,9 +38,9 @@ const fileFilter = (req, file, cb) => {
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
   ];
 
+  const path = require('path');
   const ext = path.extname(file.originalname).toLowerCase();
-  
-  // ✅ Check EITHER extension OR mime type (not both required)
+
   if (allowedExtensions.includes(ext) || allowedMimeTypes.includes(file.mimetype)) {
     return cb(null, true);
   } else {

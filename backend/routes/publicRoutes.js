@@ -1,54 +1,19 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const router = express.Router();
-const path = require('path');
-const fs = require('fs');
-const multer = require('multer');
 const Job = require('../models/Job');
 const Candidate = require('../models/Candidate');
-
-// Setup multer locally (avoids import issues)
-const uploadDir = path.join(__dirname, '..', 'uploads', 'resumes');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => {
-    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, unique + path.extname(file.originalname));
-  }
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const allowed = ['.pdf', '.doc', '.docx'];
-    const ext = path.extname(file.originalname).toLowerCase();
-    const allowedMimes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ];
-    if (allowed.includes(ext) || allowedMimes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only PDF, DOC, DOCX allowed'));
-    }
-  }
-});
+// ✅ CHANGED: previously this file had its own inline multer.diskStorage()
+// setup that saved resumes to a local folder — a second, separate copy of
+// the same problem fixed in utils/uploadMiddleware.js. Now it reuses that
+// same shared Cloudinary-based upload middleware, so public applications
+// and HR-added candidates both store resumes the same permanent way.
+const upload = require('../utils/uploadMiddleware');
 
 // GET /api/public/jobs
 router.get('/jobs', async (req, res) => {
   try {
     console.log('Fetching public jobs...');
-    // NOTE: 'status' is intentionally included in the select projection below.
-    // The query already filters to { status: 'Open' }, but Mongoose's
-    // .select() with a whitelist only returns the listed fields — omitting
-    // 'status' meant the frontend received job objects with no status
-    // property at all, breaking any client-side status checks/badges.
     const jobs = await Job.find({ status: 'Open' })
       .select('title department jobType location description salaryRange experienceLevel createdAt deadline applicantsCount skillsRequired status')
       .sort('-createdAt');
@@ -98,17 +63,19 @@ router.post('/apply', upload.single('resume'), async (req, res) => {
     };
     const finalNoticePeriod = noticePeriodMap[noticePeriod] || '15 days';
 
+    // ✅ CHANGED: req.file.path is now the permanent Cloudinary URL
+    // (previously a local disk path that would be wiped on redeploy).
     let resumeData = null;
     if (req.file) {
       resumeData = {
-        url: `/uploads/resumes/${req.file.filename}`,
+        url: req.file.path,
         filename: req.file.filename,
         originalName: req.file.originalname,
         fileSize: req.file.size,
         mimeType: req.file.mimetype,
         uploadedAt: Date.now()
       };
-      console.log('✅ Resume saved:', resumeData.originalName);
+      console.log('✅ Resume saved to Cloudinary:', resumeData.originalName);
     } else {
       console.log('⚠️  No resume file received');
     }

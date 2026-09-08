@@ -7,6 +7,8 @@ const sendEmail = require('../utils/emailService');
 const fs = require('fs');
 const path = require('path');
 const NotificationService = require('../services/notificationService');
+// ✅ ADDED: needed to delete old resume files from Cloudinary (replaces fs.unlinkSync)
+const cloudinary = require('../config/cloudinary');
 
 // @desc    Create new job posting
 // @route   POST /api/recruitment/jobs
@@ -32,10 +34,9 @@ const createJob = asyncHandler(async (req, res) => {
     skillsRequired: Array.isArray(skillsRequired) ? skillsRequired : []
   });
 
-  // ✅ Send notification to HR/Admin team about new job posting
   const io = req.app.get('io');
   const notificationService = new NotificationService(io);
-  
+
   const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } });
   for (const hr of hrUsers) {
     await notificationService.createNotification({
@@ -69,10 +70,9 @@ const publishJob = asyncHandler(async (req, res) => {
   job.publishedAt = Date.now();
   await job.save();
 
-  // ✅ Send notification when job is published
   const io = req.app.get('io');
   const notificationService = new NotificationService(io);
-  
+
   const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } });
   for (const hr of hrUsers) {
     await notificationService.createNotification({
@@ -113,17 +113,23 @@ const addCandidate = asyncHandler(async (req, res) => {
   if (!job) { res.status(404); throw new Error('Job not found'); }
   if (job.status !== 'Open') { res.status(400); throw new Error('Job is not open for applications'); }
 
+  // ✅ CHANGED: req.file now comes from Cloudinary storage (see
+  // utils/uploadMiddleware.js), not local disk. With multer-storage-cloudinary:
+  //   - req.file.path     = the permanent Cloudinary URL (was a local disk path before)
+  //   - req.file.filename = the Cloudinary public_id (was a random local filename before)
+  // We store req.file.path as resumeData.url so the rest of the app (which
+  // expects resume.url to be a fetchable link) keeps working the same way.
   let resumeData = null;
   if (req.file) {
     resumeData = {
-      url: `/uploads/resumes/${req.file.filename}`,
+      url: req.file.path,
       filename: req.file.filename,
       originalName: req.file.originalname,
       fileSize: req.file.size,
       mimeType: req.file.mimetype,
       uploadedAt: Date.now()
     };
-    console.log('✅ Resume uploaded:', resumeData);
+    console.log('✅ Resume uploaded to Cloudinary:', resumeData.url);
   }
 
   const candidate = await Candidate.create({
@@ -141,10 +147,9 @@ const addCandidate = asyncHandler(async (req, res) => {
   job.applicantsCount += 1;
   await job.save();
 
-  // ✅ Send notification to HR/Admin about new candidate application
   const io = req.app.get('io');
   const notificationService = new NotificationService(io);
-  
+
   const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } });
   for (const hr of hrUsers) {
     await notificationService.createNotification({
@@ -199,10 +204,9 @@ const updateCandidateStatus = asyncHandler(async (req, res) => {
   if (notes) candidate.notes.push({ content: notes, addedBy: req.user._id, isPrivate: false });
   await candidate.save();
 
-  // ✅ Send notification to HR/Admin about status change
   const io = req.app.get('io');
   const notificationService = new NotificationService(io);
-  
+
   const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } });
   for (const hr of hrUsers) {
     await notificationService.createNotification({
@@ -224,7 +228,6 @@ const updateCandidateStatus = asyncHandler(async (req, res) => {
     });
   }
 
-  // ✅ Also notify the candidate via email (existing code)
   const statusMessages = {
     'Shortlisted': 'Congratulations! Your application has been shortlisted.',
     'Interview Scheduled': 'We would like to schedule an interview with you.',
@@ -255,8 +258,6 @@ const updateCandidateStatus = asyncHandler(async (req, res) => {
 
 // @desc    Schedule interview - WITH NOTIFICATION
 // @route   POST /api/recruitment/candidates/:id/interview
-// @desc    Schedule interview - WITH NOTIFICATION
-// @route   POST /api/recruitment/candidates/:id/interview
 const scheduleInterview = asyncHandler(async (req, res) => {
   const { date, time, interviewer, interviewType, meetingLink, notes, round, sendEmail: shouldSendEmail } = req.body;
   const candidate = await Candidate.findById(req.params.id).populate('jobId');
@@ -270,10 +271,9 @@ const scheduleInterview = asyncHandler(async (req, res) => {
   candidate.status = 'Interview Scheduled';
   await candidate.save();
 
-  // ✅ Send notification to HR/Admin
   const io = req.app.get('io');
   const notificationService = new NotificationService(io);
-  
+
   const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } });
   for (const hr of hrUsers) {
     await notificationService.createNotification({
@@ -420,20 +420,19 @@ const addInterviewFeedback = asyncHandler(async (req, res) => {
   if (!candidate) { res.status(404); throw new Error('Candidate not found'); }
 
   const latestInterview = candidate.interviewHistory[candidate.interviewHistory.length - 1];
-  if (latestInterview) { 
-    latestInterview.feedback = feedback; 
-    latestInterview.rating = rating; 
-    latestInterview.status = status; 
+  if (latestInterview) {
+    latestInterview.feedback = feedback;
+    latestInterview.rating = rating;
+    latestInterview.status = status;
   }
   candidate.interviewScheduled = null;
   if (status === 'Completed') candidate.status = rating >= 4 ? 'Interviewed' : 'Under Review';
-  
+
   await candidate.save();
 
-  // ✅ Send notification to HR/Admin
   const io = req.app.get('io');
   const notificationService = new NotificationService(io);
-  
+
   const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } });
   for (const hr of hrUsers) {
     await notificationService.createNotification({
@@ -504,29 +503,23 @@ const updateJob = asyncHandler(async (req, res) => {
 // @access  Private/HR & Admin
 const deleteJob = asyncHandler(async (req, res) => {
   const job = await Job.findById(req.params.id);
-  
+
   if (!job) {
     res.status(404);
     throw new Error('Job not found');
   }
-  
-  // ✅ FIX: Allow HR and Admin to delete any job
-  // Remove the postedBy check - HR and Admin should be able to delete any job
+
   if (req.user.role !== 'admin' && req.user.role !== 'hr') {
     res.status(403);
     throw new Error('Not authorized to delete this job - Only HR and Admin can delete jobs');
   }
-  
-  // Delete all candidates/applications for this job
+
   await Candidate.deleteMany({ jobId: job._id });
-  
-  // Delete the job
   await job.deleteOne();
-  
-  // Send notification about job deletion
+
   const io = req.app.get('io');
   const notificationService = new NotificationService(io);
-  
+
   const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } });
   for (const hr of hrUsers) {
     await notificationService.createNotification({
@@ -546,10 +539,10 @@ const deleteJob = asyncHandler(async (req, res) => {
       priority: 'high'
     });
   }
-  
-  res.json({ 
-    success: true, 
-    message: 'Job deleted successfully' 
+
+  res.json({
+    success: true,
+    message: 'Job deleted successfully'
   });
 });
 
@@ -619,56 +612,48 @@ const addCandidateNote = asyncHandler(async (req, res) => {
   await candidate.save();
   res.json({ success: true, data: candidate });
 });
+
 // @desc    Delete candidate
 // @route   DELETE /api/recruitment/candidates/:id
 // @access  Private/HR & Admin
 const deleteCandidate = asyncHandler(async (req, res) => {
   const candidate = await Candidate.findById(req.params.id);
-  
+
   if (!candidate) {
     res.status(404);
     throw new Error('Candidate not found');
   }
-  
-  // ✅ FIX: Allow HR and Admin to delete any candidate
+
   if (req.user.role !== 'admin' && req.user.role !== 'hr') {
     res.status(403);
     throw new Error('Not authorized to delete this candidate - Only HR and Admin can delete candidates');
   }
-  
-  // Delete the candidate's resume file from disk if it exists
-  if (candidate.resume && candidate.resume.url) {
+
+  // ✅ CHANGED: resume files now live on Cloudinary, not local disk, so we
+  // delete them from Cloudinary using the stored filename (which is the
+  // Cloudinary public_id) instead of fs.unlinkSync on a local path.
+  if (candidate.resume && candidate.resume.filename) {
     try {
-      const relativePath = candidate.resume.url.startsWith('/') 
-        ? candidate.resume.url.substring(1) 
-        : candidate.resume.url;
-      const fullPath = path.join(__dirname, '..', relativePath);
-      if (fs.existsSync(fullPath)) {
-        fs.unlinkSync(fullPath);
-        console.log('✅ Resume file deleted:', fullPath);
-      }
+      await cloudinary.uploader.destroy(candidate.resume.filename, { resource_type: 'raw' });
+      console.log('✅ Resume deleted from Cloudinary:', candidate.resume.filename);
     } catch (err) {
-      console.warn('⚠️ Could not delete resume file:', err.message);
+      console.warn('⚠️ Could not delete resume from Cloudinary:', err.message);
     }
   }
-  
-  // Get job info before deleting candidate
+
   const job = await Job.findById(candidate.jobId);
-  
-  // Delete the candidate
+
   await candidate.deleteOne();
-  
-  // Decrement applicants count for the job
+
   if (job) {
     job.applicantsCount = Math.max(0, (job.applicantsCount || 1) - 1);
     await job.save();
   }
-  
-  // Send notification about candidate deletion
+
   const io = req.app.get('io');
   const NotificationService = require('../services/notificationService');
   const notificationService = new NotificationService(io);
-  
+
   const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } });
   for (const hr of hrUsers) {
     await notificationService.createNotification({
@@ -688,10 +673,10 @@ const deleteCandidate = asyncHandler(async (req, res) => {
       priority: 'high'
     });
   }
-  
-  res.json({ 
-    success: true, 
-    message: 'Candidate deleted successfully' 
+
+  res.json({
+    success: true,
+    message: 'Candidate deleted successfully'
   });
 });
 
@@ -699,8 +684,10 @@ const uploadResume = asyncHandler(async (req, res) => {
   if (!req.file) { res.status(400); throw new Error('Please upload a file'); }
   const candidate = await Candidate.findById(req.params.id);
   if (!candidate) { res.status(404); throw new Error('Candidate not found'); }
+
+  // ✅ CHANGED: same Cloudinary field mapping as addCandidate above.
   candidate.resume = {
-    url: `/uploads/resumes/${req.file.filename}`,
+    url: req.file.path,
     filename: req.file.filename,
     originalName: req.file.originalname,
     fileSize: req.file.size,
@@ -711,33 +698,22 @@ const uploadResume = asyncHandler(async (req, res) => {
   res.json({ success: true, data: candidate });
 });
 
+// ✅ REWRITTEN: previously streamed the file from local disk with
+// fs.createReadStream(fullPath). Since resumes now live on Cloudinary at
+// a permanent public URL (candidate.resume.url), we simply redirect the
+// browser/axios request there instead of reading anything from local
+// disk. This also means this endpoint no longer 404s after a redeploy —
+// Cloudinary URLs don't disappear when the server restarts.
 const getCandidateResume = asyncHandler(async (req, res) => {
   const candidate = await Candidate.findById(req.params.id).select('+resume');
   if (!candidate) { res.status(404); throw new Error('Candidate not found'); }
   if (!candidate.resume || !candidate.resume.url) {
     res.status(404); throw new Error('No resume found for this candidate');
   }
-  const relativePath = candidate.resume.url.startsWith('/') ? candidate.resume.url.substring(1) : candidate.resume.url;
-  const fullPath = path.join(__dirname, '..', relativePath);
-  if (!fs.existsSync(fullPath)) {
-    res.status(404); throw new Error('Resume file not found on disk');
-  }
-  const ext = path.extname(fullPath).toLowerCase();
-  const contentTypeMap = {
-    '.pdf':  'application/pdf',
-    '.doc':  'application/msword',
-    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-  };
-  const contentType = contentTypeMap[ext] || 'application/octet-stream';
-  const safeFilename = `${candidate.firstName}_${candidate.lastName}_resume${ext}`.replace(/\s/g, '_');
-  res.setHeader('Content-Type', contentType);
-  res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
-  const fileStream = fs.createReadStream(fullPath);
-  fileStream.on('error', (err) => {
-    console.error('Stream error:', err);
-    if (!res.headersSent) res.status(500).json({ success: false, error: 'Failed to stream file' });
-  });
-  fileStream.pipe(res);
+
+  // 302 redirect: the client's GET request is transparently forwarded to
+  // the Cloudinary URL. Axios (and browsers) follow this automatically.
+  return res.redirect(candidate.resume.url);
 });
 
 const checkCandidateResume = asyncHandler(async (req, res) => {
@@ -825,7 +801,7 @@ const getDashboardStats = asyncHandler(async (req, res) => {
 
 module.exports = {
   createJob, getJobs, getJob, updateJob, deleteJob, publishJob, closeJob,
-  addCandidate, getCandidates, getCandidate,deleteCandidate, updateCandidateStatus,
+  addCandidate, getCandidates, getCandidate, deleteCandidate, updateCandidateStatus,
   scheduleInterview, addInterviewFeedback, addCandidateNote, uploadResume,
   getRecruitmentAnalytics, getDashboardStats, checkCandidateResume, getCandidateResume
 };
