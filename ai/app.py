@@ -169,16 +169,46 @@ app.active_streams = active_streams
 
 
 # ── Register Blueprints ───────────────────────────────────────────
-register_blueprints(app)
+# 🔍 DIAGNOSTIC INSTRUMENTATION (temporary):
+# Previously this was a single bare `register_blueprints(app)` call with
+# no error handling. If ANY blueprint's import chain raised an exception
+# (e.g. wellness_routes.py -> wellness_service.py -> models/wellness.py),
+# the whole call would fail with no useful log output, making it
+# impossible to tell whether wellness routes were even attempted.
+# This wraps registration in try/except with logging, and dumps every
+# route Flask actually knows about at startup so we can directly confirm
+# whether /api/stats, /api/checkin/status, etc. are registered.
+try:
+    register_blueprints(app)
+    logger.info("✅ Core blueprints (auth, profile, career, chat, wellness, learning) registered")
+except Exception as e:
+    logger.exception(f"❌ register_blueprints(app) FAILED — this is likely why routes are 404ing: {e}")
+    raise  # keep this crashing loudly on purpose so Render logs show the real traceback
 
-app.register_blueprint(
-    career_chat_bp,
-    url_prefix="/api/career-chat"
-)
+try:
+    app.register_blueprint(career_chat_bp, url_prefix="/api/career-chat")
+    logger.info("✅ career_chat_bp registered")
+except Exception as e:
+    logger.exception(f"❌ career_chat_bp failed to register: {e}")
 
-app.register_blueprint(ats_bp)
+try:
+    app.register_blueprint(ats_bp)
+    logger.info("✅ ats_bp registered")
+except Exception as e:
+    logger.exception(f"❌ ats_bp failed to register: {e}")
 
-app.register_blueprint(face_bp)
+try:
+    app.register_blueprint(face_bp)
+    logger.info("✅ face_bp registered")
+except Exception as e:
+    logger.exception(f"❌ face_bp failed to register: {e}")
+
+# 📋 Print every route Flask actually knows about, so we can search the
+# Render logs for '/api/stats', '/api/checkin/status', etc. and see
+# immediately whether they were registered or not.
+_startup_logger.info("📋 Registered routes:")
+for rule in sorted(app.url_map.iter_rules(), key=lambda r: str(r)):
+    _startup_logger.info(f"   {rule.methods - {'HEAD', 'OPTIONS'}}  {rule}")
 
 
 # ── Database tables ───────────────────────────────────────────────
