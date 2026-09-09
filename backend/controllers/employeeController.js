@@ -1,6 +1,5 @@
 const User = require('../models/User');
-const fs = require('fs');
-const path = require('path');
+const cloudinary = require('../config/cloudinary');
 const NotificationService = require('../services/notificationService');
 const {
   generateEmployeeId,
@@ -767,6 +766,13 @@ exports.createEmployeeWithAccount = async (req, res) => {
 // the exact same ID logic instead of three separate implementations that
 // could drift apart (which is what caused the "long number ID" bug).
 
+// ==================== PROFILE PICTURE (Cloudinary) ====================
+// Files are stored on Cloudinary via multer-storage-cloudinary (see
+// middleware/profilePictureUpload.js), NOT on local disk. Render's
+// filesystem is ephemeral — anything saved locally is wiped on every
+// restart/redeploy/idle spin-down. req.file.path here is the hosted
+// Cloudinary URL, not a local path.
+
 // UPLOAD PROFILE PICTURE - WITH NOTIFICATION
 exports.uploadProfilePicture = async (req, res) => {
   try {
@@ -777,7 +783,7 @@ exports.uploadProfilePicture = async (req, res) => {
       });
     }
 
-    const profilePictureUrl = `/uploads/profile-pictures/${req.file.filename}`;
+    const profilePictureUrl = req.file.path; // Cloudinary secure URL
 
     const user = await User.findByIdAndUpdate(
       req.user.id,
@@ -845,9 +851,13 @@ exports.deleteProfilePicture = async (req, res) => {
     }
 
     if (user.profilePicture) {
-      const filePath = path.join(__dirname, '..', user.profilePicture);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+      try {
+        const parts = user.profilePicture.split('/');
+        const fileWithExt = parts[parts.length - 1];
+        const publicId = `profile-pictures/${fileWithExt.split('.')[0]}`;
+        await cloudinary.uploader.destroy(publicId);
+      } catch (cloudErr) {
+        console.error('Error deleting from Cloudinary (continuing):', cloudErr);
       }
     }
 

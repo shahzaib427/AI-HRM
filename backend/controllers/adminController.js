@@ -4,8 +4,7 @@ const Attendance = require('../models/Attendance');
 const Payroll = require('../models/Payroll');
 const mongoose = require('mongoose');
 const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
+const cloudinary = require('../config/cloudinary');
 
 // ==================== DATE RANGE HELPER ====================
 function getDateRangeFilter(timeRange) {
@@ -201,6 +200,13 @@ exports.getSystemStats = async (req, res) => {
   }
 };
 
+// ==================== PROFILE PICTURE (Cloudinary) ====================
+// Files are stored on Cloudinary via multer-storage-cloudinary (see
+// middleware/profilePictureUpload.js), NOT on local disk. Render's
+// filesystem is ephemeral — anything saved locally is wiped on every
+// restart/redeploy/idle spin-down. req.file.path here is the hosted
+// Cloudinary URL, not a local path.
+
 // Upload Profile Picture
 exports.uploadProfilePicture = async (req, res) => {
   try {
@@ -211,7 +217,7 @@ exports.uploadProfilePicture = async (req, res) => {
       });
     }
 
-    const profilePictureUrl = `/uploads/profile-pictures/${req.file.filename}`;
+    const profilePictureUrl = req.file.path; // Cloudinary secure URL
 
     const user = await User.findByIdAndUpdate(
       req.user.id,
@@ -253,9 +259,13 @@ exports.deleteProfilePicture = async (req, res) => {
     }
 
     if (user.profilePicture) {
-      const filePath = path.join(__dirname, '..', user.profilePicture);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+      try {
+        const parts = user.profilePicture.split('/');
+        const fileWithExt = parts[parts.length - 1];
+        const publicId = `profile-pictures/${fileWithExt.split('.')[0]}`;
+        await cloudinary.uploader.destroy(publicId);
+      } catch (cloudErr) {
+        console.error('Error deleting from Cloudinary (continuing):', cloudErr);
       }
     }
 
@@ -322,8 +332,6 @@ exports.getDashboardStats = async (req, res) => {
 
     const pendingLeaves = await Leave.countDocuments({ status: 'pending' });
 
-    // Real "system health": % of active employees who checked in at least
-    // once within the selected time range (was locked to "today only" before)
     const distinctCheckedIn = await Attendance.distinct('employee', {
       date: dateFilter,
       $or: [
@@ -336,8 +344,6 @@ exports.getDashboardStats = async (req, res) => {
       ? Math.round((distinctCheckedIn.length / totalEmployees) * 100)
       : 0;
 
-    // Real "employee satisfaction" proxy: on-time check-in rate within timeRange
-    // (before 9:00 AM cutoff, matching the schema's own late-detection logic)
     const attendanceInRange = await Attendance.find({
       date: dateFilter,
       $or: [
@@ -351,7 +357,6 @@ exports.getDashboardStats = async (req, res) => {
       ? Math.round((onTimeCount / attendanceInRange.length) * 100)
       : 0;
 
-    // Real "performance": average hours worked vs 8h target, within timeRange
     const withHours = await Attendance.find({
       date: dateFilter,
       totalHours: { $exists: true, $gt: 0 }
@@ -362,10 +367,6 @@ exports.getDashboardStats = async (req, res) => {
       : 0;
     const performance = Math.min(100, Math.round((avgHours / 8) * 100));
 
-    // Real "payroll cost": Payroll records are month/year-granular, so this
-    // is the finest real precision available — 'yearly' sums every month of
-    // the current year; daily/weekly/monthly all show the current month's
-    // paid total, since payroll simply doesn't run at daily/weekly granularity.
     const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonthName = now.toLocaleString('default', { month: 'long' });
@@ -389,7 +390,7 @@ exports.getDashboardStats = async (req, res) => {
         activeDepartments: activeDepartments.length,
         systemHealth,
         pendingTasks: pendingLeaves,
-        payrollCost, // real: sum of Paid payroll for the current month
+        payrollCost,
         performance,
         employeeSatisfaction
       }
@@ -447,7 +448,6 @@ exports.getRecentActivity = async (req, res) => {
       });
     });
 
-    // Real: recent AI-verified check-ins (uses your actual checkInRequest.remarks field)
     const recentCheckIns = await Attendance.find({
       approvedCheckIn: { $exists: true, $ne: null }
     })
@@ -485,9 +485,6 @@ exports.getRecentActivity = async (req, res) => {
 };
 
 // ==================== TEAM MEMBERS (real productivity, real online status) ====================
-// Expected working days per range — used as the denominator for the
-// productivity %. Rough business-day estimates; adjust if you track a real
-// work calendar/holidays.
 function getExpectedWorkingDays(timeRange) {
   switch (timeRange) {
     case 'daily': return 1;
@@ -596,7 +593,6 @@ exports.getNotifications = async (req, res) => {
       });
     }
 
-    // Real: pending attendance approval requests (uses your actual workflow fields)
     const pendingAttendanceApprovals = await Attendance.countDocuments({
       $or: [
         { 'checkInRequest.approved': false },
@@ -613,7 +609,6 @@ exports.getNotifications = async (req, res) => {
       });
     }
 
-    // Real: unpaid payroll for the current month
     const now = new Date();
     const currentMonthName = now.toLocaleString('default', { month: 'long' });
     const currentYear = now.getFullYear();
@@ -656,7 +651,6 @@ exports.getPerformanceMetrics = async (req, res) => {
 
     const totalEmployees = await User.countDocuments({ isActive: true, role: { $ne: 'admin' } });
 
-    // 1. Attendance Rate: % of employees who checked in at least once in range
     const distinctCheckedIn = await Attendance.distinct('employee', {
       date: dateFilter,
       $or: [
@@ -668,7 +662,6 @@ exports.getPerformanceMetrics = async (req, res) => {
       ? Math.round((distinctCheckedIn.length / totalEmployees) * 100)
       : 0;
 
-    // 2. Punctuality Rate: % of check-ins in range that were on-time (lateMinutes === 0)
     const attendanceRecords = await Attendance.find({
       date: dateFilter,
       $or: [
@@ -682,7 +675,6 @@ exports.getPerformanceMetrics = async (req, res) => {
       ? Math.round((onTimeCount / attendanceRecords.length) * 100)
       : 0;
 
-    // 3. Avg Work Hours: average totalHours logged in range
     const withHours = await Attendance.find({
       date: dateFilter,
       totalHours: { $exists: true, $gt: 0 }
@@ -692,7 +684,6 @@ exports.getPerformanceMetrics = async (req, res) => {
       ? parseFloat((withHours.reduce((sum, a) => sum + a.totalHours, 0) / withHours.length).toFixed(1))
       : 0;
 
-    // 4. Leave Utilization: % of employees who took approved leave in range
     const distinctOnLeave = await Leave.distinct('employee', {
       status: 'approved',
       startDate: dateFilter
@@ -788,13 +779,7 @@ exports.markNotificationRead = async (req, res) => {
   }
 };
 
-// ==================== ATTENDANCE OVERVIEW (new — real, timeRange-aware) ====================
-// Weekly: last 7 days, one bucket per day.
-// Monthly (default): last 4 weeks, one bucket per week (30 daily points would
-// be unreadable in a compact chart).
-// Present = distinct employees with an approved/raw check-in and lateMinutes === 0
-// Late    = distinct employees with an approved/raw check-in and lateMinutes > 0
-// Absent  = active employees who did not check in at all that bucket
+// ==================== ATTENDANCE OVERVIEW ====================
 exports.getAttendanceOverview = async (req, res) => {
   try {
     const { timeRange = 'weekly' } = req.query;
@@ -876,7 +861,7 @@ exports.getAttendanceOverview = async (req, res) => {
   }
 };
 
-// ==================== LEAVE OVERVIEW (new — real) ====================
+// ==================== LEAVE OVERVIEW ====================
 exports.getLeaveOverview = async (req, res) => {
   try {
     const [pending, approved, rejected] = await Promise.all([
@@ -898,18 +883,15 @@ exports.getLeaveOverview = async (req, res) => {
   }
 };
 
-// ==================== SYSTEM STATUS (new — real, per-service) ====================
+// ==================== SYSTEM STATUS ====================
 exports.getSystemStatus = async (req, res) => {
   const services = [];
 
-  // Database — mongoose's own connection state
-  const dbState = mongoose.connection.readyState; // 1 = connected
+  const dbState = mongoose.connection.readyState;
   services.push({ name: 'Database', status: dbState === 1 ? 'Operational' : 'Critical' });
 
-  // API — if this handler is running, the API itself is up
   services.push({ name: 'API', status: 'Operational' });
 
-  // Attendance service — verify the Attendance collection actually responds
   try {
     await Attendance.estimatedDocumentCount();
     services.push({ name: 'Attendance Service', status: 'Operational' });
@@ -917,7 +899,6 @@ exports.getSystemStatus = async (req, res) => {
     services.push({ name: 'Attendance Service', status: 'Critical' });
   }
 
-  // AI service — real health check against the Python face-recognition service
   const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:5001';
   try {
     await axios.get(`${AI_SERVICE_URL}/health`, { timeout: 3000 });
@@ -932,10 +913,7 @@ exports.getSystemStatus = async (req, res) => {
   });
 };
 
-// ==================== AI INSIGHTS (new — real, derived from attendance data) ====================
-// Every insight here is computed from actual records for this week vs last
-// week. If there isn't enough data yet for a given insight, it's omitted
-// rather than shown with a made-up number.
+// ==================== AI INSIGHTS ====================
 exports.getAIInsights = async (req, res) => {
   try {
     const insights = [];
@@ -945,7 +923,6 @@ exports.getAIInsights = async (req, res) => {
     const lastWeekStart = new Date(now); lastWeekStart.setDate(now.getDate() - 14);
     const lastWeekEnd = new Date(thisWeekStart);
 
-    // 1. Late-arrival trend
     const [thisWeekRecords, lastWeekRecords] = await Promise.all([
       Attendance.find({ date: { $gte: thisWeekStart, $lte: now } }).select('lateMinutes').lean(),
       Attendance.find({ date: { $gte: lastWeekStart, $lt: lastWeekEnd } }).select('lateMinutes').lean()
@@ -967,7 +944,6 @@ exports.getAIInsights = async (req, res) => {
       });
     }
 
-    // 2. Overtime / wellness signal — % of logged days over 10 hours, this week
     const longDays = await Attendance.find({
       date: { $gte: thisWeekStart, $lte: now },
       totalHours: { $exists: true, $gt: 0 }
@@ -985,7 +961,6 @@ exports.getAIInsights = async (req, res) => {
       });
     }
 
-    // 3. Face registration coverage — real count from User.hasFaceRegistered
     const [totalActive, registered] = await Promise.all([
       User.countDocuments({ isActive: true, role: { $ne: 'admin' } }),
       User.countDocuments({ isActive: true, role: { $ne: 'admin' }, hasFaceRegistered: true })
@@ -998,7 +973,6 @@ exports.getAIInsights = async (req, res) => {
       });
     }
 
-    // 4. HR Assistant — informational, not data-driven, always shown
     insights.push({
       type: 'assistant',
       title: 'AI HR Assistant',
@@ -1068,7 +1042,6 @@ function calculateUptime() {
   }
 }
 
-// Real database size via MongoDB's own stats
 async function getDatabaseSize() {
   try {
     const stats = await mongoose.connection.db.stats();
