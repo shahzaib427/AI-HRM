@@ -558,10 +558,8 @@ const AdminProfile = () => {
           <div className="relative group">
             <img
              src={
-  profile.profilePicture
-    ? (profile.profilePicture.startsWith('http')
-        ? profile.profilePicture
-        : `https://ai-hrm-backend.onrender.com${profile.profilePicture}`)
+  profile.profilePicture && profile.profilePicture.startsWith('http')
+    ? profile.profilePicture
     : `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name)}&background=4f46e5&color=fff&size=200`
 }
               alt="Profile"
