@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   BriefcaseIcon, UserGroupIcon, CalendarIcon, CheckCircleIcon,
   ClockIcon, XCircleIcon, PlusIcon,
@@ -207,6 +207,11 @@ const HRRecruitment = () => {
 
   const itemsPerPage = 6;
 
+  // ── Client-side cache for ATS endpoints (free-tier rate-limit mitigation) ──
+  const CACHE_TTL = 60000; // 60 seconds
+  const statsCache = useRef({ data: null, timestamp: 0 });
+  const bulkScoresCache = useRef({ data: null, timestamp: 0, ids: '' });
+
   // Show notification helper
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
@@ -221,69 +226,93 @@ const HRRecruitment = () => {
   };
 
   // Fetch recruitment data
-  // ✅ FIXED: previously this fired dashboard + jobs + candidates + ats/stats
-  // + ats/bulk-scores all at once via Promise.all, which sent a burst of
-  // 5-6 simultaneous requests to the Flask ATS service. On Render's free
-  // tier that burst was getting rejected with 429 Too Many Requests.
-  // Now the core recruitment data loads together (it's cheap, MongoDB-only),
-  // but the ATS-related calls (bulk-scores, stats) are deliberately delayed
-  // and run one after another instead of all at once.
   const fetchRecruitmentData = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const [statsRes, jobsRes, candidatesRes] = await Promise.all([
-        axiosInstance.get('/recruitment/dashboard'),
-        axiosInstance.get('/recruitment/jobs'),
-        axiosInstance.get('/recruitment/candidates'),
-      ]);
-
+      const statsRes = await axiosInstance.get('/recruitment/dashboard');
       if (statsRes.data.success) setRecruitmentStats(statsRes.data.data.stats || {});
+
+      await wait(300);
+      const jobsRes = await axiosInstance.get('/recruitment/jobs');
       if (jobsRes.data.success) setJobPostings(jobsRes.data.data || []);
+
+      await wait(300);
+      const candidatesRes = await axiosInstance.get('/recruitment/candidates');
 
       if (candidatesRes.data.success) {
         const cands = candidatesRes.data.data || [];
         setCandidates(cands);
 
-        // Wait a moment before hitting the ATS service so this request
-        // doesn't land in the same instant as the three above.
-        await wait(800);
+        await wait(1500);
         await fetchBulkATSScores(cands.map(c => c._id));
       }
     } catch (err) {
       if (err.response?.status === 401) setError('Session expired. Please login again.');
       else if (err.response?.status === 403) setError('Access denied — HR permissions required.');
+      else if (err.response?.status === 429) setError('Server is busy — retrying automatically…');
       else setError('Failed to load recruitment data. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch bulk ATS scores
-  const fetchBulkATSScores = async (ids) => {
+  // Fetch bulk ATS scores (cached for CACHE_TTL to avoid repeat hits on the
+  // free-tier backend when the dashboard remounts, tab switches, etc.)
+  const fetchBulkATSScores = async (ids, force = false) => {
     if (!ids.length) return;
+
+    const idsKey = ids.slice().sort().join(',');
+    const now = Date.now();
+    if (
+      !force &&
+      bulkScoresCache.current.data &&
+      bulkScoresCache.current.ids === idsKey &&
+      (now - bulkScoresCache.current.timestamp) < CACHE_TTL
+    ) {
+      setAtsScores(bulkScoresCache.current.data);
+      return;
+    }
+
     try {
       const res = await axiosInstance.post('/ats/bulk-scores', { candidate_ids: ids });
-      if (res.data.success) setAtsScores(res.data.data || {});
+      if (res.data.success) {
+        const data = res.data.data || {};
+        setAtsScores(data);
+        bulkScoresCache.current = { data, timestamp: now, ids: idsKey };
+      }
     } catch (_) {}
   };
 
-  // Fetch ATS stats
-  const fetchATSStats = async () => {
+  // Fetch ATS stats (cached for CACHE_TTL; pass force=true to bypass, e.g.
+  // when the user explicitly clicks "Refresh ATS Stats")
+  const fetchATSStats = async (force = false) => {
+    const now = Date.now();
+    if (
+      !force &&
+      statsCache.current.data &&
+      (now - statsCache.current.timestamp) < CACHE_TTL
+    ) {
+      setAtsStats(statsCache.current.data);
+      return;
+    }
+
     try {
       const res = await axiosInstance.get('/ats/stats');
-      if (res.data.success) setAtsStats(res.data.data);
+      if (res.data.success) {
+        setAtsStats(res.data.data);
+        statsCache.current = { data: res.data.data, timestamp: now };
+      }
     } catch (_) {}
   };
 
-  // ✅ FIXED: fetchRecruitmentData() and fetchATSStats() used to run
-  // side-by-side in the same effect, adding yet another simultaneous
-  // request into the initial burst. Now fetchATSStats() only runs after
-  // fetchRecruitmentData() (and its own internal delay before bulk-scores)
-  // has finished, spreading the ATS calls out over ~1-2 seconds instead of
-  // firing them all in the same instant.
+  const didInitRef = useRef(false);
+
   useEffect(() => {
+    if (didInitRef.current) return;
+    didInitRef.current = true;
+
     (async () => {
       await fetchRecruitmentData();
       await wait(500);
@@ -306,11 +335,11 @@ const HRRecruitment = () => {
         if (selectedCandidate?._id === candidateId) {
           setSelectedCandidate(prev => ({ ...prev, _atsAnalysis: analysis }));
         }
-        fetchATSStats();
+        fetchATSStats(true);
       }
     } catch (err) {
       if (err.response?.status === 429) {
-        showNotification('ATS service is busy — please wait a few seconds and try again.', 'error');
+        showNotification('Analyzing… server is busy, this may take a moment.', 'info');
       } else {
         showNotification(err.response?.data?.message || 'ATS analysis failed', 'error');
       }
@@ -393,7 +422,6 @@ const isInterviewFormValid = () => {
   };
 
   // Send interview invitation email
-// ✅ REPLACE WITH THIS (real API call):
 const sendInterviewInvitation = async () => {
   if (!candidateForInterview) return;
   setEmailSending(true);
@@ -472,12 +500,20 @@ const sendInterviewInvitation = async () => {
   };
 
   // View resume
-  const handleViewResume = async (candidateId) => {
+  // ✅ FIXED: previously trusted whatever Content-Type header came back
+  // over the network (via Cloudinary's redirect), which was unreliable —
+  // Cloudinary doesn't always report the correct type for 'raw' resources.
+  // Now we use the mimeType we saved in our own database at upload time
+  // (candidate.resume.mimeType), which comes directly from the browser's
+  // file picker and is always accurate. This ensures the Blob is tagged
+  // correctly so the browser knows whether it CAN render it inline.
+  const handleViewResume = async (candidateId, knownMimeType) => {
     try {
       setViewingResume(true);
       const res = await axiosInstance.get(`/recruitment/candidates/${candidateId}/resume`, { responseType: 'blob' });
       if (res.data?.size > 0) {
-        const blob = new Blob([res.data], { type: res.headers['content-type'] || 'application/pdf' });
+        const blobType = knownMimeType || res.headers['content-type'] || 'application/pdf';
+        const blob = new Blob([res.data], { type: blobType });
         setResumeFileUrl(URL.createObjectURL(blob));
         triggerATSAnalysis(candidateId);
       }
@@ -841,7 +877,7 @@ const sendInterviewInvitation = async () => {
                         View Strong Matches
                       </button>
                       <button
-                        onClick={fetchATSStats}
+                        onClick={() => fetchATSStats(true)}
                         className="text-xs px-3 py-1.5 border border-indigo-300 text-indigo-700 rounded-lg hover:bg-indigo-50"
                       >
                         Refresh ATS Stats
@@ -1265,7 +1301,25 @@ const sendInterviewInvitation = async () => {
                       </button>
                     </div>
                   </div>
-                  <iframe src={resumeFileUrl} className="w-full h-[600px] rounded-lg border" title="Resume" />
+                  {/* ✅ FIXED: browsers can only render PDF files inline in an
+                      iframe. Word documents (.doc/.docx) — and previously even
+                      PDFs whose Cloudinary content-type wasn't detected
+                      correctly — would show a blank box. We now explicitly
+                      check the mimeType saved in our own database at upload
+                      time (reliable, browser-supplied) and only attempt the
+                      iframe for real PDFs, showing a clear fallback message
+                      otherwise. */}
+                  {selectedCandidate.resume?.mimeType === 'application/pdf' ? (
+                    <iframe src={resumeFileUrl} className="w-full h-[600px] rounded-lg border" title="Resume" />
+                  ) : (
+                    <div className="w-full h-[300px] rounded-lg border border-dashed border-gray-300 bg-gray-50 flex flex-col items-center justify-center gap-3 text-center px-6">
+                      <DocumentTextIcon className="w-10 h-10 text-gray-300" />
+                      <p className="text-sm text-gray-500">
+                        This file type can't be previewed directly in the browser.
+                        <br />Click <strong>Download</strong> above to open it.
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-6">
@@ -1418,7 +1472,7 @@ const sendInterviewInvitation = async () => {
 
                   {selectedCandidate.resume && (
                     <button
-                      onClick={() => handleViewResume(selectedCandidate._id)}
+                      onClick={() => handleViewResume(selectedCandidate._id, selectedCandidate.resume?.mimeType)}
                       className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
                     >
                       <DocumentTextIcon className="w-5 h-5" /> View Resume & Run ATS Analysis

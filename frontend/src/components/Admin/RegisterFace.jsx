@@ -432,6 +432,13 @@ const RegisterFace = () => {
     }
   };
 
+  // Clear search and refocus the input
+  const clearSearch = () => {
+    setSearch('');
+    setHighlightedIndex(-1);
+    setTimeout(() => searchInputRef.current?.focus(), 50);
+  };
+
   if (searching && allEmployees.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -610,9 +617,19 @@ const RegisterFace = () => {
                     onKeyDown={handleSearchKeyDown}
                     className="w-full pl-11 pr-12 py-3.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-text"
                   />
-                  <FaChevronDown className={`absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+                  {search ? (
+                    <button
+                      onClick={clearSearch}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                      title="Clear search"
+                    >
+                      <FaTimesCircle className="text-sm" />
+                    </button>
+                  ) : (
+                    <FaChevronDown className={`absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+                  )}
                   {searching && (
-                    <FaSpinner className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm animate-spin" />
+                    <FaSpinner className="absolute right-12 top-1/2 -translate-y-1/2 text-gray-400 text-sm animate-spin" />
                   )}
                 </div>
 
