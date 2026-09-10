@@ -95,6 +95,58 @@ class WellnessService:
         response['wellness_level']            = result.get('wellness_level', '')
         return response
 
+    # ==================================================================
+    # ✅ NEW METHOD — generate_recommendations()
+    # ------------------------------------------------------------------
+    # Runs the same WellnessCoach pipeline that create_checkin uses, but
+    # does NOT persist anything to the database. This is what the new
+    # POST /api/checkin/recommendations route in wellness_routes.py
+    # calls to back-fill `detailed_recommendations` for older check-ins
+    # that were stored before that field existed.
+    #
+    # Returns the rich recommendation list, exactly the same shape as
+    # `create_checkin(...)['detailed_recommendations']`.
+    # ==================================================================
+    def generate_recommendations(self, user_id, data: Dict) -> List[Dict]:
+        # Validate user_id even though we don't persist — keeps the
+        # route's auth/identity contract consistent with the rest of
+        # the service.
+        self._uid(user_id)
+
+        required = ['mood', 'stress', 'sleep', 'energy', 'productivity']
+        missing  = [k for k in required if k not in data]
+        if missing:
+            raise ValueError(f"Missing required fields: {', '.join(missing)}")
+
+        wellness_input = WellnessInput(
+            mood         = data['mood'],
+            stress       = data['stress'],
+            sleep        = data['sleep'],
+            energy       = data['energy'],
+            productivity = data['productivity'],
+            message      = data.get('message', '')
+        )
+
+        result = self.coach.wellness_coach(wellness_input)
+
+        # Prefer the rich list; fall back to the simple list wrapped in
+        # the same dict shape so the frontend's RecommendationCard can
+        # still render something if the coach didn't emit rich recs.
+        rich = result.get('detailed_recommendations') or []
+
+        if not rich:
+            rich = [
+                {
+                    'title':       r if isinstance(r, str) else r.get('title', 'Recommendation'),
+                    'description': '' if isinstance(r, str) else r.get('description', ''),
+                    'priority':    'medium',
+                    'icon':        '💡',
+                }
+                for r in (result.get('recommendations') or [])
+            ]
+
+        return rich
+
     # ── Weekly wellness ────────────────────────────────────────────────────────
     def get_weekly_wellness(self, user_id, days: int = 7) -> Dict:
         uid      = self._uid(user_id)
@@ -290,7 +342,6 @@ class WellnessService:
                 streak += 1
                 current_date -= timedelta(days=1)
             elif current_date == datetime.utcnow().date():
-                # Today has no check-in yet — still allow streak from yesterday
                 current_date -= timedelta(days=1)
             else:
                 break

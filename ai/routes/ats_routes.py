@@ -10,9 +10,19 @@ Bug 2: candidate_skills is ['python react django'] — one string not a list
 Bug 3: No HF token → keyword fallback → job description empty → 0% scores
        Fix: Build synthetic job description from job title + skills so
             keyword matching works even without a real description
+
+Bug 4 (this revision):
+       When the ATS service raised an exception whose message contained
+       a NUL byte (from a malformed PDF), the except-block's
+       jsonify({'message': str(exc)}) ALSO failed → the browser saw
+       'A string literal cannot contain NUL (0x00) characters' instead
+       of the real error. Fix: _safe_str() strips control chars from
+       any exception text before jsonify.
 """
 import os
+import re
 import logging
+import traceback
 from functools import wraps
 from flask import Blueprint, request, jsonify
 from models import db
@@ -32,6 +42,32 @@ logger = logging.getLogger(__name__)
 ats_bp = Blueprint('ats', __name__, url_prefix='/api/ats')
 
 COMPANY_NAME = 'Our Company'
+
+
+# ── NEW ──────────────────────────────────────────────────────────────
+def _safe_str(s) -> str:
+    """
+    Return a JSON-safe string. Strips NUL and other C0 control chars so
+    jsonify() and the browser's XHR don't blow up with
+    'A string literal cannot contain NUL (0x00) characters.'
+    """
+    try:
+        s = '' if s is None else str(s)
+    except Exception:
+        s = 'Unknown error'
+    return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', s)
+
+
+def _error_body(exc: Exception, *, include_trace: bool = False) -> dict:
+    """Build a consistent, JSON-safe error response body."""
+    body = {
+        'success': False,
+        'message': _safe_str(exc),
+        'type':    type(exc).__name__,
+    }
+    if include_trace and os.environ.get('FLASK_ENV') != 'production':
+        body['trace'] = _safe_str(traceback.format_exc())
+    return body
 
 
 def internal_auth(f):
@@ -65,10 +101,9 @@ def _get_candidate_flexible(candidate_id: str) -> dict | None:
                 candidate.setdefault('lastName',  candidate.get('last_name', ''))
                 candidate.setdefault('skills',    candidate.get('skills', []))
 
-                # Store partial jobObj but ALWAYS fetch full job separately
                 job_ref = candidate.get('jobId') or candidate.get('job_id') or {}
                 if isinstance(job_ref, dict):
-                    candidate['_jobObj_partial'] = job_ref          # partial — do NOT use for description
+                    candidate['_jobObj_partial'] = job_ref
                     candidate['jobId'] = str(job_ref.get('_id', ''))
                 elif isinstance(job_ref, str):
                     candidate['jobId'] = job_ref
@@ -93,7 +128,6 @@ def _normalize_skills(skills_raw) -> list:
     result = []
     for item in skills_raw:
         if isinstance(item, str):
-            # Split by comma, space, or semicolon
             parts = [s.strip() for s in item.replace(',', ' ').replace(';', ' ').split()]
             result.extend(p for p in parts if p)
         else:
@@ -106,8 +140,6 @@ def _normalize_skills(skills_raw) -> list:
 def _get_job_full(job_id: str) -> dict | None:
     """
     FIX BUG 1: Always fetch the FULL job object from Node.
-    The _jobObj from Mongoose populate only has title/dept/location.
-    We need description + requirements + skillsRequired.
     """
     if not job_id:
         logger.warning('[job fetch] No job_id provided')
@@ -136,7 +168,6 @@ def _get_job_full(job_id: str) -> dict | None:
 def _build_job_description(job: dict, candidate_skills: list = None) -> str:
     """
     FIX BUG 3: Build rich description even if job.description is empty.
-    Uses all available job fields + candidate skills as context.
     """
     parts = []
 
@@ -160,7 +191,6 @@ def _build_job_description(job: dict, candidate_skills: list = None) -> str:
     dept  = job.get('department', '')
     level = job.get('experienceLevel', '')
 
-    # FIX: If still empty, synthesize from title + department + level
     if not parts:
         synthetic = f"We are looking for a {title}"
         if level:
@@ -185,7 +215,6 @@ def _build_requirements(job: dict, candidate_skills: list = None) -> list:
         if s and str(s) not in reqs:
             reqs.append(str(s))
 
-    # If still empty, use candidate skills as requirements context
     if not reqs and candidate_skills:
         reqs = candidate_skills[:]
         logger.warning('[job reqs] No requirements found — using candidate skills as proxy')
@@ -226,23 +255,18 @@ def analyze_candidate(candidate_id: str):
                 logger.info(f'[ATS] Returning cached for {candidate_id}')
                 return jsonify({'success': True, 'data': existing, 'source': 'cached'}), 200
 
-        # Step 1: Candidate
         candidate = _get_candidate_flexible(candidate_id)
         if not candidate:
             return jsonify({'success': False, 'message': 'Candidate not found'}), 404
 
-        # FIX BUG 2: Normalize skills from string to list
         raw_skills       = candidate.get('skills') or []
         candidate_skills = _normalize_skills(raw_skills)
 
-        # FIX BUG 1: Always fetch FULL job — never use partial _jobObj
         job_id = str(candidate.get('jobId') or candidate.get('job_id', ''))
         job    = _get_job_full(job_id)
 
-        # Step 3: Build job data
         job_title        = (job.get('title', '') if job else '') or 'Position'
         job_description  = _build_job_description(job, candidate_skills) if job else (
-            # No job at all — build from skills only
             f"Looking for a developer with skills: {', '.join(candidate_skills)}" if candidate_skills else ''
         )
         job_requirements = _build_requirements(job, candidate_skills) if job else candidate_skills[:]
@@ -253,12 +277,10 @@ def analyze_candidate(candidate_id: str):
         logger.info(f'[ATS] requirements    = {job_requirements[:5]}')
         logger.info(f'[ATS] skills (fixed)  = {candidate_skills}')
 
-        # Step 4: Resume
         resume_bytes, content_type = _fetch_resume_bytes(candidate_id)
         if not resume_bytes:
             return jsonify({'success': False, 'message': 'No resume found'}), 400
 
-        # Step 5: Analyze
         result = analyze_and_store(
             candidate_id=candidate_id,
             candidate_email=candidate.get('email', ''),
@@ -278,8 +300,9 @@ def analyze_candidate(candidate_id: str):
         return jsonify({'success': True, 'data': result, 'source': 'fresh'}), 200
 
     except Exception as exc:
+        # ── FIX: JSON-safe error body (was: jsonify({'message': str(exc)})) ──
         logger.exception(f'ATS analyze error: {candidate_id}')
-        return jsonify({'success': False, 'message': str(exc)}), 500
+        return jsonify(_error_body(exc, include_trace=True)), 500
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -293,7 +316,7 @@ def get_score(candidate_id: str):
         return jsonify({'success': True, 'data': result}), 200
     except Exception as exc:
         logger.exception('ATS score fetch error')
-        return jsonify({'success': False, 'message': str(exc)}), 500
+        return jsonify(_error_body(exc)), 500
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -307,7 +330,7 @@ def bulk_scores():
         return jsonify({'success': True, 'data': get_bulk_scores(ids)}), 200
     except Exception as exc:
         logger.exception('Bulk scores error')
-        return jsonify({'success': False, 'message': str(exc)}), 500
+        return jsonify(_error_body(exc)), 500
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -341,10 +364,10 @@ def send_shortlist_email(candidate_id: str):
             record.email_sent_at = datetime.utcnow()
             db.session.commit()
             return jsonify({'success': True, 'message': 'Email sent'}), 200
-        return jsonify({'success': False, 'message': msg}), 500
+        return jsonify({'success': False, 'message': _safe_str(msg)}), 500
     except Exception as exc:
         logger.exception('Send shortlist email error')
-        return jsonify({'success': False, 'message': str(exc)}), 500
+        return jsonify(_error_body(exc)), 500
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -361,7 +384,7 @@ def eligible_candidates():
         return jsonify({'success': True, 'data': [r.to_dict() for r in records], 'count': len(records)}), 200
     except Exception as exc:
         logger.exception('Eligible candidates error')
-        return jsonify({'success': False, 'message': str(exc)}), 500
+        return jsonify(_error_body(exc)), 500
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -394,10 +417,10 @@ def schedule_interview_ats():
         )
         if ok:
             return jsonify({'success': True, 'message': 'Interview invitation sent'}), 200
-        return jsonify({'success': False, 'message': msg}), 500
+        return jsonify({'success': False, 'message': _safe_str(msg)}), 500
     except Exception as exc:
         logger.exception('Schedule interview error')
-        return jsonify({'success': False, 'message': str(exc)}), 500
+        return jsonify(_error_body(exc)), 500
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -419,4 +442,4 @@ def ats_stats():
         }}), 200
     except Exception as exc:
         logger.exception('ATS stats error')
-        return jsonify({'success': False, 'message': str(exc)}), 500
+        return jsonify(_error_body(exc)), 500

@@ -1,6 +1,7 @@
 import os
 from datetime import timedelta
 
+
 class Config:
     """Base configuration"""
     SECRET_KEY = os.environ.get('SECRET_KEY', 'your-secret-key-here-change-in-production')
@@ -18,6 +19,11 @@ class Config:
         _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
     SQLALCHEMY_DATABASE_URI = _db_url
 
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_pre_ping': True,   # test each connection before using it; reconnects automatically if it's dead
+        'pool_recycle': 280,     # recycle connections every ~4.5 min, before Render's idle-timeout can kill them
+    }
+
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     CORS_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
@@ -30,5 +36,5 @@ class Config:
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
 
     # Productivity Goals
-    DAILY_FOCUS_GOAL_MINUTES = 240  # 4 hours
+    DAILY_FOCUS_GOAL_MINUTES = 240    # 4 hours
     WEEKLY_FOCUS_GOAL_MINUTES = 1200  # 20 hours

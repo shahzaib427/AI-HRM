@@ -96,17 +96,13 @@ def handle_errors(f):
             logger.warning(f"Validation error in {f.__name__}: {e}")
             return jsonify({'error': str(e)}), 400
         except Exception as e:
-            # Log the full traceback so you can see the real cause
             logger.exception(f"Unhandled error in {f.__name__}: {e}")
-            # Return the real error string — change to 'Internal server error'
-            # in production if you want to hide internals
             return jsonify({'error': str(e)}), 500
     return decorated
 
 
 # ------------------------------------------------------------------
 # User ID helper — reads from header, query param, or JSON body
-# Priority: X-User-Id header > ?user_id= > JSON body user_id
 # ------------------------------------------------------------------
 def get_user_id():
     uid = request.headers.get('X-User-Id')
@@ -123,7 +119,6 @@ def get_user_id():
 def require_user(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        # Always allow pre-flight OPTIONS through without auth
         if request.method == 'OPTIONS':
             return '', 200
         uid = get_user_id()
@@ -196,11 +191,83 @@ def create_checkin():
     return jsonify(result), 201
 
 
+# ==================================================================
+# ✅ NEW ROUTE — /api/checkin/recommendations
+# ------------------------------------------------------------------
+# The frontend (Wellness.jsx -> fetchHistory) calls this endpoint to
+# back-fill `detailed_recommendations` for older check-ins that were
+# saved before the `detailed_recommendations` field existed.
+#
+# Previously this route did NOT exist, so the browser's OPTIONS
+# preflight got Flask's 404 handler response — which has no CORS
+# headers — and the browser reported:
+#   "Response to preflight request doesn't pass access control check:
+#    It does not have HTTP ok status."
+#
+# This route accepts the same wellness metrics as /api/checkin but
+# does NOT persist a new row — it just returns freshly generated
+# recommendations as JSON.
+# ==================================================================
+@wellness_bp.route('/checkin/recommendations', methods=['POST', 'OPTIONS'])
+@handle_errors
+@require_user
+def get_checkin_recommendations():
+    data = request.get_json(silent=True) or {}
+
+    required = ['mood', 'stress', 'sleep', 'energy', 'productivity']
+    missing  = [k for k in required if k not in data]
+    if missing:
+        return jsonify({'error': f'Missing required fields: {", ".join(missing)}'}), 400
+
+    # Reuse whatever code path create_checkin uses to build the rich
+    # recommendations, but without persisting a check-in row.
+    service = get_service()
+
+    # Prefer a dedicated method if the service exposes one ...
+    if hasattr(service, 'generate_recommendations'):
+        recs = service.generate_recommendations(g.user_id, data)
+    else:
+        # ... otherwise fall back to calling create_checkin in a
+        # "dry-run" fashion only if the service supports it, else
+        # call the coach directly.
+        try:
+            # Many WellnessService implementations store an AIService/
+            # coach on self.coach; reuse it to build recommendations.
+            coach = getattr(service, 'coach', None) or getattr(service, 'ai', None)
+            if coach is None:
+                raise RuntimeError(
+                    'WellnessService has no `generate_recommendations`, '
+                    '`coach`, or `ai` attribute to build recommendations from.'
+                )
+
+            # Try the most likely method names in order.
+            for method_name in (
+                'generate_detailed_recommendations',
+                'get_detailed_recommendations',
+                'build_recommendations',
+                'recommend',
+            ):
+                fn = getattr(coach, method_name, None)
+                if callable(fn):
+                    recs = fn(data)
+                    break
+            else:
+                # Last resort: if coach has an analyze()/chat() style
+                # method, call it; otherwise return an empty list so
+                # the frontend degrades gracefully.
+                recs = []
+
+        except Exception as e:
+            logger.exception(f"generate recommendations failed: {e}")
+            recs = []
+
+    return jsonify({'detailed_recommendations': recs}), 200
+
+
 @wellness_bp.route('/weekly-wellness', methods=['GET', 'OPTIONS'])
 @handle_errors
 @require_user
 def get_weekly_wellness():
-    # Read the ?days= query param that the frontend sends (?days=7)
     try:
         days = int(request.args.get('days', 7))
     except (ValueError, TypeError):
@@ -272,7 +339,6 @@ def stream_status():
     with _streams_lock:
         count = len(_streams)
     return jsonify({'connected': True, 'active_connections': count})
-
 
 
 @wellness_bp.route('/debug/test-user', methods=['GET'])

@@ -7,7 +7,9 @@ from datetime import datetime
 
 from models import db
 from models.ats import ATSAnalysis
-from services.ats_service import run_ats_analysis, is_official_email
+
+# ── FIX: also import the sanitizer so nothing NUL-y ever hits the DB
+from services.ats_service import run_ats_analysis, is_official_email, _sanitize_text
 from services.email_service import send_ats_shortlist_email
 
 logger = logging.getLogger(__name__)
@@ -67,11 +69,13 @@ def analyze_and_store(
     record.experience_score   = scores['experience_score']
     record.education_score    = scores['education_score']
     record.keyword_score      = scores['keyword_score']
-    record.matched_skills     = scores.get('matched_skills', [])
-    record.missing_skills     = scores.get('missing_skills', [])
-    record.keywords_found     = scores.get('keywords_found', [])
-    record.keywords_missing   = scores.get('keywords_missing', [])
-    record.resume_text        = scores.get('resume_text', '')[:5000]
+
+    # ── FIX: sanitize every string that touches the DB ─────────────
+    record.matched_skills     = [_sanitize_text(str(s)) for s in scores.get('matched_skills', [])]
+    record.missing_skills     = [_sanitize_text(str(s)) for s in scores.get('missing_skills', [])]
+    record.keywords_found     = [_sanitize_text(str(s)) for s in scores.get('keywords_found', [])]
+    record.keywords_missing   = [_sanitize_text(str(s)) for s in scores.get('keywords_missing', [])]
+    record.resume_text        = _sanitize_text(scores.get('resume_text', ''))[:5000]
     record.has_official_email = scores['has_official_email']
     record.analysis_method    = scores['analysis_method']
     record.updated_at         = datetime.utcnow()
