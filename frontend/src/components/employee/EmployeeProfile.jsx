@@ -681,7 +681,26 @@ const EmployeeProfile = () => {
                 </div>
                 <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
                   <p className="text-xs text-gray-500">Phone</p>
-                  <p className="font-medium text-gray-900 text-sm">{profile.phone || 'N/A'}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-medium text-gray-900 text-sm break-all">{profile.phone || 'N/A'}</p>
+                    <button
+                      type="button"
+                      disabled={!profile.phone}
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(profile.phone);
+                          alert('Phone number copied!');
+                        } catch (err) {
+                          console.error('Unable to copy phone number:', err);
+                          alert('Unable to copy phone number. Please copy it manually.');
+                        }
+                      }}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 font-medium disabled:text-gray-400 disabled:cursor-not-allowed"
+                      aria-label="Copy phone number"
+                    >
+                      Copy
+                    </button>
+                  </div>
                 </div>
                 <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
                   <p className="text-xs text-gray-500">Joining Date</p>
